@@ -33,7 +33,7 @@ Manrope 用于拉丁字母与数字，中文使用 PingFang SC / Microsoft YaHei
 [每日安排 | 地图 | 地点池]
 ```
 
-采用方案 B：桌面侧边导航与行程票夹。行程身份位于顶部，固定的左侧导航区分四项任务，地图与两个独立面板占据其余空间。手机恢复水平导航，保留地点池与行程同时展开的拖动能力。文字左对齐，数值在表格内右对齐。
+采用方案 B：桌面侧边导航与行程票夹。行程身份位于顶部，固定的左侧导航区分规划、查看、费用、成员和动态，地图与两个独立面板占据规划页其余空间。手机恢复水平导航，保留地点池与行程同时展开的拖动能力。文字左对齐，数值在表格内右对齐。
 
 ```text
 [品牌         行程名称、日期              同行成员]
@@ -61,6 +61,8 @@ Manrope 用于拉丁字母与数字，中文使用 PingFang SC / Microsoft YaHei
 - 保留 250ms 手机长按拖动、普通触摸滚动、键盘排序、独立交通与手动路线的语义。
 - 动效只用于交互反馈，并尊重 `prefers-reduced-motion`。
 - 用户设置页沿用现有颜色与字体，桌面左侧显示账号身份，右侧以分隔线区分个人资料、修改密码和退出登录；手机改为单列。各表单独立显示保存结果，登录邮箱只读，首页和行程页均提供入口。
+- 查看页沿用云白、纯白、晴空蓝、亮青、日光黄和深海墨，以及现有 Manrope / 中文字体。封面以真实行程名和日期建立身份，桌面左侧为日期目录，右侧按天连接事项；手机目录横向滚动、正文单列。日期与站点编号只表达真实顺序，路线装饰集中在封面，正文保留足够留白。
+- 行程图沿用相同颜色与时间语义，将屏幕上的交互目录转换为连续的每日路线手册。Canvas 在浏览器内排版中文、跨行备注与跨日时间，输出 1200px 宽 PNG，无须截图地图或请求外部图片。内容过长时分图并标注续页，可单图下载或打包 ZIP；导出预览复用 Dialog / 手机 Sheet，支持范围选择、备注开关、错误重试与关闭后焦点恢复。
 
 ## 样式组织
 
@@ -68,6 +70,9 @@ Manrope 用于拉丁字母与数字，中文使用 PingFang SC / Microsoft YaHei
 - `src/styles/layout.css`：规划、拖动、地图等已有结构规则。
 - `src/styles/skyweave.css`：城市漫游手册主题与各页面的响应式布局。
 - `src/styles/settings.css`：用户设置页与账号入口的响应式布局。
+- `src/styles/itinerary.css`：行程查看页与导出预览的响应式布局。
+- `src/domain/itinerary.ts`：查看页和行程图共用的阅读数据，复用规划时间算法。
+- `src/lib/itinerary-poster.ts`：文字换行、图片分页与 PNG / ZIP 导出。
 - `src/components/journey-art.tsx`：原创路线示意插画。
 - `src/components/ui/`：基础控件，使用统一语义 token。
 
@@ -80,5 +85,7 @@ Manrope 用于拉丁字母与数字，中文使用 PingFang SC / Microsoft YaHei
 主要按钮白字对晴空蓝的对比度为 5.5:1。截图使用隔离的演示账号和测试行程数据。
 
 [登录与注册](images/field-guide-register.png) · [行程首页](images/field-guide-trips.png) · [地图规划](images/field-guide-plan.png) · [手机地点池](images/field-guide-pool-mobile.png) · [编辑表单](images/field-guide-editor.png) · [手机表单](images/field-guide-editor-mobile.png) · [手机首页](images/field-guide-trips-mobile.png) · [手机注册](images/field-guide-register-mobile.png) · [费用与结算](images/field-guide-expenses.png)
+
+行程查看与导出预览：[桌面查看](images/itinerary-view.png) · [手机查看](images/itinerary-view-mobile.png) · [导出行程图](images/itinerary-poster.png)。截图与行程图均使用隔离测试数据。
 
 Manrope 通过 Next.js 字体处理在应用内提供；许可见 `licenses/Manrope-OFL.txt`。

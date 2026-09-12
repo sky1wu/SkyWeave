@@ -6,7 +6,7 @@ export default async function Page({
   params: Promise<{ id: string; section: string }>;
 }) {
   const { id, section } = await params;
-  if (!["plan", "expenses", "members", "activity"].includes(section))
+  if (!["plan", "view", "expenses", "members", "activity"].includes(section))
     notFound();
   return <TripShell tripId={id} section={section} />;
 }

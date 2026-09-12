@@ -4,6 +4,7 @@
 @import "../styles/layout.css" layer(components);
 @import "../styles/skyweave.css" layer(components);
 @import "../styles/settings.css" layer(components);
+@import "../styles/itinerary.css" layer(components);
 
 @custom-variant dark (&:is(.dark *));
 

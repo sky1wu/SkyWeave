@@ -15,6 +15,7 @@ import {
   Wallet,
   Users,
   MessageCircle,
+  BookOpen,
 } from "lucide-react";
 import { api, ApiFailure } from "@/lib/client";
 import type { Expense, Item, TripSnapshot } from "@/domain/types";
@@ -23,11 +24,13 @@ import { Brand, ErrorText, Modal } from "./ui";
 import { TripDateFields } from "./trip-date-fields";
 import { SettingsLink } from "./settings-link";
 import { Planner, type Mutate } from "./planner";
+import { ItineraryView } from "./itinerary-view";
 import { ExpenseEditor, Expenses } from "./expenses";
 import { Members } from "./members";
 import { ActivityPage, CommentModal, type CommentTarget } from "./activity";
 const tabs = [
   { key: "plan", label: "行程", icon: Route },
+  { key: "view", label: "查看", icon: BookOpen },
   { key: "expenses", label: "费用", icon: Wallet },
   { key: "members", label: "成员", icon: Users },
   { key: "activity", label: "动态", icon: MessageCircle },
@@ -128,7 +131,7 @@ export function TripShell({
         <div className="compact-trip-heading">
           <div>
             <h1>{data.trip.title}</h1>
-            {data.role === "owner" && (
+            {data.role === "owner" && section !== "view" && (
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -179,7 +182,11 @@ export function TripShell({
           </a>
         ))}
         <span className="workspace-permission">
-          {data.role === "viewer" ? "只读，可评论" : "共同编辑"}
+          {section === "view"
+            ? "浏览模式"
+            : data.role === "viewer"
+              ? "只读，可评论"
+              : "共同编辑"}
         </span>
       </nav>
       <div className="workspace-content">
@@ -188,6 +195,7 @@ export function TripShell({
             <ErrorText error={error} />
           </div>
         )}
+        {section === "view" && <ItineraryView snapshot={data} />}
         {section === "plan" && (
           <Planner
             snapshot={data}
