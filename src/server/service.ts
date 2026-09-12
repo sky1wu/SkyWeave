@@ -1,5 +1,7 @@
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
+import { DateTime } from "luxon";
+import { nextDayDate } from "@/domain/planning";
 import { sqlite, one, many, run, insert, update } from "./db";
 import { AppError, conflict, requireValue } from "./errors";
 import * as v from "./validation";
@@ -7,6 +9,7 @@ import { routePairs } from "@/domain/timeline";
 import { convertMoney, splitExpense, calculateBalances } from "@/domain/money";
 import type {
   Trip,
+  PoolPlace,
   Day,
   Item,
   Leg,
@@ -156,6 +159,10 @@ export function snapshot(tripId: string, actor: Actor): TripSnapshot {
       trip: getTrip(tripId),
       currentUserId: actor.id,
       role: member.role,
+      poolPlaces: many<PoolPlace>(
+        "SELECT * FROM trip_places WHERE tripId=? ORDER BY createdAt, id",
+        tripId,
+      ),
       days: many<Day>(
         "SELECT * FROM days WHERE tripId = ? ORDER BY position",
         tripId,
@@ -247,6 +254,10 @@ export function createTrip(actor: Actor, body: unknown) {
 }
 export function editTrip(tripId: string, actor: Actor, body: unknown) {
   const { expectedVersion, ...data } = v.tripInput
+    .extend({
+      timezone: v.tripInput.shape.timezone.removeDefault(),
+      baseCurrency: v.tripInput.shape.baseCurrency.removeDefault(),
+    })
     .partial()
     .extend({ expectedVersion: v.version })
     .parse(body);
@@ -287,7 +298,9 @@ export function deleteTrip(tripId: string, actor: Actor, expected: number) {
   });
 }
 export function createDay(tripId: string, actor: Actor, body: unknown) {
-  const data = v.dayInput.parse(body);
+  const data = v.dayInput
+    .extend({ title: v.dayInput.shape.title.optional() })
+    .parse(body);
   return tx(() => {
     access(tripId, actor, "edit");
     const id = uid();
@@ -295,13 +308,36 @@ export function createDay(tripId: string, actor: Actor, body: unknown) {
       "SELECT coalesce(max(position),-1)+1 p FROM days WHERE tripId=?",
       tripId,
     )!.p;
-    insert("days", { id, tripId, position: pos, ...data, ...revision(actor) });
-    log(tripId, actor, "day.updated", "day", id, `添加了「${data.title}」`);
+    const trip = getTrip(tripId);
+    const existing = many<Day>(
+      "SELECT * FROM days WHERE tripId=? ORDER BY position",
+      tripId,
+    );
+    const title = data.title ?? `第 ${pos + 1} 天`;
+    const date =
+      data.date === undefined
+        ? nextDayDate(
+            trip.startDate,
+            existing,
+            DateTime.now().setZone(trip.timezone).toISODate()!,
+          )
+        : data.date;
+    insert("days", {
+      id,
+      tripId,
+      position: pos,
+      ...data,
+      title,
+      date,
+      ...revision(actor),
+    });
+    log(tripId, actor, "day.updated", "day", id, `添加了「${title}」`);
     return { id };
   });
 }
 export function editDay(dayId: string, actor: Actor, body: unknown) {
   const { expectedVersion, ...data } = v.dayInput
+    .extend({ startMinutes: v.dayInput.shape.startMinutes.removeDefault() })
     .partial()
     .extend({ expectedVersion: v.version })
     .parse(body);
@@ -369,6 +405,15 @@ export function createItem(dayId: string, actor: Actor, body: unknown) {
   return tx(() => {
     const day = getDay(dayId);
     access(day.tripId, actor, "edit");
+    if (data.sourcePlaceId)
+      requireValue(
+        one(
+          "SELECT id FROM trip_places WHERE id=? AND tripId=?",
+          data.sourcePlaceId,
+          day.tripId,
+        ),
+        "地点不属于此行程",
+      );
     const id = uid();
     insert("day_items", {
       id,
@@ -394,6 +439,11 @@ export function createItem(dayId: string, actor: Actor, body: unknown) {
 }
 export function editItem(itemId: string, actor: Actor, body: unknown) {
   const { expectedVersion, ...data } = v.itemInput
+    .extend({
+      type: v.itemInput.shape.type.removeDefault(),
+      stayMinutes: v.itemInput.shape.stayMinutes.removeDefault(),
+      fixedTime: v.itemInput.shape.fixedTime.removeDefault(),
+    })
     .partial()
     .extend({ expectedVersion: v.version })
     .parse(body);
@@ -404,6 +454,15 @@ export function editItem(itemId: string, actor: Actor, body: unknown) {
     const day = getDay(item.dayId);
     access(day.tripId, actor, "edit");
     checkVersion(item, expectedVersion);
+    if (data.sourcePlaceId)
+      requireValue(
+        one(
+          "SELECT id FROM trip_places WHERE id=? AND tripId=?",
+          data.sourcePlaceId,
+          day.tripId,
+        ),
+        "地点不属于此行程",
+      );
     validItem({ ...item, ...data });
     update("day_items", itemId, {
       ...data,

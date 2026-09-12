@@ -16,6 +16,8 @@ export function item(
     id,
     position,
     dayId: "d",
+    sourcePlaceId: null,
+    placeCategory: "未分类",
     title: id,
     type: "place",
     description: null,

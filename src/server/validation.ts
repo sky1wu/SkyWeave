@@ -27,6 +27,8 @@ export const dayInput = z.strictObject({
 });
 export const itemInput = z.strictObject({
   title,
+  sourcePlaceId: id.nullable().optional(),
+  placeCategory: z.string().trim().min(1).max(40).optional(),
   type: z
     .enum(["place", "event", "hotel", "transport", "border", "note"])
     .default("place"),
@@ -43,6 +45,22 @@ export const itemInput = z.strictObject({
   endMinutes: minutes.nullable().optional(),
   stayMinutes: minutes.default(0),
   fixedTime: z.boolean().default(false),
+  notes: optionalText,
+});
+export const poolInput = z.strictObject({
+  title,
+  type: z
+    .enum(["place", "event", "hotel", "transport", "border", "note"])
+    .optional(),
+  placeCategory: z.string().trim().min(1).max(40).optional(),
+  amapPoiId: z
+    .string()
+    .regex(/^[a-zA-Z0-9]{1,64}$/)
+    .nullable()
+    .optional(),
+  address: optionalText,
+  lat: z.number().finite().min(-90).max(90).nullable().optional(),
+  lng: z.number().finite().min(-180).max(180).nullable().optional(),
   notes: optionalText,
 });
 export const legInput = z.strictObject({

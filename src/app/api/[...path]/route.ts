@@ -8,6 +8,12 @@ import { routeRequestSchema } from "@/amap/requests";
 import { calculateDay, calculateLeg } from "@/server/routing";
 import type { Expense, Leg } from "@/domain/types";
 import { events } from "@/server/events";
+import {
+  savePoolPlace,
+  deletePoolPlace,
+  schedulePlace,
+  moveItem,
+} from "@/server/places";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,7 +57,17 @@ async function handler(request: Request, context: Context): Promise<Response> {
       else if (method === "DELETE") result = s.deleteTrip(id, user, expected());
     } else if (root === "trips" && action === "days" && method === "POST")
       result = s.createDay(id, user, data);
-    else if (root === "trips" && action === "participants") {
+    else if (root === "trips" && action === "places") {
+      if (method === "GET" && !subId) result = s.snapshot(id, user).poolPlaces;
+      else if (method === "POST" && !subId)
+        result = savePoolPlace(id, user, data);
+      else if (method === "PATCH" && subId)
+        result = savePoolPlace(id, user, data, subId);
+      else if (method === "DELETE" && subId)
+        result = deletePoolPlace(id, subId, user, expected());
+      else if (method === "POST" && subId && path[4] === "schedule")
+        result = schedulePlace(id, subId, user, data);
+    } else if (root === "trips" && action === "participants") {
       if (method === "GET") result = s.snapshot(id, user).participants;
       else if (method === "POST" && !subId)
         result = s.createParticipant(id, user, data);
@@ -93,6 +109,8 @@ async function handler(request: Request, context: Context): Promise<Response> {
         user,
         z.object({ force: z.boolean().optional() }).parse(data).force,
       );
+    else if (root === "items" && action === "move" && method === "POST")
+      result = moveItem(id, user, data);
     else if (root === "items" && id && !action) {
       if (method === "PATCH") result = s.editItem(id, user, data);
       else if (method === "DELETE") result = s.deleteItem(id, user, expected());

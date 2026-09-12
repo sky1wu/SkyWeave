@@ -138,6 +138,32 @@ export const days = sqliteTable(
   },
   (t) => [index("days_order").on(t.tripId, t.position)],
 );
+export const poolPlaces = sqliteTable(
+  "trip_places",
+  {
+    id: text().primaryKey(),
+    tripId: text()
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    title: text().notNull(),
+    type: text({
+      enum: ["place", "event", "hotel", "transport", "border", "note"],
+    })
+      .notNull()
+      .default("place"),
+    placeCategory: text().notNull().default("未分类"),
+    amapPoiId: text(),
+    address: text(),
+    lat: real(),
+    lng: real(),
+    notes: text(),
+    ...revision(),
+  },
+  (t) => [
+    uniqueIndex("pool_poi").on(t.tripId, t.amapPoiId),
+    index("pool_category").on(t.tripId, t.placeCategory),
+  ],
+);
 export const items = sqliteTable(
   "day_items",
   {
@@ -151,6 +177,10 @@ export const items = sqliteTable(
     position: integer().notNull(),
     title: text().notNull(),
     description: text(),
+    sourcePlaceId: text().references(() => poolPlaces.id, {
+      onDelete: "set null",
+    }),
+    placeCategory: text().notNull().default("未分类"),
     amapPoiId: text(),
     address: text(),
     lat: real(),

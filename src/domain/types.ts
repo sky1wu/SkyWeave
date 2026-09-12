@@ -2,6 +2,7 @@ import type * as s from "@/server/schema";
 export type Trip = typeof s.trips.$inferSelect;
 export type Day = typeof s.days.$inferSelect;
 export type Item = typeof s.items.$inferSelect;
+export type PoolPlace = typeof s.poolPlaces.$inferSelect;
 export type Leg = typeof s.legs.$inferSelect;
 export type Alternative = typeof s.alternatives.$inferSelect;
 export type Participant = typeof s.participants.$inferSelect;
@@ -24,6 +25,7 @@ export interface TripSnapshot {
   currentUserId: string;
   role: Member["role"];
   days: DayPlan[];
+  poolPlaces: PoolPlace[];
   participants: Participant[];
   members: Member[];
   expenses: (Expense & { splits: Split[] })[];
