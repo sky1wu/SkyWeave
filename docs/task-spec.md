@@ -227,16 +227,16 @@ Comment
 
 ```ts
 interface Trip {
-  id: string
-  title: string
+  id: string;
+  title: string;
 
-  startDate?: string
-  endDate?: string
+  startDate?: string;
+  endDate?: string;
 
-  timezone: string
+  timezone: string;
 
-  createdAt: Date
-  updatedAt: Date
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 
@@ -246,19 +246,19 @@ interface Trip {
 
 ```ts
 interface Day {
-  id: string
-  tripId: string
+  id: string;
+  tripId: string;
 
-  date?: string
+  date?: string;
 
-  title?: string
+  title?: string;
 
-  order: number
+  order: number;
 
-  startTime?: string
+  startTime?: string;
 
-  createdAt: Date
-  updatedAt: Date
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 
@@ -272,51 +272,46 @@ interface Day {
 
 ```ts
 type DayItemType =
-  | 'place'
-  | 'event'
-  | 'hotel'
-  | 'transport'
-  | 'border'
-  | 'note'
+  "place" | "event" | "hotel" | "transport" | "border" | "note";
 ```
 
 建议：
 
 ```ts
 interface DayItem {
-  id: string
+  id: string;
 
-  dayId: string
+  dayId: string;
 
-  type: DayItemType
+  type: DayItemType;
 
-  order: number
+  order: number;
 
-  title: string
+  title: string;
 
-  description?: string
+  description?: string;
 
   // POI
-  amapPoiId?: string
+  amapPoiId?: string;
 
-  address?: string
+  address?: string;
 
-  lat?: number
-  lng?: number
+  lat?: number;
+  lng?: number;
 
   // 时间
-  startTime?: string
-  endTime?: string
+  startTime?: string;
+  endTime?: string;
 
-  stayDurationMinutes?: number
+  stayDurationMinutes?: number;
 
-  fixedTime: boolean
+  fixedTime: boolean;
 
   // 用户备注
-  notes?: string
+  notes?: string;
 
-  createdAt: Date
-  updatedAt: Date
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 
@@ -398,42 +393,35 @@ TOGENASHI TOGEARI LIVE
 每两个相邻且可路由的 Item 之间生成一个 TravelLeg。
 
 ```ts
-type TravelMode =
-  | 'walking'
-  | 'driving'
-  | 'cycling'
-  | 'transit'
-  | 'manual'
+type TravelMode = "walking" | "driving" | "cycling" | "transit" | "manual";
 ```
 
 结构：
 
 ```ts
 interface TravelLeg {
-  id: string
+  id: string;
 
-  dayId: string
+  dayId: string;
 
-  fromItemId: string
-  toItemId: string
+  fromItemId: string;
+  toItemId: string;
 
-  mode: TravelMode
+  mode: TravelMode;
 
-  provider:
-    | 'amap'
-    | 'manual'
+  provider: "amap" | "manual";
 
-  selectedAlternativeId?: string
+  selectedAlternativeId?: string;
 
   // manual 模式
-  manualDurationMinutes?: number
+  manualDurationMinutes?: number;
 
-  manualDistanceMeters?: number
+  manualDistanceMeters?: number;
 
-  manualDescription?: string
+  manualDescription?: string;
 
-  createdAt: Date
-  updatedAt: Date
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 
@@ -463,33 +451,33 @@ RouteAlternative[]
 
 ```ts
 interface RouteAlternative {
-  id: string
+  id: string;
 
-  travelLegId: string
+  travelLegId: string;
 
-  provider: 'amap'
+  provider: "amap";
 
-  providerRouteId?: string
+  providerRouteId?: string;
 
-  label?: string
+  label?: string;
 
-  distanceMeters: number
+  distanceMeters: number;
 
-  durationSeconds: number
+  durationSeconds: number;
 
-  walkingDistanceMeters?: number
+  walkingDistanceMeters?: number;
 
-  transferCount?: number
+  transferCount?: number;
 
-  polyline: Array<[number, number]>
+  polyline: Array<[number, number]>;
 
-  steps?: RouteStep[]
+  steps?: RouteStep[];
 
-  summary?: string
+  summary?: string;
 
-  rawMeta?: Record<string, unknown>
+  rawMeta?: Record<string, unknown>;
 
-  fetchedAt: Date
+  fetchedAt: Date;
 }
 ```
 
@@ -592,13 +580,13 @@ for (...) {
 而应该：
 
 ```ts
-const alternatives = []
+const alternatives = [];
 
 for (const candidate of candidates) {
-  const route = parse(candidate)
+  const route = parse(candidate);
 
   if (route) {
-    alternatives.push(route)
+    alternatives.push(route);
   }
 }
 ```
@@ -699,19 +687,19 @@ GET /api/places/search?q=
 
 ```ts
 interface PlaceSearchResult {
-  amapPoiId: string
+  amapPoiId: string;
 
-  name: string
-  address: string
+  name: string;
+  address: string;
 
-  lat: number
-  lng: number
+  lat: number;
+  lng: number;
 
-  rating?: number
+  rating?: number;
 
-  phone?: string
+  phone?: string;
 
-  types: string[]
+  types: string[];
 }
 ```
 
@@ -993,7 +981,7 @@ v0.1 推荐：
 
 ```ts
 function databaseToMap(coord: Wgs84) {
-  return wgs84ToGcj02(coord)
+  return wgs84ToGcj02(coord);
 }
 ```
 
@@ -1327,7 +1315,6 @@ POI search
 
 ---
 
-
 ## 33. 用户与多人协作
 
 多人协作从数据模型第一版就支持。
@@ -1336,13 +1323,13 @@ POI search
 
 ```ts
 interface User {
-  id: string
-  email: string
-  displayName: string
-  avatarUrl?: string
+  id: string;
+  email: string;
+  displayName: string;
+  avatarUrl?: string;
 
-  createdAt: Date
-  updatedAt: Date
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 
@@ -1359,20 +1346,17 @@ MVP 不需要 OAuth 大全。
 ### TripMember
 
 ```ts
-type TripRole =
-  | 'owner'
-  | 'editor'
-  | 'viewer'
+type TripRole = "owner" | "editor" | "viewer";
 ```
 
 ```ts
 interface TripMember {
-  tripId: string
-  userId: string
+  tripId: string;
+  userId: string;
 
-  role: TripRole
+  role: TripRole;
 
-  joinedAt: Date
+  joinedAt: Date;
 }
 ```
 
@@ -1392,7 +1376,7 @@ editor
 - 编辑行程
 - 添加/修改费用
 - 评论
-- 查看结算
+- 查看、登记和删除结算
 
 viewer
 - 只读行程
@@ -1417,21 +1401,21 @@ MVP 不做更复杂的细粒度 RBAC。
 
 ```ts
 interface TripInvite {
-  id: string
-  tripId: string
+  id: string;
+  tripId: string;
 
-  tokenHash: string
+  tokenHash: string;
 
-  role: 'editor' | 'viewer'
+  role: "editor" | "viewer";
 
-  expiresAt?: Date
+  expiresAt?: Date;
 
-  maxUses?: number
-  usedCount: number
+  maxUses?: number;
+  usedCount: number;
 
-  createdByUserId: string
+  createdByUserId: string;
 
-  createdAt: Date
+  createdAt: Date;
 }
 ```
 
@@ -1470,9 +1454,9 @@ SSE 或 WebSocket 推送变更通知
 每个主要可编辑实体增加：
 
 ```ts
-version: number
-updatedAt: Date
-updatedByUserId: string
+version: number;
+updatedAt: Date;
+updatedByUserId: string;
 ```
 
 更新请求带：
@@ -1523,27 +1507,27 @@ Comment
 
 ```ts
 interface TripEvent {
-  id: string
-  tripId: string
+  id: string;
+  tripId: string;
 
   type:
-    | 'day.updated'
-    | 'item.created'
-    | 'item.updated'
-    | 'item.deleted'
-    | 'item.reordered'
-    | 'leg.updated'
-    | 'expense.created'
-    | 'expense.updated'
-    | 'expense.deleted'
-    | 'member.updated'
-    | 'comment.created'
+    | "day.updated"
+    | "item.created"
+    | "item.updated"
+    | "item.deleted"
+    | "item.reordered"
+    | "leg.updated"
+    | "expense.created"
+    | "expense.updated"
+    | "expense.deleted"
+    | "member.updated"
+    | "comment.created";
 
-  actorUserId: string
+  actorUserId: string;
 
-  entityId?: string
+  entityId?: string;
 
-  createdAt: string
+  createdAt: string;
 }
 ```
 
@@ -1563,19 +1547,19 @@ interface TripEvent {
 
 ```ts
 interface ActivityLog {
-  id: string
-  tripId: string
+  id: string;
+  tripId: string;
 
-  actorUserId: string
+  actorUserId: string;
 
-  action: string
+  action: string;
 
-  entityType: string
-  entityId?: string
+  entityType: string;
+  entityId?: string;
 
-  summary: string
+  summary: string;
 
-  createdAt: Date
+  createdAt: Date;
 }
 ```
 
@@ -1605,22 +1589,19 @@ Expense
 
 ```ts
 interface Comment {
-  id: string
-  tripId: string
+  id: string;
+  tripId: string;
 
-  targetType:
-    | 'trip'
-    | 'day_item'
-    | 'expense'
+  targetType: "trip" | "day_item" | "expense";
 
-  targetId: string
+  targetId: string;
 
-  authorUserId: string
+  authorUserId: string;
 
-  content: string
+  content: string;
 
-  createdAt: Date
-  updatedAt: Date
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 
@@ -1672,7 +1653,7 @@ Trip 增加：
 ```ts
 interface Trip {
   // ...
-  baseCurrency: string
+  baseCurrency: string;
 }
 ```
 
@@ -1705,42 +1686,36 @@ baseCurrency = HKD
 
 ```ts
 type ExpenseCategory =
-  | 'transport'
-  | 'food'
-  | 'hotel'
-  | 'ticket'
-  | 'shopping'
-  | 'activity'
-  | 'other'
+  "transport" | "food" | "hotel" | "ticket" | "shopping" | "activity" | "other";
 ```
 
 ```ts
 interface Expense {
-  id: string
-  tripId: string
+  id: string;
+  tripId: string;
 
-  dayId?: string
-  dayItemId?: string
+  dayId?: string;
+  dayItemId?: string;
 
-  title: string
-  category: ExpenseCategory
+  title: string;
+  category: ExpenseCategory;
 
-  amountMinor: number
-  currency: string
+  amountMinor: number;
+  currency: string;
 
-  payerUserId: string
+  payerUserId: string;
 
-  exchangeRateToBase: string
-  baseAmountMinor: number
+  exchangeRateToBase: string;
+  baseAmountMinor: number;
 
-  incurredAt?: Date
+  incurredAt?: Date;
 
-  notes?: string
+  notes?: string;
 
-  createdByUserId: string
+  createdByUserId: string;
 
-  createdAt: Date
-  updatedAt: Date
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 
@@ -1770,24 +1745,20 @@ HK$123.45
 ## 42. ExpenseSplit
 
 ```ts
-type SplitMethod =
-  | 'equal'
-  | 'exact'
-  | 'percentage'
-  | 'shares'
+type SplitMethod = "equal" | "exact" | "percentage" | "shares";
 ```
 
 数据库最终保存归一化后的每人应承担金额：
 
 ```ts
 interface ExpenseSplit {
-  id: string
-  expenseId: string
-  userId: string
+  id: string;
+  expenseId: string;
+  userId: string;
 
-  amountMinor: number
+  amountMinor: number;
 
-  createdAt: Date
+  createdAt: Date;
 }
 ```
 
@@ -2017,25 +1988,25 @@ C → A 250
 
 ```ts
 interface Settlement {
-  id: string
-  tripId: string
+  id: string;
+  tripId: string;
 
-  fromUserId: string
-  toUserId: string
+  fromUserId: string;
+  toUserId: string;
 
-  amountMinor: number
-  currency: string
+  amountMinor: number;
+  currency: string;
 
-  exchangeRateToBase: string
-  baseAmountMinor: number
+  exchangeRateToBase: string;
+  baseAmountMinor: number;
 
-  settledAt: Date
+  settledAt: Date;
 
-  note?: string
+  note?: string;
 
-  createdByUserId: string
+  createdByUserId: string;
 
-  createdAt: Date
+  createdAt: Date;
 }
 ```
 
@@ -2187,7 +2158,7 @@ TripMember 增加 inactive 状态
 而不是删除历史参与者。
 
 ```ts
-status: 'active' | 'inactive'
+status: "active" | "inactive";
 ```
 
 历史账目必须保留其身份。
@@ -2585,7 +2556,6 @@ INCUBASE Arena
 最终产品核心可以概括为：
 
 > 一起规划去哪、怎么去、什么时候到，以及最后谁该付多少钱。
-
 
 ## 补充工程要求
 

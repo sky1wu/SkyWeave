@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    image: amap-trip-planner:local
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env.local
+    environment:
+      DATABASE_PATH: /app/data/trip-planner.sqlite
+      AMAP_TEST_MODE: "0"
+    volumes:
+      - trip-data:/app/data
+    restart: unless-stopped
+    init: true
+volumes:
+  trip-data:
