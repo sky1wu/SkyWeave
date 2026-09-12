@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { one, insert, update, run } from "./db";
+import { one, many, insert, update, run } from "./db";
 import {
   access,
   getDay,
@@ -73,6 +73,10 @@ export function savePoolPlace(
       insert("trip_places", {
         id: resultId,
         tripId,
+        position: one<{ next: number }>(
+          "SELECT COALESCE(MAX(position), -1) + 1 AS next FROM trip_places WHERE tripId=?",
+          tripId,
+        )!.next,
         type: "place",
         placeCategory: inferPlaceCategory([], data.type as string | undefined),
         ...data,
@@ -87,6 +91,43 @@ export function savePoolPlace(
       `${old ? "修改" : "收藏"}了地点「${data.title ?? old?.title}」`,
     );
     return { id: resultId, created: !old };
+  });
+}
+export function reorderPoolPlaces(tripId: string, actor: Actor, body: unknown) {
+  const data = z
+    .strictObject({
+      places: z
+        .array(z.strictObject({ id, expectedVersion: version }))
+        .max(10000),
+    })
+    .parse(body);
+  return tx(() => {
+    access(tripId, actor, "edit");
+    const current = many<PoolPlace>(
+      "SELECT * FROM trip_places WHERE tripId=?",
+      tripId,
+    );
+    const byId = new Map(current.map((place) => [place.id, place]));
+    if (
+      data.places.length !== current.length ||
+      new Set(data.places.map((p) => p.id)).size !== current.length ||
+      data.places.some((p) => !byId.has(p.id))
+    )
+      throw new AppError(409, "CONFLICT", "地点池已变化，请刷新后重试");
+    for (const place of data.places)
+      checkVersion(byId.get(place.id)!, place.expectedVersion);
+    data.places.forEach((place, position) => {
+      const old = byId.get(place.id)!;
+      if (old.position !== position)
+        update("trip_places", place.id, {
+          position,
+          version: old.version + 1,
+          updatedAt: Date.now(),
+          updatedByUserId: actor.id,
+        });
+    });
+    log(tripId, actor, "place.updated", "trip", tripId, "调整了地点池顺序");
+    return { reordered: true };
   });
 }
 export function deletePoolPlace(

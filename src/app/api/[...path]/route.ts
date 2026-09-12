@@ -13,6 +13,7 @@ import {
   deletePoolPlace,
   schedulePlace,
   moveItem,
+  reorderPoolPlaces,
 } from "@/server/places";
 
 export const runtime = "nodejs";
@@ -61,6 +62,8 @@ async function handler(request: Request, context: Context): Promise<Response> {
       if (method === "GET" && !subId) result = s.snapshot(id, user).poolPlaces;
       else if (method === "POST" && !subId)
         result = savePoolPlace(id, user, data);
+      else if (method === "POST" && subId === "reorder" && path.length === 4)
+        result = reorderPoolPlaces(id, user, data);
       else if (method === "PATCH" && subId)
         result = savePoolPlace(id, user, data, subId);
       else if (method === "DELETE" && subId)

@@ -15,6 +15,13 @@
       "when": 1789206556693,
       "tag": "0001_glorious_wild_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789211129837,
+      "tag": "0002_pool_order",
+      "breakpoints": true
     }
   ]
 }

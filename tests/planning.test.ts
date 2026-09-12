@@ -138,6 +138,56 @@ describe("day dates and pooled places", () => {
     ).toThrow();
     expect(s.getDay(snap.days[0].id).items).toHaveLength(1);
   });
+  it("persists pool order, appends new places, and rejects stale or foreign reorders without partial writes", () => {
+    const snap = setup();
+    for (const title of ["A", "B", "C"])
+      p.savePoolPlace(snap.trip.id, actor, { title });
+    const places = s.snapshot(snap.trip.id, actor).poolPlaces;
+    const request = {
+      places: [places[2], places[0], places[1]].map((p) => ({
+        id: p.id,
+        expectedVersion: p.version,
+      })),
+    };
+    p.reorderPoolPlaces(snap.trip.id, actor, request);
+    expect(
+      s.snapshot(snap.trip.id, actor).poolPlaces.map((p) => p.title),
+    ).toEqual(["C", "A", "B"]);
+    expect(() => p.reorderPoolPlaces(snap.trip.id, actor, request)).toThrow();
+    const other = setup();
+    const foreign = p.savePoolPlace(other.trip.id, actor, {
+      title: "外部地点",
+    });
+    const current = s.snapshot(snap.trip.id, actor).poolPlaces;
+    const invalid = {
+      places: current.map((p) => ({ id: p.id, expectedVersion: p.version })),
+    };
+    invalid.places[2].id = foreign.id;
+    expect(() => p.reorderPoolPlaces(snap.trip.id, actor, invalid)).toThrow();
+    invalid.places[2].id = current[0].id;
+    expect(() => p.reorderPoolPlaces(snap.trip.id, actor, invalid)).toThrow();
+    expect(s.snapshot(snap.trip.id, actor).poolPlaces).toEqual(current);
+    p.savePoolPlace(snap.trip.id, actor, { title: "D" });
+    expect(
+      s.snapshot(snap.trip.id, actor).poolPlaces.map((p) => p.title),
+    ).toEqual(["C", "A", "B", "D"]);
+    const viewer = {
+      id: "pool-viewer",
+      name: "Viewer",
+      email: "pool-viewer@example.test",
+    };
+    insert("users", { ...viewer, createdAt: 0, updatedAt: 0 });
+    insert("trip_members", {
+      tripId: snap.trip.id,
+      userId: viewer.id,
+      role: "viewer",
+      status: "active",
+      joinedAt: 0,
+    });
+    expect(() =>
+      p.reorderPoolPlaces(snap.trip.id, viewer, { places: [] }),
+    ).toThrow();
+  });
   it("moves items across days with their bills and rebuilds both route chains", () => {
     const snap = setup(),
       day = snap.days[0];
@@ -232,6 +282,19 @@ describe("day dates and pooled places", () => {
         )
         .get(),
     ).toEqual({ sourcePlaceId: "pool_i1", placeCategory: "住宿" });
+    db.exec(
+      "INSERT INTO trip_places(id,tripId,title,createdAt,updatedAt,updatedByUserId)VALUES('pool_new','t','New place',50,50,'u');",
+    );
+    const priorOrder = db
+      .prepare("SELECT id FROM trip_places ORDER BY createdAt,id")
+      .all();
+    db.exec(readFileSync("drizzle/0002_pool_order.sql", "utf8"));
+    expect(
+      db.prepare("SELECT id FROM trip_places ORDER BY position").all(),
+    ).toEqual(priorOrder);
+    expect(
+      db.prepare("SELECT position FROM trip_places ORDER BY position").all(),
+    ).toEqual([{ position: 0 }, { position: 1 }]);
     db.prepare("DELETE FROM trip_places").run();
     expect(
       db

@@ -111,3 +111,5 @@ Day 使用 `position` 排序，`startMinutes` 默认 480。DayItem 使用 `posit
 `amountMinor` 为整数最小货币单位；`splitMeta.value` 在 exact 模式为原币主单位十进制字符串，在 percentage 模式为百分数，在 shares 模式为份数，equal 模式忽略该值。服务端计算并保存每人的 `amountMinor`、`baseAmountMinor`，不接受客户端直接指定折算结果。
 
 Settlement 使用 `fromParticipantId`、`toParticipantId`、`amountMinor`、`currency`、`exchangeRateToBase`、`settledAt`、可选 `note`。所有日期时间审计字段为 Unix 毫秒；Trip/Day 日期为 `YYYY-MM-DD`。
+
+`POST /api/trips/:tripId/places/reorder` 保存地点池顺序，owner/editor 可用。请求为 `{ places: [{ id, expectedVersion }] }`，需包含当前地点池全部地点；重复 ID、跨行程 ID、增删或版本冲突返回 409。事务中更新位置与修改版本，并写入一条活动；已有行程事项保持独立。

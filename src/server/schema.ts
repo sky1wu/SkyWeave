@@ -146,6 +146,7 @@ export const poolPlaces = sqliteTable(
       .notNull()
       .references(() => trips.id, { onDelete: "cascade" }),
     title: text().notNull(),
+    position: integer().notNull().default(0),
     type: text({
       enum: ["place", "event", "hotel", "transport", "border", "note"],
     })

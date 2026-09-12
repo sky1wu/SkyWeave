@@ -160,7 +160,7 @@ export function snapshot(tripId: string, actor: Actor): TripSnapshot {
       currentUserId: actor.id,
       role: member.role,
       poolPlaces: many<PoolPlace>(
-        "SELECT * FROM trip_places WHERE tripId=? ORDER BY createdAt, id",
+        "SELECT * FROM trip_places WHERE tripId=? ORDER BY position, createdAt, id",
         tripId,
       ),
       days: many<Day>(
