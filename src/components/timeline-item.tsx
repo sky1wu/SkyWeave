@@ -18,6 +18,7 @@ import { formatMoney } from "@/domain/money";
 import { FixedArrival } from "./fixed-arrival";
 import { cardDragListeners } from "./card-drag";
 import { PlaceCategory } from "./place-category";
+import { transportLabels } from "@/domain/transport";
 export function TimelineItem({
   item,
   index,
@@ -109,7 +110,12 @@ export function TimelineItem({
       {...cardDragListeners(listeners)}
     >
       <div className="item-left">
-        <span className="item-time">{formatTime(entry.start)}</span>
+        <span
+          className="item-time"
+          aria-label={entry.start === null ? "时间待定" : undefined}
+        >
+          {entry.start === null ? "待定" : formatTime(entry.start)}
+        </span>
         <span className="item-number">
           {String(index + 1).padStart(2, "0")}
         </span>
@@ -155,16 +161,54 @@ export function TimelineItem({
             )}
           </div>
         </div>
-        {item.address && <p className="item-address">{item.address}</p>}
+        {item.transport ? (
+          <div className="transport-card-endpoints">
+            <div>
+              <strong>{item.transport.origin.name}</strong>
+              <small>
+                {formatTime(
+                  item.startMinutes !== null
+                    ? item.startMinutes * 60
+                    : entry.start,
+                )}
+              </small>
+            </div>
+            <span aria-hidden="true">→</span>
+            <div>
+              <strong>{item.transport.destination.name}</strong>
+              <small>
+                {formatTime(
+                  item.endMinutes !== null
+                    ? item.endMinutes * 60
+                    : entry.departure,
+                )}
+              </small>
+            </div>
+          </div>
+        ) : (
+          item.address && <p className="item-address">{item.address}</p>
+        )}
         <div className="item-meta">
           <PlaceCategory
             name={
-              item.placeCategory !== "未分类"
-                ? item.placeCategory
-                : typeLabels[item.type]
+              item.transport
+                ? transportLabels[item.transport.mode]
+                : item.placeCategory !== "未分类"
+                  ? item.placeCategory
+                  : typeLabels[item.type]
             }
           />
-          {item.fixedTime && (
+          {item.transport && (
+            <>
+              <span className={`transport-status ${item.transport.status}`}>
+                {item.transport.status === "tentative" ? "暂定" : "已确认"}
+              </span>
+              {item.transport.serviceNumber && (
+                <span>{item.transport.serviceNumber}</span>
+              )}
+            </>
+          )}
+          {item.fixedTime && !item.transport && (
             <span>
               <CalendarDays size={12} />
               {item.startMinutes !== null && formatTime(item.startMinutes * 60)}
@@ -173,18 +217,45 @@ export function TimelineItem({
                 : " 固定活动"}
             </span>
           )}
-          <span>
-            <Clock3 size={12} />
-            停留 {item.stayMinutes} 分钟
-          </span>
+          {!item.transport && (
+            <span>
+              <Clock3 size={12} />
+              停留 {item.stayMinutes} 分钟
+            </span>
+          )}
         </div>
         {item.description && (
           <p className="text-xs muted mt-2">{item.description}</p>
         )}
         {item.notes && <p className="item-notes">{item.notes}</p>}
+        {item.transport &&
+          (item.transport.origin.lat === null ||
+            item.transport.destination.lat === null) && (
+            <p className="transport-location-state">
+              {[
+                item.transport.origin.lat === null ? "出发地" : "",
+                item.transport.destination.lat === null ? "到达地" : "",
+              ]
+                .filter(Boolean)
+                .join("、")}
+              待定位
+            </p>
+          )}
         <FixedArrival item={item} entry={entry} />
         {entry.warnings
           .filter((w) => !w.startsWith("预计迟到"))
+          .filter(
+            (w) =>
+              !item.transport ||
+              ![
+                "出发地点待定位",
+                "到达地点待定位",
+                "交通到达时间待定",
+                ...(item.transport.origin.lat === null
+                  ? ["相邻地点路线不可用"]
+                  : []),
+              ].includes(w),
+          )
           .map((w) => (
             <p className="timeline-warning" key={w}>
               <AlertTriangle size={12} />

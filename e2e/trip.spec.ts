@@ -8,7 +8,26 @@ async function register(page: Page, name: string) {
     .getByLabel("邮箱")
     .fill(`${name.toLowerCase()}-${crypto.randomUUID()}@example.test`);
   await page.getByLabel("密码").fill("Trip-test-password-2026");
-  await page.getByRole("button", { name: "创建账号", exact: true }).click();
+  const submit = async () => {
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.url().endsWith("/api/auth/sign-up/email") &&
+          r.request().method() === "POST",
+      ),
+      page.getByRole("button", { name: "创建账号", exact: true }).click(),
+    ]);
+    return response;
+  };
+  let response = await submit();
+  // The suite uses one local IP; respect the production sign-up rate limit.
+  if (response.status() === 429) {
+    await page.waitForTimeout(
+      Number(response.headers()["retry-after"] ?? 60) * 1000 + 100,
+    );
+    response = await submit();
+  }
+  expect(response.ok()).toBe(true);
   await expect(page).toHaveURL(`${origin}/`);
 }
 async function call<T>(
@@ -543,10 +562,9 @@ test("地点池、自动日期、连续滚动、路线聚焦和关联账单", as
     "data-focused-leg",
     leg.id,
   );
-  await expect(page.getByTestId("test-map").locator("svg")).not.toHaveAttribute(
-    "viewBox",
-    "0 0 700 600",
-  );
+  await expect(
+    page.getByRole("img", { name: "测试地图", exact: true }),
+  ).not.toHaveAttribute("viewBox", "0 0 700 600");
   await page.getByRole("button", { name: "使用方案 2", exact: true }).click();
   await expect(page.locator(".leg-card .fixed-arrival")).toContainText(
     "距开始还剩 14 分钟",
@@ -789,4 +807,219 @@ test("手机卡片：滑动滚动、长按排序与取消", async ({ browser }) 
   } finally {
     await context.close();
   }
+});
+
+test("地图规划：未安排地点、常驻名称、分类图标和跨日安排状态", async ({
+  page,
+}) => {
+  await register(page, "MapPlaces");
+  const id = await createTrip(page, "地图地点池");
+  for (const place of [
+    { title: "待安排公园", placeCategory: "景点", lat: 22.55, lng: 114.0 },
+    { title: "待安排餐厅", placeCategory: "餐饮", lat: 22.56, lng: 114.1 },
+    { title: "未定位地点", placeCategory: "其他" },
+  ])
+    await call(page, `/trips/${id}/places`, "POST", place);
+  const park = page.getByRole("button", {
+    name: "未安排地点 待安排公园",
+    exact: true,
+  });
+  const food = page.getByRole("button", {
+    name: "未安排地点 待安排餐厅",
+    exact: true,
+  });
+  await expect(park).toBeVisible();
+  await expect(park.locator(".test-map-label")).toHaveText("待安排公园");
+  await expect(food.locator(".test-map-label")).toHaveText("待安排餐厅");
+  await expect(park).toHaveAttribute("data-icon", "sight");
+  await expect(food).toHaveAttribute("data-icon", "food");
+  await expect(
+    page.getByRole("button", { name: "未安排地点 未定位地点", exact: true }),
+  ).not.toBeVisible();
+  await page.getByLabel("筛选地点分类").selectOption("餐饮");
+  await page.getByRole("button", { name: "折叠地点池", exact: true }).click();
+  await park.click();
+  await expect(
+    page.getByRole("button", { name: "折叠地点池", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".pool-entry.selected .pool-place-title"),
+  ).toHaveText("待安排公园");
+  await page
+    .getByRole("button", { name: "安排 待安排公园 到第 1 天", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "地图地点 待安排公园", exact: true }),
+  ).toBeVisible();
+  await expect(park).not.toBeVisible();
+  await expect(food).toBeVisible();
+  await page.getByRole("button", { name: "添加一天", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "地图地点 待安排公园", exact: true }),
+  ).not.toBeVisible();
+  await expect(park).not.toBeVisible();
+  await expect(food).toBeVisible();
+  await page.reload();
+  await expect(food.locator(".test-map-label")).toHaveText("待安排餐厅");
+});
+
+test("独立交通：暂定城市、补齐车站班次、接驳路线、跨午夜和费用关联", async ({
+  page,
+}) => {
+  await register(page, "Independent");
+  const id = await createTrip(page, "火车与飞机");
+  let snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  const dayId = snapshot.days[0].id;
+  await call(page, `/days/${dayId}/items`, "POST", {
+    title: "深圳酒店",
+    type: "hotel",
+    lat: 22.5,
+    lng: 114.05,
+  });
+  await page
+    .getByRole("button", { name: "向第 1 天添加交通", exact: true })
+    .click();
+  await page.getByLabel("出发地名称", { exact: true }).fill("深圳");
+  await page.getByLabel("到达地名称", { exact: true }).fill("北京");
+  await page.getByLabel("名称（可选）", { exact: true }).fill("北上火车");
+  await page.getByRole("button", { name: "保存交通", exact: true }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await call(page, `/days/${dayId}/items`, "POST", {
+    title: "北京酒店",
+    type: "hotel",
+    lat: 39.9,
+    lng: 116.4,
+  });
+  snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  const transport = snapshot.days[0].items.find((i) => i.transport)!;
+  expect(transport.transport).toMatchObject({
+    mode: "train",
+    status: "tentative",
+    origin: { name: "深圳", lat: null },
+    destination: { name: "北京", lat: null },
+  });
+  expect(snapshot.days[0].legs).toHaveLength(0);
+  const card = page.getByTestId(`item-${transport.id}`);
+  await expect(card).toContainText("暂定");
+  await expect(card.locator(".item-time")).toHaveText("待定");
+  await expect(
+    page.locator(".timeline-item").last().locator(".item-time"),
+  ).toHaveText("待定");
+  const start = await call<{ id: string }>(
+    page,
+    `/trips/${id}/places`,
+    "POST",
+    { title: "深圳北站", placeCategory: "交通", lat: 22.6, lng: 114.03 },
+  );
+  const end = await call<{ id: string }>(page, `/trips/${id}/places`, "POST", {
+    title: "北京南站",
+    placeCategory: "交通",
+    lat: 39.86,
+    lng: 116.38,
+  });
+  await card.getByRole("button", { name: "编辑", exact: true }).click();
+  await page
+    .getByLabel("从地点池选择出发地", { exact: true })
+    .selectOption(start.id);
+  await page
+    .getByLabel("从地点池选择到达地", { exact: true })
+    .selectOption(end.id);
+  await page.getByLabel("班次（可选）", { exact: true }).fill("G1234");
+  await page.getByLabel("确认状态", { exact: true }).selectOption("confirmed");
+  await page.getByLabel("出发时间", { exact: true }).fill("09:00");
+  await page.getByLabel("到达时间", { exact: true }).fill("15:00");
+  await page.getByRole("button", { name: "保存交通", exact: true }).click();
+  await ready(page, id);
+  snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  expect(snapshot.days[0].legs).toHaveLength(2);
+  expect(
+    snapshot.days[0].legs.some(
+      (l) => l.fromItemId === transport.id && l.toItemId === transport.id,
+    ),
+  ).toBe(false);
+  await expect(card).toContainText("G1234");
+  await expect(card).toContainText("已确认");
+  await expect(card).toContainText("距出发还剩 18 分钟");
+  // A horizontal SVG line has zero bounding-box height despite its visible stroke.
+  await expect(
+    page.getByTestId(`map-transport-${transport.id}`),
+  ).toHaveAttribute("stroke-dasharray", "10 8");
+  await expect(page.getByTestId(`map-transport-${transport.id}`)).toHaveCSS(
+    "visibility",
+    "visible",
+  );
+  await expect(
+    page.getByRole("button", { name: "地图地点 深圳北站", exact: true }),
+  ).toHaveAttribute("data-icon", "train");
+  await expect(
+    page.getByRole("button", { name: "未安排地点 深圳北站", exact: true }),
+  ).not.toBeVisible();
+  await expect(page.locator(".pool-entry").first()).toContainText(
+    "已安排 1 次",
+  );
+  await expect(
+    page.locator(".timeline-item").last().locator(".item-time"),
+  ).toHaveText("15:42");
+  await card.getByRole("button", { name: "编辑", exact: true }).click();
+  await page.getByLabel("交通类型", { exact: true }).selectOption("flight");
+  await page.getByLabel("出发时间", { exact: true }).fill("23:30");
+  await page.getByLabel("到达时间日期", { exact: true }).selectOption("1");
+  await page.getByLabel("到达时间", { exact: true }).fill("01:10");
+  await page.getByRole("button", { name: "保存交通", exact: true }).click();
+  await ready(page, id);
+  await expect(card).toContainText("次日 01:10");
+  await expect(
+    page.getByRole("button", { name: "地图地点 深圳北站", exact: true }),
+  ).toHaveAttribute("data-icon", "plane");
+  snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  await call(page, `/trips/${id}/expenses`, "POST", {
+    title: "交通票款",
+    category: "transport",
+    amountMinor: 50000,
+    currency: "CNY",
+    exchangeRateToBase: "1",
+    payerParticipantId: snapshot.participants[0].id,
+    splitMethod: "equal",
+    splitMeta: [{ participantId: snapshot.participants[0].id, value: "1" }],
+    incurredAt: Date.now(),
+    dayItemId: transport.id,
+  });
+  await expect(card).toContainText("交通票款");
+  const next = await call<{ id: string }>(
+    page,
+    `/trips/${id}/days`,
+    "POST",
+    {},
+  );
+  await expect(
+    page.locator(".day-tabs button").filter({ hasText: "第 2 天" }),
+  ).toBeVisible();
+  await card
+    .getByRole("button", { name: "北上火车 更多操作", exact: true })
+    .click();
+  await card.getByRole("button", { name: "移至后一天", exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (await call<TripSnapshot>(page, `/trips/${id}`)).days[1].items.length,
+    )
+    .toBe(1);
+  snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  expect(snapshot.days[1].items[0].transport?.serviceNumber).toBe("G1234");
+  expect(
+    snapshot.expenses.find((e) => e.dayItemId === transport.id)?.dayId,
+  ).toBe(next.id);
+  await page
+    .locator(".day-tabs")
+    .getByRole("button", { name: /第 2 天/ })
+    .click();
+  await card.locator(".item-title").click();
+  await expect(page.locator(".trip-map")).toHaveAttribute(
+    "data-map-day",
+    next.id,
+  );
+  await page.reload();
+  await expect(page.getByTestId(`item-${transport.id}`)).toContainText(
+    "交通票款",
+  );
 });

@@ -30,6 +30,7 @@ import {
   ReceiptText,
   ChevronDown,
   LocateFixed,
+  TrainFront,
 } from "lucide-react";
 import { api, ApiFailure } from "@/lib/client";
 import type {
@@ -46,6 +47,7 @@ import { ItemEditor, itemPayload, TimeField, readTime } from "./item-editor";
 import { TripMap, type MapFocus, type MapInsets } from "./map";
 import { LegCard } from "./leg-card";
 import { TimelineItem } from "./timeline-item";
+import { TransportEditor } from "./transport-editor";
 import { PlacePool, PoolPlaceEditor } from "./place-pool";
 import { ErrorText, Modal } from "./ui";
 export type Mutate = <T = { id: string }>(
@@ -63,6 +65,7 @@ function DaySection({
   children,
   settings,
   addItem,
+  addTransport,
   billCount,
   dropTarget,
 }: {
@@ -71,6 +74,7 @@ function DaySection({
   children: React.ReactNode;
   settings: () => void;
   addItem?: () => void;
+  addTransport?: () => void;
   billCount: number;
   dropTarget: DropTarget | null;
 }) {
@@ -99,6 +103,15 @@ function DaySection({
         <div className="day-actions">
           {addItem && (
             <>
+              <button
+                className="day-transport-action"
+                aria-label={`向${day.title}添加交通`}
+                title="添加火车、飞机等独立交通"
+                onClick={addTransport}
+              >
+                <TrainFront size={14} />
+                交通
+              </button>
               <button
                 className="icon-btn"
                 aria-label={`向${day.title}添加事项`}
@@ -165,9 +178,13 @@ export function Planner({
 }) {
   const [selectedDay, setSelectedDay] = useState<string | null>(null),
     [selected, setSelected] = useState<string | null>(null),
-    [editing, setEditing] = useState<{ dayId: string; item?: Item } | null>(
-      null,
-    ),
+    [selectedPool, setSelectedPool] = useState<string | null>(null),
+    [poolReveal, setPoolReveal] = useState(0),
+    [editing, setEditing] = useState<{
+      dayId: string;
+      item?: Item;
+      transport?: boolean;
+    } | null>(null),
     [point, setPoint] = useState<{ lat: number; lng: number } | null>(null),
     [picking, setPicking] = useState(false),
     [view, setView] = useState<"pool" | "timeline" | "map">("timeline"),
@@ -360,6 +377,12 @@ export function Planner({
   }
   const select = useCallback((item: Item) => {
     interactionSequence.current++;
+    navigationLock.current = true;
+    clearTimeout(navigationTimer.current);
+    navigationTimer.current = setTimeout(() => {
+      navigationLock.current = false;
+    }, 1000);
+    setSelectedPool(null);
     setSelected(item.id);
     setSelectedDay(item.dayId);
     setTimelineCollapsed(false);
@@ -397,6 +420,12 @@ export function Planner({
   }
   function focusLeg(targetDay: DayPlan, legId: string) {
     interactionSequence.current++;
+    navigationLock.current = true;
+    clearTimeout(navigationTimer.current);
+    navigationTimer.current = setTimeout(() => {
+      navigationLock.current = false;
+    }, 1000);
+    setSelectedPool(null);
     setSelectedDay(targetDay.id);
     if (window.innerWidth <= 1000) setView("timeline");
     setFocus({ kind: "leg", id: legId, request: ++focusSequence.current });
@@ -408,9 +437,12 @@ export function Planner({
       return;
     }
     setSelected(null);
+    setSelectedPool(place.id);
     setFocus({
       kind: "point",
       title: place.title,
+      poolPlaceId: place.id,
+      category: place.placeCategory,
       lat: place.lat,
       lng: place.lng,
       request: ++focusSequence.current,
@@ -643,6 +675,8 @@ export function Planner({
             >
               <PlacePool
                 snapshot={snapshot}
+                selectedId={selectedPool}
+                revealRequest={poolReveal}
                 heading={false}
                 dayId={day?.id}
                 mutate={mutate}
@@ -752,6 +786,15 @@ export function Planner({
                       addItem={
                         editable
                           ? () => setEditing({ dayId: targetDay.id })
+                          : undefined
+                      }
+                      addTransport={
+                        editable
+                          ? () =>
+                              setEditing({
+                                dayId: targetDay.id,
+                                transport: true,
+                              })
                           : undefined
                       }
                       billCount={
@@ -907,6 +950,17 @@ export function Planner({
           <section className="map-pane">
             <TripMap
               day={day}
+              days={snapshot.days}
+              pool={snapshot.poolPlaces}
+              selectedPool={selectedPool}
+              selectPool={(place) => {
+                interactionSequence.current++;
+                setSelected(null);
+                setSelectedPool(place.id);
+                setPoolReveal((n) => n + 1);
+                setPoolCollapsed(false);
+                setView("pool");
+              }}
               selected={selected}
               focus={focus}
               view={view}
@@ -924,22 +978,38 @@ export function Planner({
           {dragTitle && <div className="planner-drag-preview">{dragTitle}</div>}
         </DragOverlay>
       </DndContext>
-      {editing && (
-        <ItemEditor
-          item={editing.item}
-          categories={categories}
-          close={() => setEditing(null)}
-          save={(data) =>
-            mutate(
-              editing.item
-                ? `/items/${editing.item.id}`
-                : `/days/${editing.dayId}/items`,
-              editing.item ? "PATCH" : "POST",
-              data,
-            )
-          }
-        />
-      )}
+      {editing &&
+        (editing.transport || editing.item?.transport ? (
+          <TransportEditor
+            item={editing.item}
+            places={snapshot.poolPlaces}
+            close={() => setEditing(null)}
+            save={(data) =>
+              mutate(
+                editing.item
+                  ? `/items/${editing.item.id}`
+                  : `/days/${editing.dayId}/items`,
+                editing.item ? "PATCH" : "POST",
+                data,
+              )
+            }
+          />
+        ) : (
+          <ItemEditor
+            item={editing.item}
+            categories={categories}
+            close={() => setEditing(null)}
+            save={(data) =>
+              mutate(
+                editing.item
+                  ? `/items/${editing.item.id}`
+                  : `/days/${editing.dayId}/items`,
+                editing.item ? "PATCH" : "POST",
+                data,
+              )
+            }
+          />
+        ))}
       {point && (
         <PoolPlaceEditor
           point={point}

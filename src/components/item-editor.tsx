@@ -20,6 +20,7 @@ export function itemPayload(item: Item) {
     notes: item.notes,
     sourcePlaceId: item.sourcePlaceId,
     placeCategory: item.placeCategory,
+    transport: item.transport,
   };
 }
 export function TimeField({

@@ -17,7 +17,11 @@ import {
 import { api } from "@/lib/client";
 import type { PoolPlace, TripSnapshot } from "@/domain/types";
 import type { Place } from "@/amap/requests";
-import { inferPlaceCategory, placeCategories } from "@/domain/planning";
+import {
+  inferPlaceCategory,
+  placeCategories,
+  poolPlaceCounts,
+} from "@/domain/planning";
 import { typeLabels } from "@/domain/types";
 import { ErrorText, Modal } from "./ui";
 import type { Mutate } from "./planner";
@@ -34,6 +38,7 @@ function PoolEntry({
   remove,
   locate,
   move,
+  selected,
 }: {
   place: PoolPlace;
   count: number;
@@ -44,6 +49,7 @@ function PoolEntry({
   remove: () => void;
   locate: () => void;
   move: (direction: -1 | 1) => void;
+  selected: boolean;
 }) {
   const {
     attributes,
@@ -62,7 +68,8 @@ function PoolEntry({
     <article
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={`pool-entry place-card ${editable ? "draggable-card" : ""} ${isDragging ? "dragging" : ""}`}
+      className={`pool-entry place-card ${selected ? "selected" : ""} ${editable ? "draggable-card" : ""} ${isDragging ? "dragging" : ""}`}
+      id={`pool-place-${place.id}`}
       data-testid={`pool-${place.id}`}
       {...cardDragListeners(listeners)}
     >
@@ -263,6 +270,8 @@ export function PlacePool({
   pick,
   reorder,
   heading = true,
+  selectedId = null,
+  revealRequest = 0,
 }: {
   snapshot: TripSnapshot;
   dayId?: string;
@@ -272,6 +281,8 @@ export function PlacePool({
   pick: () => void;
   reorder: (place: PoolPlace, target: PoolPlace) => void;
   heading?: boolean;
+  selectedId?: string | null;
+  revealRequest?: number;
 }) {
   const [query, setQuery] = useState(""),
     [city, setCity] = useState(""),
@@ -285,6 +296,29 @@ export function PlacePool({
     [editor, setEditor] = useState<PoolPlace | "new" | null>(null);
   const sequence = useRef(0),
     timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const revealed = useRef(0);
+  useEffect(() => {
+    if (!selectedId || revealRequest === revealed.current) return;
+    revealed.current = revealRequest;
+    let scroll = 0;
+    const frame = requestAnimationFrame(() => {
+      setCategory("");
+      setArranged("all");
+      setQuery("");
+      setResults([]);
+      setSearching(false);
+      sequence.current++;
+      scroll = requestAnimationFrame(() =>
+        document
+          .getElementById(`pool-place-${selectedId}`)
+          ?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+      );
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(scroll);
+    };
+  }, [revealRequest, selectedId]);
   const editable = snapshot.role !== "viewer";
   const categories = [
     ...new Set([
@@ -293,14 +327,7 @@ export function PlacePool({
       ...snapshot.days.flatMap((d) => d.items.map((i) => i.placeCategory)),
     ]),
   ];
-  const counts = new Map<string, number>();
-  for (const day of snapshot.days)
-    for (const item of day.items)
-      if (item.sourcePlaceId)
-        counts.set(
-          item.sourcePlaceId,
-          (counts.get(item.sourcePlaceId) ?? 0) + 1,
-        );
+  const counts = poolPlaceCounts(snapshot.days);
   const visible = snapshot.poolPlaces.filter(
     (p) =>
       (!category || p.placeCategory === category) &&
@@ -504,6 +531,7 @@ export function PlacePool({
             <PoolEntry
               key={place.id}
               place={place}
+              selected={selectedId === place.id}
               count={counts.get(place.id) ?? 0}
               editable={editable}
               dayTitle={snapshot.days.find((d) => d.id === dayId)?.title}

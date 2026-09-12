@@ -1,10 +1,14 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapPinned } from "lucide-react";
 import { api } from "@/lib/client";
 import { wgs84ToGcj02, gcj02ToWgs84 } from "@/geo/gcj02";
-import type { DayPlan, Item } from "@/domain/types";
+import type { DayPlan, Item, PoolPlace } from "@/domain/types";
 import { located } from "@/domain/timeline";
+import { routeEndpoint } from "@/domain/transport";
+import { mapLocations, type MapLocation } from "@/domain/map-locations";
+import { mapCategory, markerElement, arrangeMapLabels } from "./map-marker";
+import { PlaceCategory } from "./place-category";
 interface MapObject {
   destroy(): void;
   add(object: unknown): void;
@@ -15,6 +19,7 @@ interface MapObject {
     padding?: number[],
   ): void;
   setCenter(point: [number, number]): void;
+  off(type: string, listener: () => void): void;
   on(
     type: string,
     listener: (event: {
@@ -77,12 +82,18 @@ export type MapFocus =
       lat: number;
       lng: number;
       title?: string;
+      poolPlaceId?: string;
+      category?: string;
       request: number;
     };
 // AMap setFitView uses top, bottom, left, right (not CSS clockwise order).
 export type MapInsets = [number, number, number, number];
 export function TripMap({
   day,
+  days,
+  pool,
+  selectedPool,
+  selectPool,
   selected,
   select,
   pick,
@@ -92,6 +103,10 @@ export function TripMap({
   insets,
 }: {
   day: DayPlan | undefined;
+  days: DayPlan[];
+  pool: PoolPlace[];
+  selectedPool: string | null;
+  selectPool: (place: PoolPlace) => void;
   selected: string | null;
   select: (item: Item) => void;
   pick: (point: { lat: number; lng: number }) => void;
@@ -104,13 +119,17 @@ export function TripMap({
     instance = useRef<MapObject | null>(null),
     overlays = useRef<unknown[]>([]),
     fit = useRef("");
-  const callbacks = useRef({ select, pick, picking });
+  const callbacks = useRef({ select, selectPool, pick, picking });
   const [sdk, setSdk] = useState<SDK | null>(null),
     [error, setError] = useState(""),
     [testMode, setTestMode] = useState(false);
+  const locations = useMemo(
+    () => mapLocations(day, pool, days),
+    [day, pool, days],
+  );
   useEffect(() => {
-    callbacks.current = { select, pick, picking };
-  }, [select, pick, picking]);
+    callbacks.current = { select, selectPool, pick, picking };
+  }, [select, selectPool, pick, picking]);
   useEffect(() => {
     let cancelled = false;
     api<{ amapJsKey: string; mapAvailable: boolean; testMode: boolean }>(
@@ -163,45 +182,56 @@ export function TripMap({
       map.add(object);
       overlays.current.push(object);
     };
-    const markers: unknown[] = [];
-    const markerByItem = new globalThis.Map<string, unknown>();
-    const lineByLeg = new globalThis.Map<string, unknown>();
-    for (const [i, item] of (day?.items ?? []).entries())
-      if (located(item) && item.type !== "note") {
-        const node = document.createElement("button");
-        node.className = `map-marker ${selected === item.id ? "active" : ""}`;
-        node.textContent = String(i + 1);
-        node.title = item.title;
-        const marker = new sdk.Marker({
-          position: mapPoint(item.lng!, item.lat!),
-          content: node,
-          offset: new sdk.Pixel(-15, -15),
-          zIndex: selected === item.id ? 200 : 100,
-        });
-        marker.on("click", () => callbacks.current.select(item));
-        add(marker);
-        markers.push(marker);
-        markerByItem.set(item.id, marker);
-      }
+    const markers = new globalThis.Map<string, unknown>(),
+      lineByLeg = new globalThis.Map<string, unknown>(),
+      lineByItem = new globalThis.Map<string, unknown>();
+    const createMarker = (point: MapLocation) => {
+      const active =
+        !!(point.itemId && point.itemId === selected) ||
+        !!(point.poolPlaceId && point.poolPlaceId === selectedPool);
+      const node = markerElement(point, active);
+      const marker = new sdk.Marker({
+        position: mapPoint(point.lng, point.lat),
+        content: node,
+        offset: new sdk.Pixel(-17, -17),
+        zIndex: active ? 300 : point.itemId ? 200 : 100,
+      });
+      marker.on("click", () => {
+        if (callbacks.current.picking) return;
+        if (point.poolPlaceId) {
+          const place = pool.find((p) => p.id === point.poolPlaceId);
+          if (place) callbacks.current.selectPool(place);
+        } else {
+          const item = day?.items.find((i) => i.id === point.itemId);
+          if (item) callbacks.current.select(item);
+        }
+      });
+      add(marker);
+      markers.set(point.id, marker);
+      return marker;
+    };
+    for (const point of locations) createMarker(point);
     for (const leg of day?.legs ?? []) {
       const alternative = leg.alternatives.find(
         (a) => a.id === leg.selectedAlternativeId,
       );
       const a = day?.items.find((i) => i.id === leg.fromItemId),
         b = day?.items.find((i) => i.id === leg.toItemId);
+      const from = a && routeEndpoint(a, "departure"),
+        to = b && routeEndpoint(b, "arrival");
       const points =
-        leg.mode === "manual" && a && b && located(a) && located(b)
+        leg.mode === "manual" && from && to && located(from) && located(to)
           ? [
-              [a.lng!, a.lat!],
-              [b.lng!, b.lat!],
+              [from.lng!, from.lat!],
+              [to.lng!, to.lat!],
             ]
           : (alternative?.polyline ?? []);
       if (points.length >= 2) {
         const line = new sdk.Polyline({
           path: points.map((p) => mapPoint(p[0], p[1])),
           strokeColor: leg.mode === "manual" ? "#ed9045" : "#3264ef",
-          strokeWeight: 5,
-          strokeOpacity: 0.8,
+          strokeWeight: 4,
+          strokeOpacity: 0.85,
           strokeStyle: leg.mode === "manual" ? "dashed" : "solid",
           lineJoin: "round",
           zIndex: focus?.kind === "leg" && focus.id === leg.id ? 50 : 30,
@@ -210,58 +240,89 @@ export function TripMap({
         lineByLeg.set(leg.id, line);
       }
     }
-    let targets = markers;
-    const focusedLeg =
+    for (const item of day?.items ?? [])
+      if (
+        item.transport &&
+        located(item.transport.origin) &&
+        located(item.transport.destination)
+      ) {
+        const { origin, destination } = item.transport;
+        const line = new sdk.Polyline({
+          path: [
+            mapPoint(origin.lng!, origin.lat!),
+            mapPoint(destination.lng!, destination.lat!),
+          ],
+          strokeColor: "#8c70ad",
+          strokeWeight: 3,
+          strokeOpacity: 0.8,
+          strokeStyle: "dashed",
+          zIndex: 25,
+        });
+        add(line);
+        lineByItem.set(item.id, line);
+      }
+    let targets = [...markers.values()];
+    const leg =
       focus?.kind === "leg"
         ? day?.legs.find((l) => l.id === focus.id)
         : undefined;
-    let signature = JSON.stringify([
-      day?.id,
-      day?.items.map((i) => [i.id, i.lat, i.lng]),
-      view,
-    ]);
-    if (focusedLeg && focus) {
+    if (leg) {
+      const a = day?.items.find((i) => i.id === leg.fromItemId),
+        b = day?.items.find((i) => i.id === leg.toItemId);
       targets = [
-        markerByItem.get(focusedLeg.fromItemId),
-        markerByItem.get(focusedLeg.toItemId),
-        lineByLeg.get(focusedLeg.id),
+        markers.get(a?.transport ? `${a.id}:destination` : leg.fromItemId),
+        markers.get(b?.transport ? `${b.id}:origin` : leg.toItemId),
+        lineByLeg.get(leg.id),
       ].filter(Boolean);
-      signature = JSON.stringify([
-        day?.id,
-        focus.request,
-        focusedLeg.id,
-        focusedLeg.selectedAlternativeId,
-        focusedLeg.manualDurationMinutes,
-        view,
-      ]);
-    } else if (focus?.kind === "item" && markerByItem.has(focus.id)) {
-      targets = [markerByItem.get(focus.id)];
-      signature = JSON.stringify([
-        focus,
-        day?.items.find((i) => i.id === focus.id)?.lat,
-        day?.items.find((i) => i.id === focus.id)?.lng,
-        view,
-      ]);
+    } else if (focus?.kind === "item") {
+      targets = [
+        ...locations
+          .filter((p) => p.itemId === focus.id)
+          .map((p) => markers.get(p.id)),
+        lineByItem.get(focus.id),
+      ].filter(Boolean);
     } else if (focus?.kind === "point") {
-      const node = document.createElement("span");
-      node.className = "map-marker pool-preview-marker";
-      node.textContent = "·";
-      node.title = focus.title ?? "地点预览";
-      const marker = new sdk.Marker({
-        position: mapPoint(focus.lng, focus.lat),
-        content: node,
-        offset: new sdk.Pixel(-15, -15),
-        zIndex: 250,
-      });
-      add(marker);
-      targets = [marker];
-      signature = JSON.stringify([focus, view]);
+      const existing = focus.poolPlaceId
+        ? markers.get(`pool:${focus.poolPlaceId}`)
+        : undefined;
+      targets = [
+        existing ??
+          createMarker({
+            id: "preview",
+            poolPlaceId: focus.poolPlaceId,
+            title: focus.title ?? "地点预览",
+            category: focus.category ?? "未分类",
+            lat: focus.lat,
+            lng: focus.lng,
+          }),
+      ];
     }
-    signature = JSON.stringify([
-      signature,
-      focus?.kind === "day" ? focus.request : null,
+    const signature = JSON.stringify([
+      day?.id,
+      locations.map((p) => [p.id, p.lat, p.lng]),
+      focus,
+      leg?.selectedAlternativeId,
+      leg?.manualDurationMinutes,
+      view,
       insets,
     ]);
+    let frame = 0;
+    const arrange = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (!container.current) return;
+        const rect = container.current.getBoundingClientRect();
+        arrangeMapLabels(container.current, {
+          x: rect.x + insets[2],
+          y: rect.y + insets[0],
+          width: Math.max(0, rect.width - insets[2] - insets[3]),
+          height: Math.max(0, rect.height - insets[0] - insets[1]),
+        });
+      });
+    };
+    map.on("zoomend", arrange);
+    map.on("moveend", arrange);
+    map.on("complete", arrange);
     const timer = setTimeout(() => {
       if (
         signature !== fit.current &&
@@ -269,31 +330,76 @@ export function TripMap({
         container.current?.clientWidth &&
         container.current?.clientHeight
       ) {
-        map.setFitView(targets, true, insets);
+        map.setFitView(targets, true, [
+          insets[0] + 16,
+          insets[1] + 35,
+          insets[2] + 60,
+          insets[3] + 60,
+        ]);
         fit.current = signature;
       }
+      arrange();
     }, 80);
-    return () => clearTimeout(timer);
-  }, [sdk, day, selected, focus, view, insets]);
-  const points =
-    day?.items.filter((i) => located(i) && i.type !== "note") ?? [];
+    return () => {
+      clearTimeout(timer);
+      cancelAnimationFrame(frame);
+      map.off("zoomend", arrange);
+      map.off("moveend", arrange);
+      map.off("complete", arrange);
+    };
+  }, [sdk, day, pool, locations, selected, selectedPool, focus, view, insets]);
   const focusedLeg =
     focus?.kind === "leg"
       ? day?.legs.find((l) => l.id === focus.id)
       : undefined;
-  const focusIds = focusedLeg
+  const ids = focusedLeg
     ? [focusedLeg.fromItemId, focusedLeg.toItemId]
     : focus?.kind === "item"
       ? [focus.id]
       : [];
-  const selectedPoints = points.flatMap((item, i) =>
-    focusIds.includes(item.id)
+  const selectedPoints = locations.flatMap((point, i) =>
+    (point.itemId && ids.includes(point.itemId)) ||
+    (focus?.kind === "point" && point.poolPlaceId === focus.poolPlaceId)
       ? [{ x: 130 + (i % 3) * 180, y: 110 + Math.floor(i / 3) * 140 }]
       : [],
   );
   const testViewBox = selectedPoints.length
     ? `${Math.min(...selectedPoints.map((p) => p.x)) - 80} ${Math.min(...selectedPoints.map((p) => p.y)) - 80} ${Math.max(200, Math.max(...selectedPoints.map((p) => p.x)) - Math.min(...selectedPoints.map((p) => p.x)) + 160)} ${Math.max(180, Math.max(...selectedPoints.map((p) => p.y)) - Math.min(...selectedPoints.map((p) => p.y)) + 160)}`
-    : "0 0 700 600";
+    : `0 0 700 ${Math.max(600, Math.ceil(locations.length / 3) * 140 + 80)}`;
+  const offset = {
+    top: insets[0],
+    bottom: insets[1],
+    left: insets[2],
+    right: insets[3],
+  };
+  const unplanned = locations.filter((p) => p.poolPlaceId).length;
+  const pointIndex = (id: string, endpoint: "origin" | "destination") =>
+    locations.findIndex(
+      (p) => p.itemId === id && (!p.endpoint || p.endpoint === endpoint),
+    );
+  const testLine = (
+    a: number,
+    b: number,
+    id: string,
+    alternative: string,
+    independent = false,
+  ) =>
+    a >= 0 && b >= 0 ? (
+      <line
+        key={id}
+        data-testid={independent ? `map-transport-${id}` : `map-leg-${id}`}
+        data-alternative={alternative}
+        x1={130 + (a % 3) * 180}
+        y1={110 + Math.floor(a / 3) * 140}
+        x2={130 + (b % 3) * 180}
+        y2={110 + Math.floor(b / 3) * 140}
+        stroke={independent ? "#8c70ad" : "#3264ef"}
+        strokeWidth="4"
+        strokeDasharray={
+          independent || alternative === "manual" ? "10 8" : undefined
+        }
+      />
+    ) : null;
   return (
     <div
       className={`trip-map ${picking ? "picking" : ""}`}
@@ -303,31 +409,14 @@ export function TripMap({
     >
       <div ref={container} className="map-container" />
       {(error || (!sdk && !testMode)) && (
-        <div
-          className="map-unavailable"
-          style={{
-            top: insets[0],
-            bottom: insets[1],
-            left: insets[2],
-            right: insets[3],
-          }}
-        >
+        <div className="map-unavailable" style={offset}>
           <MapPinned size={48} strokeWidth={1.2} />
           <h3>{error ? "地图暂不可用" : "地图加载中"}</h3>
           <p>{error || "正在加载地点和路线。"}</p>
         </div>
       )}
       {testMode && (
-        <div
-          className="test-map"
-          data-testid="test-map"
-          style={{
-            top: insets[0],
-            bottom: insets[1],
-            left: insets[2],
-            right: insets[3],
-          }}
-        >
+        <div className="test-map" data-testid="test-map" style={offset}>
           <span className="pill absolute top-5 left-5">
             模拟高德 · 仅测试环境
           </span>
@@ -347,77 +436,117 @@ export function TripMap({
                 />
               </pattern>
             </defs>
-            <rect width="700" height="600" fill="#f3f6fc" />
-            <rect width="700" height="600" fill="url(#grid)" />
-            {day?.legs.map((leg) => {
-              const a = points.findIndex((i) => i.id === leg.fromItemId),
-                b = points.findIndex((i) => i.id === leg.toItemId);
-              const alt = leg.alternatives.find(
-                (x) => x.id === leg.selectedAlternativeId,
+            <rect width="700" height="2000" fill="#f3f6fc" />
+            <rect width="700" height="2000" fill="url(#grid)" />
+            {day?.legs.map(
+              (leg) =>
+                (leg.selectedAlternativeId || leg.mode === "manual") &&
+                testLine(
+                  pointIndex(leg.fromItemId, "destination"),
+                  pointIndex(leg.toItemId, "origin"),
+                  leg.id,
+                  leg.selectedAlternativeId ?? "manual",
+                ),
+            )}
+            {day?.items
+              .filter((i) => i.transport)
+              .map((item) =>
+                testLine(
+                  pointIndex(item.id, "origin"),
+                  pointIndex(item.id, "destination"),
+                  item.id,
+                  "independent",
+                  true,
+                ),
+              )}
+            {locations.map((point, i) => {
+              const activate = () => {
+                const place = pool.find((p) => p.id === point.poolPlaceId),
+                  item = day?.items.find((p) => p.id === point.itemId);
+                if (place) selectPool(place);
+                else if (item) select(item);
+              };
+              return (
+                <g
+                  key={point.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${point.poolPlaceId ? "未安排地点" : "地图地点"} ${point.title}`}
+                  data-pool-place-id={point.poolPlaceId}
+                  data-item-id={point.itemId}
+                  data-icon={mapCategory(point.category).icon}
+                  data-category={point.category}
+                  onClick={activate}
+                  onKeyDown={(e) => {
+                    if (["Enter", " "].includes(e.key)) {
+                      e.preventDefault();
+                      activate();
+                    }
+                  }}
+                >
+                  <circle
+                    cx={130 + (i % 3) * 180}
+                    cy={110 + Math.floor(i / 3) * 140}
+                    r={20}
+                    fill={
+                      point.poolPlaceId
+                        ? "white"
+                        : mapCategory(point.category).color
+                    }
+                    stroke={mapCategory(point.category).color}
+                    strokeWidth="2"
+                  />
+                  <foreignObject
+                    x={117 + (i % 3) * 180}
+                    y={98 + Math.floor(i / 3) * 140}
+                    width={26}
+                    height={26}
+                  >
+                    <span
+                      className={`test-map-category ${point.poolPlaceId ? "" : "on-color"}`}
+                    >
+                      <PlaceCategory name={point.category} />
+                    </span>
+                  </foreignObject>
+                  {point.number !== undefined && (
+                    <text
+                      x={150 + (i % 3) * 180}
+                      y={99 + Math.floor(i / 3) * 140}
+                      fontSize="13"
+                      fill="#324c75"
+                    >
+                      {point.number}
+                    </text>
+                  )}
+                  <text
+                    className="test-map-label"
+                    x={130 + (i % 3) * 180}
+                    y={150 + Math.floor(i / 3) * 140}
+                    textAnchor="middle"
+                    fill="#455570"
+                    fontSize="12"
+                  >
+                    {point.title}
+                  </text>
+                </g>
               );
-              return a >= 0 && b >= 0 && (alt || leg.mode === "manual") ? (
-                <line
-                  key={leg.id}
-                  data-testid={`map-leg-${leg.id}`}
-                  data-alternative={leg.selectedAlternativeId ?? "manual"}
-                  x1={130 + (a % 3) * 180}
-                  y1={110 + Math.floor(a / 3) * 140}
-                  x2={130 + (b % 3) * 180}
-                  y2={110 + Math.floor(b / 3) * 140}
-                  stroke="#3264ef"
-                  strokeWidth="5"
-                  strokeDasharray={leg.mode === "manual" ? "10 8" : undefined}
-                />
-              ) : null;
             })}
-            {points.map((item, i) => (
-              <g
-                key={item.id}
-                role="button"
-                tabIndex={0}
-                aria-label={`地图地点 ${item.title}`}
-                onClick={() => select(item)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") select(item);
-                }}
-              >
-                <circle
-                  cx={130 + (i % 3) * 180}
-                  cy={110 + Math.floor(i / 3) * 140}
-                  r={20}
-                  fill={selected === item.id ? "#ff754f" : "#3264ef"}
-                />
-                <text
-                  x={130 + (i % 3) * 180}
-                  y={116 + Math.floor(i / 3) * 140}
-                  textAnchor="middle"
-                  fill="white"
-                  fontSize="16"
-                >
-                  {day!.items.indexOf(item) + 1}
-                </text>
-                <text
-                  x={130 + (i % 3) * 180}
-                  y={150 + Math.floor(i / 3) * 140}
-                  textAnchor="middle"
-                  fill="#455570"
-                  fontSize="12"
-                >
-                  {item.title.slice(0, 12)}
-                </text>
-              </g>
-            ))}
           </svg>
         </div>
       )}
       <div className="map-caption">
         <span>
-          <i className="real-line" /> 高德路线
+          <i className="real-line" />
+          高德路线
         </span>
         <span>
-          <i className="manual-line" /> 手动交通
+          <i className="manual-line" />
+          独立／手动交通
         </span>
-        <span>{points.length} 个地点</span>
+        <span>{locations.length - unplanned} 个行程地点</span>
+        {unplanned > 0 && (
+          <span className="unplanned-legend">{unplanned} 个未安排</span>
+        )}
       </div>
       {picking && (
         <div className="map-pick-hint">点击地图，添加一个自选地点</div>

@@ -7,6 +7,9 @@ import {
   TrainFront,
   Ticket,
   StickyNote,
+  Plane,
+  Bus,
+  Ship,
 } from "lucide-react";
 
 const categories = {
@@ -19,6 +22,10 @@ const categories = {
   口岸: { icon: TrainFront, tone: "blue" },
   活动: { icon: Ticket, tone: "violet" },
   备注: { icon: StickyNote, tone: "neutral" },
+  火车: { icon: TrainFront, tone: "blue" },
+  飞机: { icon: Plane, tone: "violet" },
+  长途汽车: { icon: Bus, tone: "orange" },
+  轮船: { icon: Ship, tone: "blue" },
 };
 
 export function PlaceCategory({ name }: { name: string }) {

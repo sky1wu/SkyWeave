@@ -40,3 +40,13 @@
 端点还支持可空的 `sourcePlaceId`、`lat`、`lng`、`amapPoiId`、`address`。坐标必须成对填写，来源地点必须属于当前 Trip。`startMinutes`、`endMinutes` 仍在事项顶层；不提供时间即可保存暂定交通。
 
 不包含订票、实时班次查询或出票状态同步；“已确认”由用户手动维护。
+
+## 界面示例
+
+以下截图使用隔离的验证行程。班次与时间未填写，线路为起终点连线示意。
+
+![地图上的地点池、常驻名称和分类图标](images/map-pool-labels.png)
+
+![独立铁路交通](images/independent-transport.png)
+
+[手机暂定交通](images/tentative-transport-mobile.png)
