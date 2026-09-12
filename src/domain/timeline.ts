@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 import type { DayPlan, Item } from "./types";
+import { routeEndpoint, transportTiming } from "./transport";
 export interface TimelineEntry {
   itemId: string;
   arrival: number | null;
@@ -24,7 +25,10 @@ export function routePairs(items: Item[]): [Item, Item][] {
   return points
     .slice(1)
     .flatMap((item, i): [Item, Item][] =>
-      located(points[i]) && located(item) ? [[points[i], item]] : [],
+      located(routeEndpoint(points[i], "departure")) &&
+      located(routeEndpoint(item, "arrival"))
+        ? [[points[i], item]]
+        : [],
     );
 }
 export function calculateTimeline(day: DayPlan) {
@@ -35,7 +39,11 @@ export function calculateTimeline(day: DayPlan) {
   for (const item of [...day.items].sort((a, b) => a.position - b.position)) {
     const warnings: string[] = [];
     if (item.type !== "note") {
-      if (!located(item)) warnings.push("地点没有坐标");
+      if (item.transport) {
+        if (!located(item.transport.origin)) warnings.push("出发地点待定位");
+        if (!located(item.transport.destination))
+          warnings.push("到达地点待定位");
+      } else if (!located(item)) warnings.push("地点没有坐标");
       if (previous) {
         const leg = day.legs.find(
           (l) => l.fromItemId === previous!.id && l.toItemId === item.id,
@@ -66,6 +74,17 @@ export function calculateTimeline(day: DayPlan) {
       previous = item;
     }
     const arrival = clock;
+    if (item.transport) {
+      const timing = transportTiming(item, arrival);
+      clock = timing.departure;
+      entries.push({
+        itemId: item.id,
+        arrival,
+        ...timing,
+        warnings: [...warnings, ...timing.warnings],
+      });
+      continue;
+    }
     const fixedStart =
       item.startMinutes === null ? null : item.startMinutes * 60;
     const plannedEnd =

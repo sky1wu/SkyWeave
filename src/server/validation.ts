@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { transportInput } from "@/domain/transport";
 import { DateTime } from "luxon";
 import { currencies } from "@/domain/money";
 export const id = z.string().min(1).max(100);
@@ -27,6 +28,7 @@ export const dayInput = z.strictObject({
 });
 export const itemInput = z.strictObject({
   title,
+  transport: transportInput.nullable().optional(),
   sourcePlaceId: id.nullable().optional(),
   placeCategory: z.string().trim().min(1).max(40).optional(),
   type: z

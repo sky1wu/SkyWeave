@@ -2,6 +2,7 @@ import { amap } from "@/amap/service";
 import type { RouteRequest } from "@/amap/requests";
 import { calculateTimeline, departureISO } from "@/domain/timeline";
 import type { Leg } from "@/domain/types";
+import { routeEndpoint } from "@/domain/transport";
 import {
   access,
   getDay,
@@ -22,8 +23,14 @@ export async function calculateLeg(legId: string, actor: Actor, force = false) {
   const day = getDay(leg.dayId);
   access(day.tripId, actor, "edit");
   if (leg.mode === "manual") return { changed: false };
-  const origin = requireValue(day.items.find((i) => i.id === leg.fromItemId)),
-    destination = requireValue(day.items.find((i) => i.id === leg.toItemId));
+  const origin = routeEndpoint(
+      requireValue(day.items.find((i) => i.id === leg.fromItemId)),
+      "departure",
+    ),
+    destination = routeEndpoint(
+      requireValue(day.items.find((i) => i.id === leg.toItemId)),
+      "arrival",
+    );
   const departure = calculateTimeline(day).departures[legId] ?? null;
   const request: RouteRequest = {
     mode: leg.mode,

@@ -1,3 +1,4 @@
+import type { TransportPlan } from "@/domain/transport";
 import {
   sqliteTable,
   text,
@@ -189,6 +190,7 @@ export const items = sqliteTable(
     startMinutes: integer(),
     endMinutes: integer(),
     stayMinutes: integer().notNull().default(0),
+    transport: text({ mode: "json" }).$type<TransportPlan>(),
     fixedTime: integer({ mode: "boolean" }).notNull().default(false),
     notes: text(),
     ...revision(),

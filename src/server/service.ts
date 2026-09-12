@@ -1,11 +1,12 @@
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 import { DateTime } from "luxon";
-import { nextDayDate } from "@/domain/planning";
+import { nextDayDate, itemSourcePlaceIds } from "@/domain/planning";
 import { sqlite, one, many, run, insert, update } from "./db";
 import { AppError, conflict, requireValue } from "./errors";
 import * as v from "./validation";
 import { routePairs } from "@/domain/timeline";
+import { routeEndpoint } from "@/domain/transport";
 import { convertMoney, splitExpense, calculateBalances } from "@/domain/money";
 import type {
   Trip,
@@ -129,7 +130,9 @@ export function rebuildLegs(dayId: string, actor: Actor) {
         dayId,
         fromItemId: a.id,
         toItemId: b.id,
-        ...(a.lat === b.lat && a.lng === b.lng
+        ...(routeEndpoint(a, "departure").lat ===
+          routeEndpoint(b, "arrival").lat &&
+        routeEndpoint(a, "departure").lng === routeEndpoint(b, "arrival").lng
           ? {
               mode: "manual",
               provider: "manual",
@@ -377,15 +380,21 @@ export function deleteDay(dayId: string, actor: Actor, expected: number) {
   });
 }
 function validItem(
-  data: Pick<Item, "lat" | "lng" | "fixedTime" | "startMinutes" | "endMinutes">,
+  data: Pick<
+    Item,
+    "lat" | "lng" | "fixedTime" | "startMinutes" | "endMinutes" | "type"
+  > & { transport?: Item["transport"] },
 ) {
+  if (data.transport && data.type !== "transport")
+    throw new AppError(400, "VALIDATION", "独立交通必须使用交通类型");
   if ((data.lat == null) !== (data.lng == null))
     throw new AppError(400, "VALIDATION", "经纬度必须成对填写");
   if (data.fixedTime && data.startMinutes == null)
     throw new AppError(400, "VALIDATION", "固定活动必须设置开始时间");
   if (
     data.endMinutes != null &&
-    (data.startMinutes == null || data.endMinutes < data.startMinutes)
+    ((data.startMinutes == null && !data.transport) ||
+      (data.startMinutes != null && data.endMinutes < data.startMinutes))
   )
     throw new AppError(
       400,
@@ -405,11 +414,14 @@ export function createItem(dayId: string, actor: Actor, body: unknown) {
   return tx(() => {
     const day = getDay(dayId);
     access(day.tripId, actor, "edit");
-    if (data.sourcePlaceId)
+    for (const sourceId of itemSourcePlaceIds({
+      sourcePlaceId: data.sourcePlaceId ?? null,
+      transport: data.transport ?? null,
+    }))
       requireValue(
         one(
           "SELECT id FROM trip_places WHERE id=? AND tripId=?",
-          data.sourcePlaceId,
+          sourceId,
           day.tripId,
         ),
         "地点不属于此行程",
@@ -454,11 +466,11 @@ export function editItem(itemId: string, actor: Actor, body: unknown) {
     const day = getDay(item.dayId);
     access(day.tripId, actor, "edit");
     checkVersion(item, expectedVersion);
-    if (data.sourcePlaceId)
+    for (const sourceId of itemSourcePlaceIds({ ...item, ...data }))
       requireValue(
         one(
           "SELECT id FROM trip_places WHERE id=? AND tripId=?",
-          data.sourcePlaceId,
+          sourceId,
           day.tripId,
         ),
         "地点不属于此行程",
@@ -470,13 +482,20 @@ export function editItem(itemId: string, actor: Actor, body: unknown) {
       updatedAt: Date.now(),
       updatedByUserId: actor.id,
     });
-    if (
-      (data.lat !== undefined && data.lat !== item.lat) ||
-      (data.lng !== undefined && data.lng !== item.lng) ||
-      (data.amapPoiId !== undefined && data.amapPoiId !== item.amapPoiId)
-    ) {
+    const endpointChanged = (side: "arrival" | "departure") => {
+      const old = routeEndpoint(item, side),
+        next = routeEndpoint({ ...item, ...data }, side);
+      return (
+        old.lat !== next.lat ||
+        old.lng !== next.lng ||
+        old.amapPoiId !== next.amapPoiId
+      );
+    };
+    if (endpointChanged("arrival") || endpointChanged("departure")) {
       for (const leg of day.legs.filter(
-        (l) => l.fromItemId === itemId || l.toItemId === itemId,
+        (l) =>
+          (l.fromItemId === itemId && endpointChanged("departure")) ||
+          (l.toItemId === itemId && endpointChanged("arrival")),
       )) {
         run("DELETE FROM route_alternatives WHERE travelLegId=?", leg.id);
         update("travel_legs", leg.id, {
@@ -484,6 +503,15 @@ export function editItem(itemId: string, actor: Actor, body: unknown) {
           requestKey: null,
           status: "pending",
           version: leg.version + 1,
+          ...(leg.mode === "manual" &&
+          leg.manualDescription === "同一地点，无需移动"
+            ? {
+                mode: "transit",
+                provider: "amap",
+                manualDurationMinutes: null,
+                manualDescription: null,
+              }
+            : {}),
         });
       }
     }

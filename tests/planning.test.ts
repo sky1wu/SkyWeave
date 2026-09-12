@@ -304,3 +304,81 @@ describe("day dates and pooled places", () => {
     db.close();
   });
 });
+
+it("validates independent transport references and preserves endpoints when their pool source is removed", async () => {
+  const snap = setup(),
+    foreign = setup();
+  const localPlace = p.savePoolPlace(snap.trip.id, actor, {
+    title: "深圳北",
+    lat: 22.6,
+    lng: 114.0,
+  });
+  const outside = p.savePoolPlace(foreign.trip.id, actor, {
+    title: "另一个行程的机场",
+  });
+  const plan = {
+    mode: "train",
+    origin: {
+      name: "深圳北",
+      sourcePlaceId: localPlace.id,
+      lat: 22.6,
+      lng: 114.0,
+    },
+    destination: { name: "北京南" },
+  };
+  expect(() =>
+    s.createItem(snap.days[0].id, actor, {
+      title: "越权",
+      type: "transport",
+      transport: {
+        ...plan,
+        destination: { name: "北京", sourcePlaceId: outside.id },
+      },
+    }),
+  ).toThrow();
+  expect(() =>
+    s.createItem(snap.days[0].id, actor, {
+      title: "错误类型",
+      transport: plan,
+    }),
+  ).toThrow();
+  expect(() =>
+    s.createItem(snap.days[0].id, actor, {
+      title: "半个坐标",
+      type: "transport",
+      transport: { ...plan, destination: { name: "北京", lat: 39.9 } },
+    }),
+  ).toThrow();
+  const created = s.createItem(snap.days[0].id, actor, {
+    title: "待定火车",
+    type: "transport",
+    transport: plan,
+  });
+  const item = s
+    .getDay(snap.days[0].id)
+    .items.find((i) => i.id === created.id)!;
+  expect(item.transport).toMatchObject({
+    status: "tentative",
+    origin: { sourcePlaceId: localPlace.id },
+    destination: { name: "北京南", lat: null },
+  });
+  const { poolPlaceCounts } = await import("@/domain/planning");
+  expect(
+    poolPlaceCounts(s.snapshot(snap.trip.id, actor).days).get(localPlace.id),
+  ).toBe(1);
+  p.deletePoolPlace(snap.trip.id, localPlace.id, actor, 1);
+  const changed = s.getDay(item.dayId).items.find((i) => i.id === item.id)!;
+  expect(changed.transport?.origin).toMatchObject({
+    sourcePlaceId: null,
+    name: "深圳北",
+    lat: 22.6,
+    lng: 114.0,
+  });
+  expect(changed.version).toBeGreaterThan(item.version);
+  expect(() =>
+    s.editItem(item.id, actor, {
+      expectedVersion: item.version,
+      notes: "过期修改",
+    }),
+  ).toThrow();
+});

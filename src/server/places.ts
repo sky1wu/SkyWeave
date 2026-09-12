@@ -146,6 +146,13 @@ export function deletePoolPlace(
       ),
     );
     checkVersion(place, expected);
+    for (const endpoint of ["origin", "destination"])
+      run(
+        `UPDATE day_items SET transport=json_set(transport, '$.${endpoint}.sourcePlaceId', NULL), version=version+1, updatedAt=?, updatedByUserId=? WHERE json_extract(transport, '$.${endpoint}.sourcePlaceId')=?`,
+        Date.now(),
+        actor.id,
+        placeId,
+      );
     run(
       "UPDATE day_items SET sourcePlaceId=NULL, version=version+1, updatedAt=?, updatedByUserId=? WHERE sourcePlaceId=?",
       Date.now(),

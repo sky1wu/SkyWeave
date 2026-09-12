@@ -1,0 +1,1 @@
+ALTER TABLE `day_items` ADD `transport` text;

@@ -30,6 +30,7 @@ export function item(
     startMinutes: null,
     endMinutes: null,
     stayMinutes: 0,
+    transport: null,
     ...rev,
     ...data,
   };
@@ -143,4 +144,106 @@ it("supports overnight travel and warns for non-geographic actual places", () =>
       item("c", 2),
     ]),
   ).toEqual([]);
+});
+
+const { transportInput, routeEndpoint } = await import("@/domain/transport");
+const rail = transportInput.parse({
+  mode: "train",
+  origin: { name: "出发站", lat: 22.6, lng: 114.1 },
+  destination: { name: "到达站", lat: 39.8, lng: 116.4 },
+});
+it("connects to the departure station and from the arrival station around an independent journey", () => {
+  const a = item("a", 0),
+    trip = item("t", 1, {
+      type: "transport",
+      lat: null,
+      lng: null,
+      transport: rail,
+      startMinutes: 540,
+      endMinutes: 720,
+      fixedTime: true,
+    }),
+    b = item("b", 2);
+  expect(routePairs([a, trip, b]).map(([a, b]) => [a.id, b.id])).toEqual([
+    ["a", "t"],
+    ["t", "b"],
+  ]);
+  expect(routeEndpoint(trip, "arrival")).toEqual(rail.origin);
+  expect(routeEndpoint(trip, "departure")).toEqual(rail.destination);
+  const result = calculateTimeline(
+    day([a, trip, b], [leg("a", "t", 20), leg("t", "b", 15)]),
+  );
+  expect(result.entries[1]).toMatchObject({
+    arrival: 500 * 60,
+    start: 540 * 60,
+    departure: 720 * 60,
+    earlyMinutes: 40,
+  });
+  expect(result.entries[2].arrival).toBe(735 * 60);
+  expect(result.entries[1].warnings).not.toContain("地点没有坐标");
+});
+it("does not treat an undetermined train or flight duration as zero or bypass its unknown endpoints", () => {
+  const trip = item("t", 1, {
+    type: "transport",
+    lat: null,
+    lng: null,
+    transport: rail,
+  });
+  const result = calculateTimeline(
+    day(
+      [item("a", 0), trip, item("b", 2)],
+      [leg("a", "t", 20), leg("t", "b", 15)],
+    ),
+  );
+  expect(result.entries[1].start).toBeNull();
+  expect(result.entries[1].departure).toBeNull();
+  expect(result.entries[2].arrival).toBeNull();
+  const unknown = {
+    ...trip,
+    transport: transportInput.parse({
+      mode: "flight",
+      origin: { name: "深圳" },
+      destination: { name: "北京" },
+    }),
+  };
+  expect(routePairs([item("a", 0), unknown, item("b", 2)])).toEqual([]);
+});
+it("missed departures leave downstream times uncertain instead of teleporting to the destination", () => {
+  const trip = item("t", 1, {
+    type: "transport",
+    transport: rail,
+    startMinutes: 490,
+    endMinutes: 720,
+    fixedTime: true,
+  });
+  const result = calculateTimeline(
+    day(
+      [item("a", 0), trip, item("b", 2)],
+      [leg("a", "t", 20), leg("t", "b", 15)],
+    ),
+  );
+  expect(result.entries[1].lateMinutes).toBe(10);
+  expect(result.entries[1].warnings.join()).toContain("赶不上");
+  expect(result.entries[1].departure).toBeNull();
+  expect(result.entries[2].arrival).toBeNull();
+});
+it("supports estimated durations and overnight independent travel", () => {
+  const estimated = item("t", 0, {
+    type: "transport",
+    transport: { ...rail, durationMinutes: 90 },
+  });
+  expect(calculateTimeline(day([estimated], [])).entries[0].departure).toBe(
+    570 * 60,
+  );
+  const overnight = {
+    ...estimated,
+    startMinutes: 1410,
+    endMinutes: 1510,
+    fixedTime: true,
+  };
+  const result = calculateTimeline(
+    day([overnight, item("b", 1)], [leg("t", "b", 15)], 1380),
+  );
+  expect(formatTime(result.entries[0].departure)).toBe("次日 01:10");
+  expect(formatTime(result.entries[1].arrival)).toBe("次日 01:25");
 });

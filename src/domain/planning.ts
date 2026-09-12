@@ -1,4 +1,27 @@
 import { DateTime } from "luxon";
+import type { DayPlan, Item } from "./types";
+
+export function itemSourcePlaceIds(
+  item: Pick<Item, "sourcePlaceId" | "transport">,
+) {
+  return [
+    ...new Set(
+      [
+        item.sourcePlaceId,
+        item.transport?.origin.sourcePlaceId,
+        item.transport?.destination.sourcePlaceId,
+      ].filter((id): id is string => !!id),
+    ),
+  ];
+}
+export function poolPlaceCounts(days: DayPlan[]) {
+  const counts = new Map<string, number>();
+  for (const day of days)
+    for (const item of day.items)
+      for (const id of itemSourcePlaceIds(item))
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+  return counts;
+}
 export const placeCategories = [
   "未分类",
   "景点",
