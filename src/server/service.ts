@@ -1,7 +1,8 @@
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 import { DateTime } from "luxon";
-import { nextDayDate, itemSourcePlaceIds } from "@/domain/planning";
+import { itemSourcePlaceIds } from "@/domain/planning";
+import { dayTitle, tripDates } from "@/domain/calendar";
 import { sqlite, one, many, run, insert, update } from "./db";
 import { AppError, conflict, requireValue } from "./errors";
 import * as v from "./validation";
@@ -223,13 +224,25 @@ function validDates(data: {
 }) {
   if (data.startDate && data.endDate && data.endDate < data.startDate)
     throw new AppError(400, "VALIDATION", "结束日期不能早于开始日期");
+  if (!data.startDate || !data.endDate)
+    throw new AppError(400, "VALIDATION", "请设置开始和结束日期");
+  try {
+    return tripDates(data.startDate, data.endDate);
+  } catch (e) {
+    throw new AppError(400, "VALIDATION", (e as Error).message);
+  }
 }
 export function createTrip(actor: Actor, body: unknown) {
   const data = v.tripInput.parse(body);
-  validDates(data);
+  const startDate =
+    data.startDate ??
+    data.endDate ??
+    DateTime.now().setZone(data.timezone).toISODate()!;
+  const endDate = data.endDate ?? startDate;
+  const dates = validDates({ startDate, endDate });
   return tx(() => {
     const id = uid();
-    insert("trips", { id, ...data, ...revision(actor) });
+    insert("trips", { id, ...data, startDate, endDate, ...revision(actor) });
     insert("trip_members", {
       tripId: id,
       userId: actor.id,
@@ -243,14 +256,16 @@ export function createTrip(actor: Actor, body: unknown) {
       userId: actor.id,
       ...revision(actor),
     });
-    insert("days", {
-      id: uid(),
-      tripId: id,
-      title: "第 1 天",
-      date: data.startDate ?? null,
-      position: 0,
-      ...revision(actor),
-    });
+    dates.forEach((date, position) =>
+      insert("days", {
+        id: uid(),
+        tripId: id,
+        title: dayTitle(position),
+        date,
+        position,
+        ...revision(actor),
+      }),
+    );
     log(id, actor, "trip.created", "trip", id, `创建了行程「${data.title}」`);
     return { id };
   });
@@ -268,7 +283,56 @@ export function editTrip(tripId: string, actor: Actor, body: unknown) {
     access(tripId, actor, "owner");
     const trip = getTrip(tripId);
     checkVersion(trip, expectedVersion);
-    validDates({ ...trip, ...data });
+    const dates = validDates({ ...trip, ...data });
+    const calendarChanged =
+      (data.startDate !== undefined && data.startDate !== trip.startDate) ||
+      (data.endDate !== undefined && data.endDate !== trip.endDate);
+    if (calendarChanged) {
+      const existing = many<Day>(
+        "SELECT * FROM days WHERE tripId=? ORDER BY position, id",
+        tripId,
+      );
+      for (const day of existing.slice(dates.length)) {
+        const populated = one<{ n: number }>(
+          "SELECT (SELECT count(*) FROM day_items WHERE dayId=?) + (SELECT count(*) FROM expenses WHERE dayId=?) n",
+          day.id,
+          day.id,
+        )!.n;
+        if (populated)
+          throw new AppError(
+            409,
+            "DAY_HAS_CONTENT",
+            `${day.title}仍有事项或费用，请整理后再缩短行程`,
+          );
+      }
+      for (const day of existing.slice(dates.length))
+        run("DELETE FROM days WHERE id=?", day.id);
+      dates.forEach((date, position) => {
+        const day = existing[position];
+        if (!day)
+          insert("days", {
+            id: uid(),
+            tripId,
+            position,
+            title: dayTitle(position),
+            date,
+            ...revision(actor),
+          });
+        else if (
+          day.date !== date ||
+          day.position !== position ||
+          day.title !== dayTitle(position)
+        )
+          update("days", day.id, {
+            date,
+            position,
+            title: dayTitle(position),
+            version: day.version + 1,
+            updatedAt: Date.now(),
+            updatedByUserId: actor.id,
+          });
+      });
+    }
     if (
       trip.baseCurrencyLockedAt &&
       data.baseCurrency &&
@@ -300,42 +364,48 @@ export function deleteTrip(tripId: string, actor: Actor, expected: number) {
     return { deleted: true };
   });
 }
-export function createDay(tripId: string, actor: Actor, body: unknown) {
-  const data = v.dayInput
-    .extend({ title: v.dayInput.shape.title.optional() })
+export function reorderDays(tripId: string, actor: Actor, body: unknown) {
+  const data = z
+    .strictObject({
+      expectedVersion: v.version,
+      dayIds: z.array(v.id).min(1).max(366),
+    })
     .parse(body);
   return tx(() => {
     access(tripId, actor, "edit");
-    const id = uid();
-    const pos = one<{ p: number }>(
-      "SELECT coalesce(max(position),-1)+1 p FROM days WHERE tripId=?",
-      tripId,
-    )!.p;
     const trip = getTrip(tripId);
-    const existing = many<Day>(
-      "SELECT * FROM days WHERE tripId=? ORDER BY position",
-      tripId,
-    );
-    const title = data.title ?? `第 ${pos + 1} 天`;
-    const date =
-      data.date === undefined
-        ? nextDayDate(
-            trip.startDate,
-            existing,
-            DateTime.now().setZone(trip.timezone).toISODate()!,
-          )
-        : data.date;
-    insert("days", {
-      id,
-      tripId,
-      position: pos,
-      ...data,
-      title,
-      date,
-      ...revision(actor),
+    checkVersion(trip, data.expectedVersion);
+    const days = many<Day>(
+        "SELECT * FROM days WHERE tripId=? ORDER BY position, id",
+        tripId,
+      ),
+      byId = new Map(days.map((d) => [d.id, d]));
+    if (
+      data.dayIds.length !== days.length ||
+      new Set(data.dayIds).size !== days.length ||
+      data.dayIds.some((id) => !byId.has(id))
+    )
+      throw new AppError(409, "CONFLICT", "行程日期已变化，请刷新后重试");
+    const dates = tripDates(trip.startDate!, trip.endDate!);
+    data.dayIds.forEach((id, position) => {
+      const day = byId.get(id)!;
+      if (day.position !== position || day.date !== dates[position])
+        update("days", id, {
+          position,
+          date: dates[position],
+          title: dayTitle(position),
+          version: day.version + 1,
+          updatedAt: Date.now(),
+          updatedByUserId: actor.id,
+        });
     });
-    log(tripId, actor, "day.updated", "day", id, `添加了「${title}」`);
-    return { id };
+    update("trips", tripId, {
+      version: trip.version + 1,
+      updatedAt: Date.now(),
+      updatedByUserId: actor.id,
+    });
+    log(tripId, actor, "day.reordered", "trip", tripId, "调整了每日行程顺序");
+    return { id: tripId };
   });
 }
 export function editDay(dayId: string, actor: Actor, body: unknown) {
@@ -356,27 +426,6 @@ export function editDay(dayId: string, actor: Actor, body: unknown) {
     });
     log(day.tripId, actor, "day.updated", "day", dayId, "更新了当天安排");
     return { id: dayId };
-  });
-}
-export function deleteDay(dayId: string, actor: Actor, expected: number) {
-  return tx(() => {
-    const day = getDay(dayId);
-    access(day.tripId, actor, "edit");
-    checkVersion(day, expected);
-    run(
-      "DELETE FROM comments WHERE targetType='day_item' AND targetId IN (SELECT id FROM day_items WHERE dayId=?)",
-      dayId,
-    );
-    run("DELETE FROM days WHERE id=?", dayId);
-    log(
-      day.tripId,
-      actor,
-      "day.updated",
-      "day",
-      dayId,
-      `删除了「${day.title}」`,
-    );
-    return { deleted: true };
   });
 }
 function validItem(

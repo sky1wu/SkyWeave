@@ -29,6 +29,13 @@
       "when": 1789212667919,
       "tag": "0003_independent_transport",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789215245005,
+      "tag": "0004_trip_calendar",
+      "breakpoints": true
     }
   ]
 }

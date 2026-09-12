@@ -1,4 +1,3 @@
-import { DateTime } from "luxon";
 import type { DayPlan, Item } from "./types";
 
 export function itemSourcePlaceIds(
@@ -47,19 +46,4 @@ export function inferPlaceCategory(types: string[] = [], itemType?: string) {
   for (const type of types)
     if (categories[type.slice(0, 2)]) return categories[type.slice(0, 2)];
   return "未分类";
-}
-export function nextDayDate(
-  startDate: string | null,
-  days: { date: string | null; position: number }[],
-  fallbackDate: string,
-): string {
-  const ordered = [...days].sort((a, b) => a.position - b.position);
-  for (let i = ordered.length - 1; i >= 0; i--)
-    if (ordered[i].date)
-      return DateTime.fromISO(ordered[i].date!)
-        .plus({ days: ordered.length - i })
-        .toISODate()!;
-  return DateTime.fromISO(startDate ?? fallbackDate)
-    .plus({ days: ordered.length })
-    .toISODate()!;
 }

@@ -22,8 +22,6 @@ export const tripInput = z.strictObject({
   baseCurrency: z.enum(currencies).default("CNY"),
 });
 export const dayInput = z.strictObject({
-  title,
-  date: date.nullable().optional(),
   startMinutes: minutes.default(480),
 });
 export const itemInput = z.strictObject({

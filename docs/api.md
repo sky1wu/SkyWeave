@@ -18,8 +18,8 @@
 
 | 方法             | 路径                                | 行为                                                         |
 | ---------------- | ----------------------------------- | ------------------------------------------------------------ |
-| POST             | `/api/trips/:id/days`               | 创建 Day；省略 title/date 时自动递增，可发送 `{}`            |
-| GET/PATCH/DELETE | `/api/days/:id`                     | 当天快照 / 修改 / 删除                                       |
+| POST | `/api/trips/:id/days/reorder` | `{ expectedVersion, dayIds }`，整天排序并自动分配日期 |
+| GET/PATCH | `/api/days/:id` | 当天快照 / 修改开始时间；日期与天数由 Trip 设置维护 |
 | POST             | `/api/days/:id/items`               | 添加事项                                                     |
 | PATCH/DELETE     | `/api/items/:id`                    | 修改 / 删除事项并维护路线关系                                |
 | POST             | `/api/days/:id/reorder`             | `{ expectedVersion, itemIds }`，必须完整包含当天事项且无重复 |
@@ -115,3 +115,5 @@ Settlement 使用 `fromParticipantId`、`toParticipantId`、`amountMinor`、`cur
 `POST /api/trips/:tripId/places/reorder` 保存地点池顺序，owner/editor 可用。请求为 `{ places: [{ id, expectedVersion }] }`，需包含当前地点池全部地点；重复 ID、跨行程 ID、增删或版本冲突返回 409。事务中更新位置与修改版本，并写入一条活动；已有行程事项保持独立。新地点追加到列表末尾，迁移保留原有收藏顺序。
 
 独立交通通过事项的可空 `transport` 字段维护，包含交通类型、暂定／已确认、班次、起终点和可选时长。名称即可保存起终点；地点池来源校验 Trip 归属。出发和到达时间使用事项的 `startMinutes`、`endMinutes`。详见[地图地点与独立交通](map-and-transport.md)。
+
+行程起止日期与 Day 数量保持一致，缩短范围时超出的日期若含事项或费用则返回 409。单独新增、删除 Day 返回 405。日历与新选择控件详见[SkyWeave 日历与规划操作](calendar-and-controls.md)。

@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import Database from "better-sqlite3";
-import { nextDayDate, inferPlaceCategory } from "@/domain/planning";
+import { inferPlaceCategory } from "@/domain/planning";
+import { addDays, tripDates } from "@/domain/calendar";
 process.env.DATABASE_PATH = `${mkdtempSync(`${tmpdir()}/trip-planning-`)}/test.sqlite`;
 const s = await import("@/server/service");
 const p = await import("@/server/places");
@@ -16,34 +17,27 @@ function setup() {
   });
   return s.snapshot(id, actor);
 }
+function extendDay(tripId: string) {
+  const trip = s.getTrip(tripId);
+  s.editTrip(tripId, actor, {
+    expectedVersion: trip.version,
+    endDate: addDays(trip.endDate!, 1),
+  });
+  return s.snapshot(tripId, actor).days.at(-1)!;
+}
 describe("day dates and pooled places", () => {
-  it("continues from the last dated day across month boundaries and falls back to the trip date", () => {
-    expect(
-      nextDayDate(
-        "2026-10-01",
-        [{ date: "2026-12-31", position: 0 }],
-        "2026-09-12",
-      ),
-    ).toBe("2027-01-01");
-    expect(
-      nextDayDate(
-        "2026-10-01",
-        [
-          { date: null, position: 0 },
-          { date: null, position: 1 },
-        ],
-        "2026-09-12",
-      ),
-    ).toBe("2026-10-03");
-    expect(nextDayDate(null, [{ date: null, position: 0 }], "2026-09-12")).toBe(
-      "2026-09-13",
-    );
-    const snap = setup();
-    const day = s.createDay(snap.trip.id, actor, { title: "第2天" });
-    expect(s.getDay(day.id).date).toBe("2026-10-02");
-    const next = s.createDay(snap.trip.id, actor, {});
-    expect(s.getDay(next.id).date).toBe("2026-10-03");
-    expect(s.getDay(next.id).title).toBe("第 3 天");
+  it("derives consecutive calendar days across month boundaries from trip settings", () => {
+    expect(tripDates("2026-12-31", "2027-01-02")).toEqual([
+      "2026-12-31",
+      "2027-01-01",
+      "2027-01-02",
+    ]);
+    const snap = setup(),
+      day = extendDay(snap.trip.id);
+    expect(day.date).toBe("2026-10-02");
+    const next = extendDay(snap.trip.id);
+    expect(next.date).toBe("2026-10-03");
+    expect(next.title).toBe("第 3 天");
   });
   it("infers common POI categories and preserves custom categories", () => {
     expect(inferPlaceCategory(["050100"])).toBe("餐饮");
@@ -96,7 +90,7 @@ describe("day dates and pooled places", () => {
       first.id,
       existing.id,
     ]);
-    const other = s.createDay(snap.trip.id, actor, { title: "次日" });
+    const other = extendDay(snap.trip.id);
     p.schedulePlace(snap.trip.id, place.id, actor, {
       dayId: other.id,
       expectedVersion: 1,
@@ -194,7 +188,7 @@ describe("day dates and pooled places", () => {
     const a = s.createItem(day.id, actor, { title: "A", lat: 22, lng: 114 }),
       b = s.createItem(day.id, actor, { title: "B", lat: 23, lng: 115 }),
       c = s.createItem(day.id, actor, { title: "C", lat: 24, lng: 116 });
-    const next = s.createDay(snap.trip.id, actor, { title: "第二天" }),
+    const next = extendDay(snap.trip.id),
       dest = s.createItem(next.id, actor, { title: "D", lat: 25, lng: 117 });
     s.saveExpense(snap.trip.id, actor, {
       title: "门票",
@@ -245,9 +239,10 @@ describe("day dates and pooled places", () => {
       expectedVersion: s.getDay(day.id).version,
       startMinutes: 600,
     });
-    s.editDay(day.id, actor, {
-      expectedVersion: s.getDay(day.id).version,
-      date: "2026-10-05",
+    s.editTrip(snap.trip.id, actor, {
+      expectedVersion: snap.trip.version,
+      startDate: "2026-10-05",
+      endDate: "2026-10-05",
     });
     expect(s.getDay(day.id).startMinutes).toBe(600);
   });

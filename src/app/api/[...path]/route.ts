@@ -56,9 +56,17 @@ async function handler(request: Request, context: Context): Promise<Response> {
       if (method === "GET") result = s.snapshot(id, user);
       else if (method === "PATCH") result = s.editTrip(id, user, data);
       else if (method === "DELETE") result = s.deleteTrip(id, user, expected());
-    } else if (root === "trips" && action === "days" && method === "POST")
-      result = s.createDay(id, user, data);
-    else if (root === "trips" && action === "places") {
+    } else if (root === "trips" && action === "days" && method === "POST") {
+      if (subId === "reorder") result = s.reorderDays(id, user, data);
+      else {
+        s.access(id, user, "edit");
+        throw new AppError(
+          405,
+          "CALENDAR_MANAGED",
+          "请在行程设置中调整天数或日期范围",
+        );
+      }
+    } else if (root === "trips" && action === "places") {
       if (method === "GET" && !subId) result = s.snapshot(id, user).poolPlaces;
       else if (method === "POST" && !subId)
         result = savePoolPlace(id, user, data);
@@ -96,7 +104,14 @@ async function handler(request: Request, context: Context): Promise<Response> {
         s.access(d.tripId, user);
         result = d;
       } else if (method === "PATCH") result = s.editDay(id, user, data);
-      else if (method === "DELETE") result = s.deleteDay(id, user, expected());
+      else if (method === "DELETE") {
+        s.access(s.getDay(id).tripId, user, "edit");
+        throw new AppError(
+          405,
+          "CALENDAR_MANAGED",
+          "请在行程设置中调整天数或日期范围",
+        );
+      }
     } else if (root === "days" && action === "items" && method === "POST")
       result = s.createItem(id, user, data);
     else if (root === "days" && action === "reorder" && method === "POST")
