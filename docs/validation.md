@@ -8,9 +8,9 @@
 | --------------------------------- | ---------------------------------------------------------------- |
 | TypeScript strict / route typegen | 通过                                                             |
 | ESLint                            | 通过，无警告                                                     |
-| Vitest                            | 6 个文件，38 项通过                                              |
+| Vitest                            | 6 个文件，39 项通过                                              |
 | Next.js 生产构建                  | 通过                                                             |
-| Playwright                        | 5 套场景通过                                                     |
+| Playwright                        | 7 套场景通过                                                     |
 | Drizzle schema 检查               | 与已提交迁移一致，无待生成变更                                   |
 | npm audit                         | 0 vulnerabilities                                                |
 | Docker 镜像构建                   | 通过                                                             |
@@ -70,3 +70,12 @@ Playwright 场景：
 可用命令见 README。详细本地报告位于 `.tmp/live-amap-results.json`、`.tmp/live-detail-results.json`、`.tmp/live-map-results.json`、`.tmp/docker-validation.json`；Playwright 报告在 `playwright-report/`。这些临时报告和测试会话不提交，仅保留本文件中的非敏感结果及界面截图。
 
 已知限制及后续范围见 README 的 v0.2 部分。
+
+## 悬浮面板与整卡拖动（2026-09-12）
+
+- 39 项单元与集成测试通过，包括地点池排序的版本冲突、越权、跨行程、重复 ID、追加新地点和旧库顺序迁移。
+- 7 套 Playwright 场景通过，新增整卡与标题拖动、取消、操作按钮不触发拖动、分类筛选后排序、刷新持久化、独立折叠和输入保留，以及手机真实触摸滚动／长按拖放。
+- 真实高德地图确认聚焦两端均落在左右悬浮面板之间；覆盖 320、390、768、900、1024、1440px，无横向溢出和页面异常。
+- 类型检查、ESLint、Prettier 和生产构建通过。构建先串行迁移数据库，避免并发构建进程重复执行增列迁移。
+
+- Docker 镜像构建和重建后的健康检查通过；升级前完成 SQLite 在线备份，确认原有行程、事项、成员、费用、结算和评论保留，地点池迁移保留原顺序，外键检查通过。

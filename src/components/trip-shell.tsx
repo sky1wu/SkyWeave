@@ -102,7 +102,7 @@ export function TripShell({
         <main className="empty">
           <ErrorText error={error} />
           {!error ? (
-            "正在加载这段旅程…"
+            "加载行程中…"
           ) : (
             <Link className="btn mt-5" href="/">
               返回行程列表

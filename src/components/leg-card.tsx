@@ -69,7 +69,7 @@ export function LegCard({
   return (
     <div
       data-leg-id={leg.id}
-      className={`leg-card ${leg.mode === "manual" ? "manual-leg" : ""}`}
+      className={`leg-card ${open ? "expanded" : ""} ${leg.mode === "manual" ? "manual-leg" : ""}`}
     >
       <button
         className="leg-summary"
@@ -93,10 +93,10 @@ export function LegCard({
           : selected?.summary ||
             (leg.status === "pending" ? "等待计算路线" : leg.error)}
       </p>
-      <FixedArrival item={destination} entry={arrival} />
       {open && (
         <div className="leg-details">
           <ErrorText error={error} />
+          <FixedArrival item={destination} entry={arrival} />
           {editable && (
             <label>
               交通方式
@@ -180,7 +180,7 @@ export function LegCard({
             )
           ) : (
             <>
-              <div className="grid gap-2 mt-3">
+              <div className="route-alternatives" aria-label="路线方案">
                 {leg.alternatives.map((a) => (
                   <div
                     key={a.id}
@@ -203,9 +203,7 @@ export function LegCard({
                         ` · 换乘 ${a.transferCount} 次`}
                     </p>
                     {!a.geometryComplete && (
-                      <p className="text-amber-700 mt-2">
-                        路线几何不完整，地图暂不绘线
-                      </p>
+                      <p className="text-amber-700 mt-2">无法完整绘制路线</p>
                     )}
                     {editable && a.id !== leg.selectedAlternativeId && (
                       <button

@@ -70,6 +70,7 @@ function load(key: string): Promise<SDK> {
   return window.tripMapLoader;
 }
 export type MapFocus =
+  | { kind: "day"; request: number }
   | { kind: "leg" | "item"; id: string; request: number }
   | {
       kind: "point";
@@ -78,6 +79,8 @@ export type MapFocus =
       title?: string;
       request: number;
     };
+// AMap setFitView uses top, bottom, left, right (not CSS clockwise order).
+export type MapInsets = [number, number, number, number];
 export function TripMap({
   day,
   selected,
@@ -86,6 +89,7 @@ export function TripMap({
   picking,
   focus,
   view,
+  insets,
 }: {
   day: DayPlan | undefined;
   selected: string | null;
@@ -94,6 +98,7 @@ export function TripMap({
   picking: boolean;
   focus: MapFocus | null;
   view: "pool" | "timeline" | "map";
+  insets: MapInsets;
 }) {
   const container = useRef<HTMLDivElement>(null),
     instance = useRef<MapObject | null>(null),
@@ -252,6 +257,11 @@ export function TripMap({
       targets = [marker];
       signature = JSON.stringify([focus, view]);
     }
+    signature = JSON.stringify([
+      signature,
+      focus?.kind === "day" ? focus.request : null,
+      insets,
+    ]);
     const timer = setTimeout(() => {
       if (
         signature !== fit.current &&
@@ -259,12 +269,12 @@ export function TripMap({
         container.current?.clientWidth &&
         container.current?.clientHeight
       ) {
-        map.setFitView(targets, true, [65, 50, 65, 50]);
+        map.setFitView(targets, true, insets);
         fit.current = signature;
       }
     }, 80);
     return () => clearTimeout(timer);
-  }, [sdk, day, selected, focus, view]);
+  }, [sdk, day, selected, focus, view, insets]);
   const points =
     day?.items.filter((i) => located(i) && i.type !== "note") ?? [];
   const focusedLeg =
@@ -289,17 +299,35 @@ export function TripMap({
       className={`trip-map ${picking ? "picking" : ""}`}
       data-map-day={day?.id}
       data-focused-leg={focusedLeg?.id ?? ""}
+      data-map-insets={insets.join(",")}
     >
       <div ref={container} className="map-container" />
       {(error || (!sdk && !testMode)) && (
-        <div className="map-unavailable">
+        <div
+          className="map-unavailable"
+          style={{
+            top: insets[0],
+            bottom: insets[1],
+            left: insets[2],
+            right: insets[3],
+          }}
+        >
           <MapPinned size={48} strokeWidth={1.2} />
           <h3>{error ? "地图暂不可用" : "地图加载中"}</h3>
           <p>{error || "正在加载地点和路线。"}</p>
         </div>
       )}
       {testMode && (
-        <div className="test-map" data-testid="test-map">
+        <div
+          className="test-map"
+          data-testid="test-map"
+          style={{
+            top: insets[0],
+            bottom: insets[1],
+            left: insets[2],
+            right: insets[3],
+          }}
+        >
           <span className="pill absolute top-5 left-5">
             模拟高德 · 仅测试环境
           </span>

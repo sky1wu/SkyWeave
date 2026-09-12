@@ -1,6 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { useDraggable } from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   GripVertical,
   Plus,
@@ -16,6 +21,8 @@ import { inferPlaceCategory, placeCategories } from "@/domain/planning";
 import { typeLabels } from "@/domain/types";
 import { ErrorText, Modal } from "./ui";
 import type { Mutate } from "./planner";
+import { cardDragListeners } from "./card-drag";
+import { PlaceCategory } from "./place-category";
 
 function PoolEntry({
   place,
@@ -26,6 +33,7 @@ function PoolEntry({
   edit,
   remove,
   locate,
+  move,
 }: {
   place: PoolPlace;
   count: number;
@@ -35,8 +43,17 @@ function PoolEntry({
   edit: () => void;
   remove: () => void;
   locate: () => void;
+  move: (direction: -1 | 1) => void;
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    isDragging,
+    transform,
+    transition,
+  } = useSortable({
     id: `pool:${place.id}`,
     data: { kind: "pool", placeId: place.id, title: place.title },
     disabled: !editable,
@@ -44,31 +61,44 @@ function PoolEntry({
   return (
     <article
       ref={setNodeRef}
-      className={`pool-entry ${isDragging ? "dragging" : ""}`}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`pool-entry place-card ${editable ? "draggable-card" : ""} ${isDragging ? "dragging" : ""}`}
       data-testid={`pool-${place.id}`}
+      {...cardDragListeners(listeners)}
     >
-      <div className="pool-entry-heading">
-        {editable && (
-          <button
-            className="pool-drag-handle"
-            aria-label={`拖动地点池 ${place.title}`}
-            {...attributes}
-            {...listeners}
-          >
-            <GripVertical size={15} />
-          </button>
-        )}
-        <button className="pool-place-title" onClick={locate}>
-          {place.title}
-        </button>
-      </div>
-      {place.address && <p className="pool-address">{place.address}</p>}
       <div className="pool-entry-meta">
-        <span>{place.placeCategory}</span>
+        <PlaceCategory name={place.placeCategory} />
         <span className={count ? "scheduled-count" : "muted"}>
           {count ? `已安排 ${count} 次` : "未安排"}
         </span>
       </div>
+      <div className="pool-entry-heading">
+        <button className="pool-place-title" data-card-drag onClick={locate}>
+          {place.title}
+        </button>
+        {editable && (
+          <button
+            ref={setActivatorNodeRef}
+            data-drag-handle
+            className="pool-drag-handle"
+            aria-label={`拖动地点池 ${place.title}`}
+            title="拖动卡片排序；手机长按；Alt + 上下方向键移动"
+            {...attributes}
+            onKeyDown={(event) => {
+              if (
+                event.altKey &&
+                ["ArrowUp", "ArrowDown"].includes(event.key)
+              ) {
+                event.preventDefault();
+                move(event.key === "ArrowUp" ? -1 : 1);
+              } else listeners?.onKeyDown?.(event);
+            }}
+          >
+            <GripVertical size={15} />
+          </button>
+        )}
+      </div>
+      {place.address && <p className="pool-address">{place.address}</p>}
       {place.notes && <p className="pool-address">{place.notes}</p>}
       {editable && (
         <div className="pool-entry-actions">
@@ -80,10 +110,20 @@ function PoolEntry({
             <Plus size={13} />
             {dayTitle ? `加入${dayTitle}` : "先添加日期"}
           </button>
-          <button aria-label={`编辑地点池 ${place.title}`} onClick={edit}>
+          <button
+            className="pool-secondary-action"
+            aria-label={`编辑地点池 ${place.title}`}
+            title="编辑"
+            onClick={edit}
+          >
             <Pencil size={13} />
           </button>
-          <button aria-label={`删除地点池 ${place.title}`} onClick={remove}>
+          <button
+            className="pool-secondary-action"
+            aria-label={`删除地点池 ${place.title}`}
+            title="移除"
+            onClick={remove}
+          >
             <Trash2 size={13} />
           </button>
         </div>
@@ -221,6 +261,8 @@ export function PlacePool({
   schedule,
   locate,
   pick,
+  reorder,
+  heading = true,
 }: {
   snapshot: TripSnapshot;
   dayId?: string;
@@ -228,6 +270,8 @@ export function PlacePool({
   schedule: (place: PoolPlace) => Promise<unknown>;
   locate: (place: PoolPlace) => void;
   pick: () => void;
+  reorder: (place: PoolPlace, target: PoolPlace) => void;
+  heading?: boolean;
 }) {
   const [query, setQuery] = useState(""),
     [city, setCity] = useState(""),
@@ -331,12 +375,14 @@ export function PlacePool({
   return (
     <aside className="pool-pane" aria-label="地点池">
       <div className="pool-toolbar">
-        <div className="pool-heading">
-          <h2>
-            地点池 <span>{snapshot.poolPlaces.length}</span>
-          </h2>
-          <span className="muted">拖入行程安排</span>
-        </div>
+        {heading && (
+          <div className="pool-heading">
+            <h2>
+              地点池 <span>{snapshot.poolPlaces.length}</span>
+            </h2>
+            <span className="muted pool-drag-tip">拖入行程</span>
+          </div>
+        )}
         {editable && (
           <>
             <form
@@ -375,9 +421,6 @@ export function PlacePool({
                     }
                   }}
                 />
-                <button type="submit" aria-label="搜索">
-                  <Search size={15} />
-                </button>
               </div>
               <input
                 className="city-input"
@@ -453,32 +496,42 @@ export function PlacePool({
         )}
       </div>
       <div className="pool-list">
-        {visible.map((place) => (
-          <PoolEntry
-            key={place.id}
-            place={place}
-            count={counts.get(place.id) ?? 0}
-            editable={editable}
-            dayTitle={snapshot.days.find((d) => d.id === dayId)?.title}
-            schedule={() => act(() => schedule(place))}
-            edit={() => setEditor(place)}
-            locate={() => locate(place)}
-            remove={() => {
-              if (
-                window.confirm(
-                  `从地点池移除「${place.title}」？已安排的事项会保留。`,
+        <SortableContext
+          items={visible.map((p) => `pool:${p.id}`)}
+          strategy={verticalListSortingStrategy}
+        >
+          {visible.map((place) => (
+            <PoolEntry
+              key={place.id}
+              place={place}
+              count={counts.get(place.id) ?? 0}
+              editable={editable}
+              dayTitle={snapshot.days.find((d) => d.id === dayId)?.title}
+              schedule={() => act(() => schedule(place))}
+              edit={() => setEditor(place)}
+              locate={() => locate(place)}
+              move={(direction) => {
+                const index = visible.findIndex((p) => p.id === place.id);
+                const target = visible[index + direction];
+                if (target) reorder(place, target);
+              }}
+              remove={() => {
+                if (
+                  window.confirm(
+                    `从地点池移除「${place.title}」？已安排的事项会保留。`,
+                  )
                 )
-              )
-                void act(() =>
-                  mutate(
-                    `/trips/${snapshot.trip.id}/places/${place.id}`,
-                    "DELETE",
-                    { expectedVersion: place.version },
-                  ),
-                );
-            }}
-          />
-        ))}
+                  void act(() =>
+                    mutate(
+                      `/trips/${snapshot.trip.id}/places/${place.id}`,
+                      "DELETE",
+                      { expectedVersion: place.version },
+                    ),
+                  );
+              }}
+            />
+          ))}
+        </SortableContext>
         {!visible.length && (
           <p className="empty">
             {snapshot.poolPlaces.length

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -16,6 +16,8 @@ import type { TimelineEntry } from "@/domain/timeline";
 import { formatTime } from "@/domain/timeline";
 import { formatMoney } from "@/domain/money";
 import { FixedArrival } from "./fixed-arrival";
+import { cardDragListeners } from "./card-drag";
+import { PlaceCategory } from "./place-category";
 export function TimelineItem({
   item,
   index,
@@ -59,6 +61,7 @@ export function TimelineItem({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -68,6 +71,30 @@ export function TimelineItem({
     disabled: !editable,
   });
   const [menu, setMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null),
+    moreRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const outside = (event: PointerEvent) => {
+      if (
+        !menuRef.current?.contains(event.target as Node) &&
+        !moreRef.current?.contains(event.target as Node)
+      )
+        setMenu(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenu(false);
+        moreRef.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [menu]);
   return (
     <article
       ref={setNodeRef}
@@ -76,9 +103,10 @@ export function TimelineItem({
         transition,
         opacity: isDragging ? 0.55 : 1,
       }}
-      className={`timeline-item ${selected ? "selected" : ""}`}
+      className={`timeline-item place-card ${editable ? "draggable-card" : ""} ${selected ? "selected" : ""} ${isDragging ? "dragging" : ""}`}
       id={`item-${item.id}`}
       data-testid={`item-${item.id}`}
+      {...cardDragListeners(listeners)}
     >
       <div className="item-left">
         <span className="item-time">{formatTime(entry.start)}</span>
@@ -87,11 +115,12 @@ export function TimelineItem({
         </span>
         {editable && (
           <button
+            ref={setActivatorNodeRef}
+            data-drag-handle
             className="drag-handle"
             aria-label={`拖动 ${item.title}`}
-            title="拖动排序；Alt + 上下方向键快速移动"
+            title="拖动卡片排序；手机长按；Alt + 上下方向键移动"
             {...attributes}
-            {...listeners}
             onKeyDown={(event) => {
               if (
                 event.altKey &&
@@ -108,14 +137,16 @@ export function TimelineItem({
       </div>
       <div className="item-body">
         <div className="flex justify-between items-center gap-2">
-          <button className="item-title" onClick={select}>
+          <button className="item-title" data-card-drag onClick={select}>
             {item.title}
           </button>
           <div className="flex items-center gap-2">
-            <span className="pill">{typeLabels[item.type]}</span>
             {editable && (
               <button
+                ref={moreRef}
                 aria-label={`${item.title} 更多操作`}
+                aria-expanded={menu}
+                aria-controls={`item-menu-${item.id}`}
                 onClick={() => setMenu(!menu)}
                 className="icon-btn"
               >
@@ -126,9 +157,13 @@ export function TimelineItem({
         </div>
         {item.address && <p className="item-address">{item.address}</p>}
         <div className="item-meta">
-          {item.placeCategory !== "未分类" && (
-            <span className="item-category">{item.placeCategory}</span>
-          )}
+          <PlaceCategory
+            name={
+              item.placeCategory !== "未分类"
+                ? item.placeCategory
+                : typeLabels[item.type]
+            }
+          />
           {item.fixedTime && (
             <span>
               <CalendarDays size={12} />
@@ -193,7 +228,12 @@ export function TimelineItem({
           <button onClick={comment}>评论</button>
         </div>
         {menu && (
-          <div className="item-menu">
+          <div
+            ref={menuRef}
+            id={`item-menu-${item.id}`}
+            className="item-menu"
+            data-no-drag
+          >
             <button
               onClick={() => {
                 copy();

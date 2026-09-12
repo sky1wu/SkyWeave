@@ -6,7 +6,8 @@ import {
   closestCenter,
   pointerWithin,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   useDroppable,
@@ -27,6 +28,8 @@ import {
   Library,
   Settings2,
   ReceiptText,
+  ChevronDown,
+  LocateFixed,
 } from "lucide-react";
 import { api, ApiFailure } from "@/lib/client";
 import type {
@@ -40,7 +43,7 @@ import { calculateTimeline } from "@/domain/timeline";
 import { formatMoney } from "@/domain/money";
 import { placeCategories } from "@/domain/planning";
 import { ItemEditor, itemPayload, TimeField, readTime } from "./item-editor";
-import { TripMap, type MapFocus } from "./map";
+import { TripMap, type MapFocus, type MapInsets } from "./map";
 import { LegCard } from "./leg-card";
 import { TimelineItem } from "./timeline-item";
 import { PlacePool, PoolPlaceEditor } from "./place-pool";
@@ -130,8 +133,18 @@ function DaySection({
   );
 }
 const collision: CollisionDetection = (args) => {
-  if (!args.pointerCoordinates) return closestCenter(args);
-  const hits = pointerWithin(args).filter((hit) => hit.id !== args.active.id);
+  const eligible = {
+    ...args,
+    droppableContainers: args.droppableContainers.filter(
+      (container) =>
+        args.active.data.current?.kind === "pool" ||
+        container.data.current?.kind !== "pool",
+    ),
+  };
+  if (!args.pointerCoordinates) return closestCenter(eligible);
+  const hits = pointerWithin(eligible).filter(
+    (hit) => hit.id !== args.active.id,
+  );
   const items = hits.filter((hit) => !String(hit.id).startsWith("day:"));
   return items.length ? items : hits;
 };
@@ -165,6 +178,10 @@ export function Planner({
     [focus, setFocus] = useState<MapFocus | null>(null),
     [dragTitle, setDragTitle] = useState<string | null>(null),
     [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [poolCollapsed, setPoolCollapsed] = useState(false),
+    [timelineCollapsed, setTimelineCollapsed] = useState(false),
+    [mapInsets, setMapInsets] = useState<MapInsets>([48, 42, 48, 48]);
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null),
     focusSequence = useRef(0),
     interactionSequence = useRef(0),
@@ -184,12 +201,67 @@ export function Planner({
     ]),
   ];
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 7 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 8 },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
   const current = useRef({ refresh });
+  useEffect(() => {
+    const workspace = workspaceRef.current;
+    if (!workspace) return;
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const bounds = workspace.getBoundingClientRect();
+        const narrow = bounds.width <= 1000;
+        const next: MapInsets = [
+          narrow ? (view === "map" ? 110 : 70) : 90,
+          40,
+          40,
+          40,
+        ];
+        for (const panel of workspace.querySelectorAll<HTMLElement>(
+          ".floating-panel",
+        )) {
+          const rect = panel.getBoundingClientRect();
+          if (!rect.width || !rect.height || panel.dataset.collapsed === "true")
+            continue;
+          if (narrow) {
+            if (panel.classList.contains("floating-timeline"))
+              next[1] = bounds.bottom - rect.top + 20;
+            else next[0] = rect.bottom - bounds.top + 20;
+          } else if (panel.classList.contains("floating-timeline"))
+            next[2] = rect.right - bounds.left + 30;
+          else next[3] = bounds.right - rect.left + 30;
+        }
+        // Both mobile lists may be open for dragging; retain a usable camera extent.
+        const vertical = Math.max(1, bounds.height - 140);
+        if (next[0] + next[1] > vertical) {
+          const ratio = vertical / (next[0] + next[1]);
+          next[0] *= ratio;
+          next[1] *= ratio;
+        }
+        const rounded = next.map(Math.round) as MapInsets;
+        setMapInsets((previous) =>
+          previous.every((v, i) => v === rounded[i]) ? previous : rounded,
+        );
+      });
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(workspace);
+    for (const panel of workspace.querySelectorAll(".floating-panel"))
+      observer.observe(panel);
+    measure();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [poolCollapsed, timelineCollapsed, view]);
   useEffect(() => {
     current.current = { refresh };
   }, [refresh]);
@@ -268,6 +340,7 @@ export function Planner({
     setSelectedDay(id);
     setFocus(null);
     setView("timeline");
+    setTimelineCollapsed(false);
     requestAnimationFrame(() => {
       const pane = timelineRef.current,
         section = document.getElementById(`day-${id}`);
@@ -289,9 +362,13 @@ export function Planner({
     interactionSequence.current++;
     setSelected(item.id);
     setSelectedDay(item.dayId);
-    document
-      .getElementById(`item-${item.id}`)
-      ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    setTimelineCollapsed(false);
+    setView("timeline");
+    requestAnimationFrame(() =>
+      document
+        .getElementById(`item-${item.id}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" }),
+    );
   }, []);
   async function act(fn: () => Promise<unknown>) {
     setError("");
@@ -321,6 +398,7 @@ export function Planner({
   function focusLeg(targetDay: DayPlan, legId: string) {
     interactionSequence.current++;
     setSelectedDay(targetDay.id);
+    if (window.innerWidth <= 1000) setView("timeline");
     setFocus({ kind: "leg", id: legId, request: ++focusSequence.current });
   }
   function locate(place: PoolPlace) {
@@ -379,6 +457,17 @@ export function Planner({
       itemIds: ids,
     });
   }
+  async function reorderPool(place: PoolPlace, target: PoolPlace) {
+    if (place.id === target.id) return;
+    const ordered = [...snapshot.poolPlaces];
+    const from = ordered.findIndex((p) => p.id === place.id),
+      to = ordered.findIndex((p) => p.id === target.id);
+    ordered.splice(from, 1);
+    ordered.splice(to, 0, place);
+    await mutate(`/trips/${snapshot.trip.id}/places/reorder`, "POST", {
+      places: ordered.map((p) => ({ id: p.id, expectedVersion: p.version })),
+    });
+  }
   function move(item: Item, direction: "first" | "last" | "up" | "down") {
     const targetDay = snapshot.days.find((d) => d.id === item.dayId)!;
     const ids = targetDay.items.map((i) => i.id),
@@ -420,6 +509,19 @@ export function Planner({
   function dragEnd(event: DragEndEvent) {
     setDragTitle(null);
     setDropTarget(null);
+    if (
+      event.active.data.current?.kind === "pool" &&
+      event.over?.data.current?.kind === "pool"
+    ) {
+      const place = snapshot.poolPlaces.find(
+          (p) => p.id === event.active.data.current?.placeId,
+        ),
+        target = snapshot.poolPlaces.find(
+          (p) => p.id === event.over?.data.current?.placeId,
+        );
+      if (place && target) void act(() => reorderPool(place, target));
+      return;
+    }
     const target = targetFor(event);
     if (!target) return;
     const targetDay = snapshot.days.find((d) => d.id === target.dayId)!;
@@ -450,61 +552,6 @@ export function Planner({
   }
   return (
     <>
-      <div className="day-bar planner-toolbar">
-        <div className="day-tabs">
-          {snapshot.days.map((d) => (
-            <button
-              key={d.id}
-              className={day?.id === d.id ? "active" : ""}
-              onClick={() => jumpToDay(d.id)}
-            >
-              {d.title}
-              <small>{d.date?.slice(5) ?? "日期待定"}</small>
-            </button>
-          ))}
-          {editable && (
-            <button
-              className="add-day"
-              disabled={addingDay}
-              aria-label="添加一天"
-              onClick={appendDay}
-            >
-              <Plus size={18} />
-            </button>
-          )}
-        </div>
-        <div className="planner-toolbar-actions">
-          {routing && (
-            <span className="routing-state">
-              <RefreshCw size={12} className="animate-spin" />
-              算路中
-            </span>
-          )}
-          {day && editable && (
-            <button className="btn" onClick={() => setDayEditor(day)}>
-              当天设置
-            </button>
-          )}
-          <div className="mobile-switch">
-            {(
-              [
-                { key: "pool", label: "地点池", icon: Library },
-                { key: "timeline", label: "行程", icon: List },
-                { key: "map", label: "地图", icon: Map },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.key}
-                className={view === tab.key ? "active" : ""}
-                onClick={() => setView(tab.key)}
-              >
-                <tab.icon size={15} />
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
       {error && (
         <div className="planner-error">
           <ErrorText error={error} />
@@ -526,197 +573,344 @@ export function Planner({
         }}
         onDragEnd={dragEnd}
       >
-        <div className={`planner-grid pool-layout view-${view}`}>
-          <PlacePool
-            snapshot={snapshot}
-            dayId={day?.id}
-            mutate={mutate}
-            schedule={(place) =>
-              day ? schedule(place, day) : Promise.resolve()
-            }
-            locate={locate}
-            pick={() => {
-              setPicking(true);
-              setView("map");
-            }}
-          />
-          <div
-            ref={timelineRef}
-            className="timeline-pane continuous-timeline"
-            onScroll={followScroll}
-            onWheel={() => {
-              navigationLock.current = false;
-            }}
-            onTouchStart={() => {
-              navigationLock.current = false;
-            }}
-            onPointerDown={() => {
-              navigationLock.current = false;
-            }}
-            aria-label="连续行程时间线"
-          >
-            {snapshot.days.map((targetDay, dayIndex) => {
-              const timeline = calculateTimeline(targetDay),
-                dayBills = snapshot.expenses.filter(
-                  (e) => e.dayId === targetDay.id && !e.dayItemId,
-                );
-              return (
-                <DaySection
-                  key={targetDay.id}
-                  day={targetDay}
-                  active={day?.id === targetDay.id}
-                  settings={() => setDayEditor(targetDay)}
-                  addItem={
-                    editable
-                      ? () => setEditing({ dayId: targetDay.id })
-                      : undefined
-                  }
-                  billCount={
-                    snapshot.expenses.filter((e) => e.dayId === targetDay.id)
-                      .length
-                  }
-                  dropTarget={dropTarget}
+        <div
+          ref={workspaceRef}
+          className={`planner-grid pool-layout floating-workspace view-${view}`}
+        >
+          <div className="map-workspace-controls">
+            <div className="mobile-switch">
+              {(
+                [
+                  { key: "pool", label: "地点池", icon: Library },
+                  { key: "timeline", label: "行程", icon: List },
+                  { key: "map", label: "地图", icon: Map },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.key}
+                  className={view === tab.key ? "active" : ""}
+                  onClick={() => {
+                    setView(tab.key);
+                    if (tab.key === "pool") {
+                      setPoolCollapsed(false);
+                      setTimelineCollapsed(false);
+                    }
+                    if (tab.key === "timeline") setTimelineCollapsed(false);
+                  }}
                 >
-                  <div className="timeline-list">
-                    {targetDay.items.map((item, i) => {
-                      const leg = targetDay.legs.find(
-                          (l) => l.toItemId === item.id,
-                        ),
-                        entry = timeline.entries.find(
-                          (e) => e.itemId === item.id,
-                        )!;
-                      return (
-                        <div
-                          key={item.id}
-                          className={
-                            dropTarget?.dayId === targetDay.id &&
-                            dropTarget.beforeItemId === item.id
-                              ? "drop-before"
-                              : ""
-                          }
-                        >
-                          {leg && (
-                            <LegCard
-                              leg={leg}
-                              destination={item}
-                              arrival={entry}
-                              editable={editable}
-                              focus={() => focusLeg(targetDay, leg.id)}
-                              mutate={(data) =>
-                                mutate(`/legs/${leg.id}`, "PATCH", data)
-                              }
-                              recalculate={() =>
-                                mutate(`/legs/${leg.id}/route`, "POST", {})
-                              }
-                            />
-                          )}
-                          <TimelineItem
-                            item={item}
-                            index={i}
-                            entry={entry}
-                            selected={selected === item.id}
-                            editable={editable}
-                            select={() => {
-                              select(item);
-                              setFocus({
-                                kind: "item",
-                                id: item.id,
-                                request: ++focusSequence.current,
-                              });
-                            }}
-                            edit={() =>
-                              setEditing({ dayId: targetDay.id, item })
-                            }
-                            remove={() => {
-                              if (
-                                window.confirm(
-                                  `删除「${item.title}」？相关费用将保留。`,
-                                )
-                              )
-                                void act(() =>
-                                  mutate(`/items/${item.id}`, "DELETE", {
-                                    expectedVersion: item.version,
-                                  }),
-                                );
-                            }}
-                            copy={() =>
-                              act(() =>
-                                mutate(`/days/${targetDay.id}/items`, "POST", {
-                                  ...itemPayload(item),
-                                  title: `${item.title}（副本）`,
-                                }),
-                              )
-                            }
-                            move={(direction) => move(item, direction)}
-                            expense={() => addExpense(item)}
-                            comment={() => addComment(item)}
-                            bills={snapshot.expenses.filter(
-                              (e) => e.dayItemId === item.id,
-                            )}
-                            baseCurrency={snapshot.trip.baseCurrency}
-                            openBill={editExpense}
-                            hasPrevious={dayIndex > 0}
-                            hasNext={dayIndex < snapshot.days.length - 1}
-                            moveDay={(direction) =>
-                              act(() =>
-                                transfer(
-                                  item,
-                                  snapshot.days[dayIndex + direction],
-                                  null,
-                                ),
-                              )
-                            }
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {dayBills.length > 0 && (
-                    <div className="day-bills">
-                      <span>
-                        <ReceiptText size={13} />
-                        当天费用
-                      </span>
-                      {dayBills.map((bill) => (
-                        <button key={bill.id} onClick={() => editExpense(bill)}>
-                          {bill.title}
-                          <strong>
-                            {formatMoney(bill.amountMinor, bill.currency)}
-                          </strong>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {targetDay.legs.length > 0 && editable && (
+                  <tab.icon size={15} />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <button
+              className="map-overview"
+              aria-label="查看当天全图"
+              title="查看当天全图"
+              onClick={() => {
+                setSelected(null);
+                setFocus({ kind: "day", request: ++focusSequence.current });
+                setView("map");
+              }}
+            >
+              <LocateFixed size={17} />
+            </button>
+          </div>
+          <section
+            className="floating-panel floating-pool"
+            data-collapsed={poolCollapsed}
+            aria-label="地点池面板"
+          >
+            <button
+              className="floating-panel-heading"
+              aria-label={poolCollapsed ? "展开地点池" : "折叠地点池"}
+              aria-expanded={!poolCollapsed}
+              aria-controls="pool-panel-content"
+              onClick={() => setPoolCollapsed(!poolCollapsed)}
+            >
+              <Library size={17} />
+              <strong>地点池</strong>
+              <span>{snapshot.poolPlaces.length}</span>
+              <ChevronDown
+                size={16}
+                className={poolCollapsed ? "" : "rotate-180"}
+              />
+            </button>
+            <div
+              id="pool-panel-content"
+              className="floating-panel-content"
+              hidden={poolCollapsed}
+            >
+              <PlacePool
+                snapshot={snapshot}
+                heading={false}
+                dayId={day?.id}
+                mutate={mutate}
+                schedule={(place) =>
+                  day ? schedule(place, day) : Promise.resolve()
+                }
+                locate={locate}
+                reorder={(place, target) => {
+                  void act(() => reorderPool(place, target));
+                }}
+                pick={() => {
+                  setPicking(true);
+                  setView("map");
+                }}
+              />
+            </div>
+          </section>
+          <section
+            className="floating-panel floating-timeline"
+            data-collapsed={timelineCollapsed}
+            aria-label="行程面板"
+          >
+            <button
+              className="floating-panel-heading"
+              aria-label={timelineCollapsed ? "展开行程" : "折叠行程"}
+              aria-expanded={!timelineCollapsed}
+              aria-controls="timeline-panel-content"
+              onClick={() => setTimelineCollapsed(!timelineCollapsed)}
+            >
+              <List size={18} />
+              <strong>行程</strong>
+              <span>{snapshot.days.length} 天</span>
+              <ChevronDown
+                size={16}
+                className={timelineCollapsed ? "" : "rotate-180"}
+              />
+            </button>
+            <div
+              id="timeline-panel-content"
+              className="floating-panel-content"
+              hidden={timelineCollapsed}
+            >
+              <div className="day-bar planner-toolbar">
+                <div className="day-tabs">
+                  {snapshot.days.map((d) => (
                     <button
-                      className="day-recalculate"
-                      onClick={() =>
-                        act(() =>
-                          mutate(
-                            `/days/${targetDay.id}/routes/recalculate`,
-                            "POST",
-                            { force: true },
-                          ),
-                        )
-                      }
+                      key={d.id}
+                      className={day?.id === d.id ? "active" : ""}
+                      onClick={() => jumpToDay(d.id)}
                     >
-                      <RefreshCw size={12} />
-                      重新计算{targetDay.title}路线
+                      {d.title}
+                      <small>{d.date?.slice(5) ?? "日期待定"}</small>
+                    </button>
+                  ))}
+                  {editable && (
+                    <button
+                      className="add-day"
+                      disabled={addingDay}
+                      aria-label="添加一天"
+                      onClick={appendDay}
+                    >
+                      <Plus size={18} />
                     </button>
                   )}
-                </DaySection>
-              );
-            })}
-            {!snapshot.days.length && (
-              <div className="empty">添加一天后开始安排行程。</div>
-            )}
-          </div>
+                </div>
+                <div className="planner-toolbar-actions">
+                  {routing && (
+                    <span className="routing-state">
+                      <RefreshCw size={12} className="animate-spin" />
+                      算路中
+                    </span>
+                  )}
+                  {day && editable && (
+                    <button className="btn" onClick={() => setDayEditor(day)}>
+                      当天设置
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div
+                ref={timelineRef}
+                className="timeline-pane continuous-timeline"
+                onScroll={followScroll}
+                onWheel={() => {
+                  navigationLock.current = false;
+                }}
+                onTouchStart={() => {
+                  navigationLock.current = false;
+                }}
+                onPointerDown={() => {
+                  navigationLock.current = false;
+                }}
+                aria-label="连续行程时间线"
+              >
+                {snapshot.days.map((targetDay, dayIndex) => {
+                  const timeline = calculateTimeline(targetDay),
+                    dayBills = snapshot.expenses.filter(
+                      (e) => e.dayId === targetDay.id && !e.dayItemId,
+                    );
+                  return (
+                    <DaySection
+                      key={targetDay.id}
+                      day={targetDay}
+                      active={day?.id === targetDay.id}
+                      settings={() => setDayEditor(targetDay)}
+                      addItem={
+                        editable
+                          ? () => setEditing({ dayId: targetDay.id })
+                          : undefined
+                      }
+                      billCount={
+                        snapshot.expenses.filter(
+                          (e) => e.dayId === targetDay.id,
+                        ).length
+                      }
+                      dropTarget={dropTarget}
+                    >
+                      <div className="timeline-list">
+                        {targetDay.items.map((item, i) => {
+                          const leg = targetDay.legs.find(
+                              (l) => l.toItemId === item.id,
+                            ),
+                            entry = timeline.entries.find(
+                              (e) => e.itemId === item.id,
+                            )!;
+                          return (
+                            <div
+                              key={item.id}
+                              className={
+                                dropTarget?.dayId === targetDay.id &&
+                                dropTarget.beforeItemId === item.id
+                                  ? "drop-before"
+                                  : ""
+                              }
+                            >
+                              {leg && (
+                                <LegCard
+                                  leg={leg}
+                                  destination={item}
+                                  arrival={entry}
+                                  editable={editable}
+                                  focus={() => focusLeg(targetDay, leg.id)}
+                                  mutate={(data) =>
+                                    mutate(`/legs/${leg.id}`, "PATCH", data)
+                                  }
+                                  recalculate={() =>
+                                    mutate(`/legs/${leg.id}/route`, "POST", {})
+                                  }
+                                />
+                              )}
+                              <TimelineItem
+                                item={item}
+                                index={i}
+                                entry={entry}
+                                selected={selected === item.id}
+                                editable={editable}
+                                select={() => {
+                                  select(item);
+                                  setFocus({
+                                    kind: "item",
+                                    id: item.id,
+                                    request: ++focusSequence.current,
+                                  });
+                                }}
+                                edit={() =>
+                                  setEditing({ dayId: targetDay.id, item })
+                                }
+                                remove={() => {
+                                  if (
+                                    window.confirm(
+                                      `删除「${item.title}」？相关费用将保留。`,
+                                    )
+                                  )
+                                    void act(() =>
+                                      mutate(`/items/${item.id}`, "DELETE", {
+                                        expectedVersion: item.version,
+                                      }),
+                                    );
+                                }}
+                                copy={() =>
+                                  act(() =>
+                                    mutate(
+                                      `/days/${targetDay.id}/items`,
+                                      "POST",
+                                      {
+                                        ...itemPayload(item),
+                                        title: `${item.title}（副本）`,
+                                      },
+                                    ),
+                                  )
+                                }
+                                move={(direction) => move(item, direction)}
+                                expense={() => addExpense(item)}
+                                comment={() => addComment(item)}
+                                bills={snapshot.expenses.filter(
+                                  (e) => e.dayItemId === item.id,
+                                )}
+                                baseCurrency={snapshot.trip.baseCurrency}
+                                openBill={editExpense}
+                                hasPrevious={dayIndex > 0}
+                                hasNext={dayIndex < snapshot.days.length - 1}
+                                moveDay={(direction) =>
+                                  act(() =>
+                                    transfer(
+                                      item,
+                                      snapshot.days[dayIndex + direction],
+                                      null,
+                                    ),
+                                  )
+                                }
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {dayBills.length > 0 && (
+                        <div className="day-bills">
+                          <span>
+                            <ReceiptText size={13} />
+                            当天费用
+                          </span>
+                          {dayBills.map((bill) => (
+                            <button
+                              key={bill.id}
+                              onClick={() => editExpense(bill)}
+                            >
+                              {bill.title}
+                              <strong>
+                                {formatMoney(bill.amountMinor, bill.currency)}
+                              </strong>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {targetDay.legs.length > 0 && editable && (
+                        <button
+                          className="day-recalculate"
+                          onClick={() =>
+                            act(() =>
+                              mutate(
+                                `/days/${targetDay.id}/routes/recalculate`,
+                                "POST",
+                                { force: true },
+                              ),
+                            )
+                          }
+                        >
+                          <RefreshCw size={12} />
+                          重新计算{targetDay.title}路线
+                        </button>
+                      )}
+                    </DaySection>
+                  );
+                })}
+                {!snapshot.days.length && (
+                  <div className="empty">添加一天后开始安排行程。</div>
+                )}
+              </div>
+            </div>
+          </section>
           <section className="map-pane">
             <TripMap
               day={day}
               selected={selected}
               focus={focus}
               view={view}
+              insets={mapInsets}
               select={select}
               picking={picking}
               pick={(p) => {

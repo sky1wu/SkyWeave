@@ -114,7 +114,8 @@ test("西安：搜索、四种交通、候选切换、键盘排序、手机视�
   await ready(page, id);
   const beforeDrag = await call<TripSnapshot>(page, `/trips/${id}`);
   const firstId = beforeDrag.days[0].items[0].id;
-  const dragHandle = await page.locator(".drag-handle").first().boundingBox();
+  // Start on the card surface, away from the dedicated keyboard handle.
+  const dragHandle = await page.locator(".timeline-item").first().boundingBox();
   const dropItem = await page.locator(".timeline-item").nth(1).boundingBox();
   expect(dragHandle).not.toBeNull();
   expect(dropItem).not.toBeNull();
@@ -443,9 +444,7 @@ test("地点池、自动日期、连续滚动、路线聚焦和关联账单", as
   await page.getByLabel("地点分类", { exact: true }).fill("购物清单");
   await page.getByRole("button", { name: "保存地点", exact: true }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
-  const poolHandle = await page
-    .getByRole("button", { name: "拖动地点池 西安SKP", exact: true })
-    .boundingBox();
+  const poolHandle = await page.locator(".pool-entry").boundingBox();
   const drop = await page.locator(`[data-day-end="${first}"]`).boundingBox();
   expect(poolHandle).not.toBeNull();
   expect(drop).not.toBeNull();
@@ -500,8 +499,8 @@ test("地点池、自动日期、连续滚动、路线聚焦和关联账单", as
     "data-map-day",
     first,
   );
-  const toolbar = await page.locator(".planner-toolbar").boundingBox();
-  expect(toolbar!.y + toolbar!.height).toBeLessThan(165);
+  const workspace = await page.locator(".floating-workspace").boundingBox();
+  expect(workspace!.y).toBeLessThan(110);
   const place = await call<{ id: string }>(
     page,
     `/trips/${id}/places`,
@@ -534,7 +533,7 @@ test("地点池、自动日期、连续滚动、路线聚焦和关联账单", as
     startMinutes: 660,
   });
   await ready(page, id);
-  await expect(page.locator(".leg-card .fixed-arrival")).toContainText(
+  await expect(page.locator(".timeline-item .fixed-arrival")).toContainText(
     "距开始还剩 18 分钟",
   );
   snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
@@ -588,4 +587,206 @@ test("地点池、自动日期、连续滚动、路线聚焦和关联账单", as
   snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
   expect(snapshot.poolPlaces).toHaveLength(2);
   expect(snapshot.days[1].items.some((i) => i.id === fixed.id)).toBe(true);
+});
+
+test("地点卡片：整卡排序、筛选后移动、控件点击与刷新持久化", async ({
+  page,
+}) => {
+  await register(page, "Cards");
+  const id = await createTrip(page, "卡片操作");
+  for (const [title, placeCategory] of [
+    ["公园", "景点"],
+    ["餐厅", "餐饮"],
+    ["博物馆", "景点"],
+  ])
+    await call(page, `/trips/${id}/places`, "POST", { title, placeCategory });
+  await expect(page.locator(".pool-entry")).toHaveCount(3);
+  const mapRect = (await page.locator(".trip-map").boundingBox())!;
+  const workspaceRect = (await page
+    .locator(".floating-workspace")
+    .boundingBox())!;
+  expect(mapRect).toEqual(workspaceRect);
+  await expect
+    .poll(async () =>
+      Number(
+        (await page
+          .locator(".trip-map")
+          .getAttribute("data-map-insets"))!.split(",")[3],
+      ),
+    )
+    .toBeGreaterThan(300);
+  await page.getByLabel("筛选地点分类").selectOption("景点");
+  await page.getByRole("button", { name: "折叠地点池", exact: true }).click();
+  await expect(page.getByLabel("搜索地点", { exact: true })).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "展开地点池", exact: true }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect
+    .poll(async () =>
+      Number(
+        (await page
+          .locator(".trip-map")
+          .getAttribute("data-map-insets"))!.split(",")[3],
+      ),
+    )
+    .toBe(40);
+  await page.getByRole("button", { name: "折叠行程", exact: true }).click();
+  await expect(page.locator(".continuous-timeline")).not.toBeVisible();
+  await expect
+    .poll(async () =>
+      Number(
+        (await page
+          .locator(".trip-map")
+          .getAttribute("data-map-insets"))!.split(",")[2],
+      ),
+    )
+    .toBe(40);
+  expect(await page.locator(".trip-map").boundingBox()).toEqual(mapRect);
+  await page.getByRole("button", { name: "展开地点池", exact: true }).click();
+  await expect(page.getByLabel("筛选地点分类")).toHaveValue("景点");
+  await page.getByLabel("筛选地点分类").selectOption("");
+  await page.getByRole("button", { name: "展开行程", exact: true }).click();
+  const order = async () =>
+    (await call<TripSnapshot>(page, `/trips/${id}`)).poolPlaces.map(
+      (p) => p.title,
+    );
+  const first = (await page
+    .locator(".pool-place-title")
+    .first()
+    .boundingBox())!;
+  const third = (await page.locator(".pool-entry").nth(2).boundingBox())!;
+  await page.mouse.move(first.x + 5, first.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(first.x + 5, first.y + 22, { steps: 3 });
+  await expect(page.locator(".planner-drag-preview")).toBeVisible();
+  await page.mouse.move(third.x + 12, third.y + third.height / 2, {
+    steps: 15,
+  });
+  await page.mouse.up();
+  await expect.poll(order).toEqual(["餐厅", "博物馆", "公园"]);
+  await page.waitForTimeout(60);
+  await page.getByLabel("筛选地点分类").selectOption("景点");
+  await page
+    .getByRole("button", { name: "拖动地点池 公园", exact: true })
+    .focus();
+  await page.keyboard.press("Alt+ArrowUp");
+  await expect.poll(order).toEqual(["餐厅", "公园", "博物馆"]);
+  await page.reload();
+  await expect(page.locator(".pool-place-title")).toHaveText([
+    "餐厅",
+    "公园",
+    "博物馆",
+  ]);
+
+  // Drag-like mouse movement on an action must never pick up its parent card.
+  const edit = page.getByRole("button", {
+    name: "编辑地点池 公园",
+    exact: true,
+  });
+  await page.locator(".pool-entry").nth(1).hover();
+  const editBox = (await edit.boundingBox())!;
+  await page.mouse.move(editBox.x + 6, editBox.y + 6);
+  await page.mouse.down();
+  await page.mouse.move(editBox.x + 6, editBox.y + 50, { steps: 5 });
+  await expect(page.locator(".planner-drag-preview")).not.toBeVisible();
+  await page.mouse.up();
+  await edit.click();
+  await expect(page.getByRole("dialog", { name: "编辑地点" })).toBeVisible();
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+
+  // Cancel a whole-card drag without changing the saved order.
+  const card = (await page.locator(".pool-entry").first().boundingBox())!;
+  await page.mouse.move(card.x + 5, card.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(card.x + 5, card.y + 30, { steps: 3 });
+  await expect(page.locator(".planner-drag-preview")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.mouse.up();
+  await expect(page.locator(".planner-drag-preview")).not.toBeVisible();
+  expect(await order()).toEqual(["餐厅", "公园", "博物馆"]);
+});
+
+test("手机卡片：滑动滚动、长按排序与取消", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await register(page, "TouchCards");
+    const id = await createTrip(page, "手机卡片");
+    const snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+    for (let i = 1; i <= 7; i++)
+      await call(page, `/days/${snapshot.days[0].id}/items`, "POST", {
+        title: `地点 ${i}`,
+        type: "note",
+      });
+    await expect(page.locator(".timeline-item")).toHaveCount(7);
+    const order = async () =>
+      (await call<TripSnapshot>(page, `/trips/${id}`)).days[0].items.map(
+        (i) => i.title,
+      );
+    const client = await context.newCDPSession(page);
+    const touch = (
+      type: "touchStart" | "touchMove" | "touchEnd" | "touchCancel",
+      x = 0,
+      y = 0,
+    ) =>
+      client.send("Input.dispatchTouchEvent", {
+        type,
+        touchPoints:
+          type === "touchEnd" || type === "touchCancel" ? [] : [{ x, y }],
+      });
+    const pane = page.locator(".continuous-timeline");
+    const initial = await order();
+    const card = (await page.locator(".timeline-item").nth(1).boundingBox())!;
+    await touch("touchStart", card.x + 5, card.y + 50);
+    for (let i = 1; i <= 5; i++)
+      await touch("touchMove", card.x + 5, card.y + 50 - i * 25);
+    await touch("touchEnd");
+    await expect
+      .poll(() => pane.evaluate((e) => e.scrollTop))
+      .toBeGreaterThan(20);
+    expect(await order()).toEqual(initial);
+    await expect(page.locator(".planner-drag-preview")).not.toBeVisible();
+    await page.locator(".day-tabs button").first().click();
+    await expect
+      .poll(() => pane.evaluate((e) => e.scrollTop))
+      .toBeLessThanOrEqual(2);
+    const start = (await page.locator(".timeline-item").first().boundingBox())!;
+    const target = (await page.locator(".timeline-item").nth(1).boundingBox())!;
+    await touch("touchStart", start.x + 5, start.y + 12);
+    await expect(page.locator(".planner-drag-preview")).toBeVisible();
+    for (let i = 1; i <= 8; i++)
+      await touch(
+        "touchMove",
+        start.x + 5,
+        start.y + 12 + ((target.y + target.height / 2 - start.y - 12) * i) / 8,
+      );
+    await touch("touchEnd");
+    await expect.poll(order).toEqual(["地点 2", "地点 1", ...initial.slice(2)]);
+    await page.waitForTimeout(60);
+    const cancel = (await page
+      .locator(".timeline-item")
+      .first()
+      .boundingBox())!;
+    await touch("touchStart", cancel.x + 5, cancel.y + 12);
+    await expect(page.locator(".planner-drag-preview")).toBeVisible();
+    await touch("touchCancel");
+    await expect(page.locator(".planner-drag-preview")).not.toBeVisible();
+    await page.reload();
+    await expect(page.locator(".item-title").first()).toHaveText("地点 2");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: "test-results/cards-mobile.png",
+      fullPage: true,
+    });
+  } finally {
+    await context.close();
+  }
 });
