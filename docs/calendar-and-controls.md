@@ -28,3 +28,15 @@
 - 原单独新增、删除 Day 接口返回 405，提示通过行程设置调整范围。
 
 数据仍使用稳定的 Day ID；只有位置、生成名称和日期变化。高德配置变量及原 SQLite 数据卷路径保持原名，产品名与应用镜像使用 SkyWeave。
+
+## 验证与界面
+
+52 项单元与集成测试、10 套 Playwright 场景通过。覆盖日期范围生成、空日期收缩、事项与账单阻止收缩、日序冲突及越权、历史迁移保留、整卡精简拖动、整天拖动与键盘排序、未打开日期的自动算路，以及分类和城市下拉的选择、搜索、自定义与 Escape 行为。
+
+以下截图使用隔离的验证行程。
+
+![一行卡片排序视图](images/skyweave-compact.png)
+
+![直接展开选择分类](images/skyweave-categories.png)
+
+[行程日期与天数](images/skyweave-calendar-settings.png) · [手机城市选择](images/skyweave-mobile-picker.png)

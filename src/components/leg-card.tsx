@@ -25,7 +25,6 @@ export function LegCard({
   leg,
   editable,
   mutate,
-  recalculate,
   focus,
   destination,
   arrival,
@@ -33,7 +32,6 @@ export function LegCard({
   leg: DayPlan["legs"][number];
   editable: boolean;
   mutate: (data: unknown) => Promise<unknown>;
-  recalculate: () => Promise<unknown>;
   focus: () => void;
   destination: Item;
   arrival: TimelineEntry;
@@ -74,6 +72,7 @@ export function LegCard({
       <button
         className="leg-summary"
         aria-expanded={open}
+        aria-controls={`leg-details-${leg.id}`}
         onClick={() => {
           if (!open) focus();
           setOpen(!open);
@@ -85,7 +84,10 @@ export function LegCard({
           {duration == null ? "时间待定" : `${duration} 分钟`}
           {distance != null ? ` · ${(distance / 1000).toFixed(1)} km` : ""}
         </span>
-        <ChevronDown size={13} className={open ? "rotate-180" : ""} />
+        <span className="leg-toggle-label">
+          {open ? "收起路线" : "展开路线"}
+          <ChevronDown size={15} className={open ? "rotate-180" : ""} />
+        </span>
       </button>
       <p className="leg-note">
         {leg.mode === "manual"
@@ -94,7 +96,7 @@ export function LegCard({
             (leg.status === "pending" ? "等待计算路线" : leg.error)}
       </p>
       {open && (
-        <div className="leg-details">
+        <div className="leg-details" id={`leg-details-${leg.id}`}>
           <ErrorText error={error} />
           <FixedArrival item={destination} entry={arrival} />
           {editable && (
@@ -234,17 +236,12 @@ export function LegCard({
                   </div>
                 ))}
               </div>
-              {editable && (
-                <button
-                  className="btn mt-3 w-full"
-                  disabled={busy}
-                  onClick={() => act(recalculate)}
-                >
-                  重新计算此段
-                </button>
-              )}
             </>
           )}
+          <button className="leg-close" onClick={() => setOpen(false)}>
+            收起路线
+            <ChevronDown size={14} className="rotate-180" />
+          </button>
         </div>
       )}
     </div>

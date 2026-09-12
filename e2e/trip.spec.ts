@@ -58,6 +58,19 @@ async function createTrip(page: Page, title: string) {
   await expect(page).toHaveURL(/\/trips\/[^/]+\/plan/);
   return page.url().split("/").at(-2)!;
 }
+async function setTripDays(page: Page, tripId: string, count: number) {
+  await page.getByRole("button", { name: "行程设置", exact: true }).click();
+  await page.getByLabel("行程天数", { exact: true }).fill(String(count));
+  await page.getByRole("button", { name: "保存设置", exact: true }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect
+    .poll(
+      async () =>
+        (await call<TripSnapshot>(page, `/trips/${tripId}`)).days.length,
+    )
+    .toBe(count);
+  return (await call<TripSnapshot>(page, `/trips/${tripId}`)).days.at(-1)!;
+}
 async function searchAdd(page: Page, name: string) {
   await page.getByLabel("搜索地点", { exact: true }).fill(name);
   await page
@@ -436,7 +449,7 @@ test("地点池、自动日期、连续滚动、路线聚焦和关联账单", as
   const id = await createTrip(page, "连续规划验收");
   let snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
   const first = snapshot.days[0].id;
-  await page.getByRole("button", { name: "添加一天", exact: true }).click();
+  await setTripDays(page, id, 2);
   await expect
     .poll(
       async () => (await call<TripSnapshot>(page, `/trips/${id}`)).days.length,
@@ -460,7 +473,13 @@ test("地点池、自动日期、连续滚动、路线聚焦和关联账单", as
   await page
     .getByRole("button", { name: "编辑地点池 西安SKP", exact: true })
     .click();
-  await page.getByLabel("地点分类", { exact: true }).fill("购物清单");
+  await page.getByRole("combobox", { name: "地点分类", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "搜索地点分类", exact: true })
+    .fill("购物清单");
+  await page
+    .getByRole("option", { name: "使用“购物清单”", exact: true })
+    .click();
   await page.getByRole("button", { name: "保存地点", exact: true }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
   const poolHandle = await page.locator(".pool-entry").boundingBox();
@@ -853,7 +872,11 @@ test("地图规划：未安排地点、常驻名称、分类图标和跨日安�
   ).toBeVisible();
   await expect(park).not.toBeVisible();
   await expect(food).toBeVisible();
-  await page.getByRole("button", { name: "添加一天", exact: true }).click();
+  await setTripDays(page, id, 2);
+  await page
+    .locator(".day-tabs")
+    .getByRole("button", { name: /第 2 天/ })
+    .click();
   await expect(
     page.getByRole("button", { name: "地图地点 待安排公园", exact: true }),
   ).not.toBeVisible();
@@ -985,12 +1008,7 @@ test("独立交通：暂定城市、补齐车站班次、接驳路线、跨午�
     dayItemId: transport.id,
   });
   await expect(card).toContainText("交通票款");
-  const next = await call<{ id: string }>(
-    page,
-    `/trips/${id}/days`,
-    "POST",
-    {},
-  );
+  const next = await setTripDays(page, id, 2);
   await expect(
     page.locator(".day-tabs button").filter({ hasText: "第 2 天" }),
   ).toBeVisible();
@@ -1022,4 +1040,179 @@ test("独立交通：暂定城市、补齐车站班次、接驳路线、跨午�
   await expect(page.getByTestId(`item-${transport.id}`)).toContainText(
     "交通票款",
   );
+});
+
+test("SkyWeave：精简排序、日历拖动、自动路线、分类和城市选择", async ({
+  page,
+}) => {
+  await register(page, "SkyWeave");
+  const id = await createTrip(page, "三日规划");
+  await expect(page).toHaveTitle("SkyWeave");
+  await setTripDays(page, id, 3);
+  await expect(page.locator(".day-tab")).toHaveCount(3);
+  await expect(
+    page.getByRole("button", { name: "添加一天", exact: true }),
+  ).not.toBeVisible();
+  let snap = await call<TripSnapshot>(page, `/trips/${id}`);
+  const [first, second, third] = snap.days.map((d) => d.id);
+  const a = await call<{ id: string }>(page, `/days/${first}/items`, "POST", {
+    title: "地点 A",
+    lat: 22.5,
+    lng: 114.05,
+    address: "A 地址",
+  });
+  const b = await call<{ id: string }>(page, `/days/${first}/items`, "POST", {
+    title: "地点 B",
+    lat: 22.6,
+    lng: 114.15,
+  });
+  for (const [title, lat] of [
+    ["地点 C", 22.7],
+    ["地点 D", 22.8],
+  ] as const)
+    await call(page, `/days/${third}/items`, "POST", {
+      title,
+      lat,
+      lng: 114.2,
+    });
+  // A non-active day's new route is calculated without opening that day.
+  await expect
+    .poll(async () =>
+      (await call<TripSnapshot>(page, `/trips/${id}`)).days
+        .filter((d) => d.legs.length)
+        .every((d) => d.legs.every((l) => l.status === "ready")),
+    )
+    .toBe(true);
+  await expect(page.getByRole("button", { name: /重新计算/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "全部折叠", exact: true }).click();
+  await expect(page.locator(".timeline-item.compact")).toHaveCount(4);
+  await expect(
+    page.getByTestId(`item-${a.id}`).locator(".item-address"),
+  ).not.toBeVisible();
+  await expect(page.locator(".leg-card").first()).not.toBeVisible();
+  const cardA = (await page.getByTestId(`item-${a.id}`).boundingBox())!,
+    cardB = (await page.getByTestId(`item-${b.id}`).boundingBox())!;
+  expect(cardA.height).toBeLessThanOrEqual(48);
+  await page.mouse.move(cardA.x + 45, cardA.y + 18);
+  await page.mouse.down();
+  await page.mouse.move(cardA.x + 45, cardA.y + 29, { steps: 3 });
+  await page.mouse.move(cardB.x + 45, cardB.y + 18, { steps: 12 });
+  await page.mouse.up();
+  await expect
+    .poll(async () =>
+      (await call<TripSnapshot>(page, `/trips/${id}`)).days[0].items.map(
+        (i) => i.id,
+      ),
+    )
+    .toEqual([b.id, a.id]);
+  await page.waitForTimeout(60);
+  const from = (await page
+      .locator(`[data-day-tab-id="${third}"]`)
+      .boundingBox())!,
+    to = (await page.locator(`[data-day-tab-id="${first}"]`).boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + 13);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 - 12, from.y + 13, {
+    steps: 3,
+  });
+  await page.mouse.move(to.x + to.width / 2, to.y + 13, { steps: 14 });
+  await page.mouse.up();
+  await expect
+    .poll(async () =>
+      (await call<TripSnapshot>(page, `/trips/${id}`)).days.map((d) => d.id),
+    )
+    .toEqual([third, first, second]);
+  snap = await call<TripSnapshot>(page, `/trips/${id}`);
+  expect(snap.days[0]).toMatchObject({ title: "第 1 天", date: "2026-10-02" });
+  expect(snap.days[0].items.map((i) => i.title)).toEqual(["地点 C", "地点 D"]);
+  expect(snap.days[1].date).toBe("2026-10-03");
+  await page.locator(`[data-day-tab-id="${first}"]`).focus();
+  await page.keyboard.press("Alt+ArrowLeft");
+  await expect
+    .poll(async () =>
+      (await call<TripSnapshot>(page, `/trips/${id}`)).days.map((d) => d.id),
+    )
+    .toEqual([first, third, second]);
+  await page.getByRole("button", { name: "全部展开", exact: true }).click();
+  const route = page.locator(`#day-${first} .leg-card`).first();
+  await route.getByRole("button", { name: /展开路线/ }).click();
+  await expect(route.locator(".leg-summary")).toContainText("收起路线");
+  await route.locator(".leg-close").click();
+  await expect(route.locator(".leg-summary")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await page
+    .getByTestId(`item-${a.id}`)
+    .getByRole("button", { name: "编辑", exact: true })
+    .click();
+  const category = page.getByRole("combobox", {
+    name: "地点分类",
+    exact: true,
+  });
+  await category.click();
+  await page
+    .getByRole("listbox", { name: "地点分类选项", exact: true })
+    .getByRole("option", { name: "餐饮", exact: true })
+    .click();
+  await category.click();
+  await expect(
+    page
+      .getByRole("listbox", { name: "地点分类选项", exact: true })
+      .getByRole("option", { name: "景点", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "搜索地点分类", exact: true })
+    .fill("咖啡");
+  await page.getByRole("option", { name: "使用“咖啡”", exact: true }).click();
+  await category.click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "保存事项", exact: true }).click();
+  await expect(page.getByTestId(`item-${a.id}`)).toContainText("咖啡");
+  await page.getByRole("combobox", { name: "城市", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "搜索城市", exact: true })
+    .fill("香港");
+  await page.getByRole("option", { name: "香港", exact: true }).click();
+  await expect(
+    page.getByRole("combobox", { name: "城市", exact: true }),
+  ).toHaveText("香港");
+  const search = page.waitForRequest(
+    (request) =>
+      request.url().includes("/places/autocomplete") &&
+      new URL(request.url()).searchParams.get("city") === "香港",
+  );
+  await page.getByLabel("搜索地点", { exact: true }).fill("中环");
+  await search;
+  await page.getByLabel("搜索地点", { exact: true }).fill("");
+  await setTripDays(page, id, 2);
+  await page.getByRole("button", { name: "行程设置", exact: true }).click();
+  await page.getByLabel("行程天数", { exact: true }).fill("1");
+  await page.getByRole("button", { name: "保存设置", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "仍有事项或费用",
+  );
+  expect((await call<TripSnapshot>(page, `/trips/${id}`)).days).toHaveLength(2);
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page
+    .locator(`#day-${first}`)
+    .getByRole("button", { name: "第 1 天设置", exact: true })
+    .click();
+  await expect(page.getByLabel("当天名称", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "删除这一天", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  const obsolete = await page.request.post(`${origin}/api/trips/${id}/days`, {
+    headers: { Origin: origin },
+    data: {},
+  });
+  expect(obsolete.status()).toBe(405);
+  await page.reload();
+  await expect(page.locator(".day-tab")).toHaveCount(2);
+  await page.screenshot({
+    path: "test-results/skyweave-planner.png",
+    fullPage: true,
+  });
 });

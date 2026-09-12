@@ -13,6 +13,7 @@ import { api, authClient } from "@/lib/client";
 import type { Trip } from "@/domain/types";
 import { currencies } from "@/domain/money";
 import { Brand, ErrorText, Modal } from "./ui";
+import { TripDateFields } from "./trip-date-fields";
 export function Trips() {
   const router = useRouter();
   const [trips, setTrips] = useState<
@@ -147,16 +148,7 @@ export function Trips() {
                 autoFocus
               />
             </label>
-            <div className="field-grid">
-              <label>
-                开始日期
-                <input name="startDate" type="date" />
-              </label>
-              <label>
-                结束日期
-                <input name="endDate" type="date" />
-              </label>
-            </div>
+            <TripDateFields />
             <div className="field-grid">
               <label>
                 统一结算币种

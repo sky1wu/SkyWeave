@@ -47,6 +47,7 @@ import { ItemEditor, itemPayload, TimeField, readTime } from "./item-editor";
 import { TripMap, type MapFocus, type MapInsets } from "./map";
 import { LegCard } from "./leg-card";
 import { TimelineItem } from "./timeline-item";
+import { DayTabs } from "./day-tabs";
 import { TransportEditor } from "./transport-editor";
 import { PlacePool, PoolPlaceEditor } from "./place-pool";
 import { ErrorText, Modal } from "./ui";
@@ -191,7 +192,7 @@ export function Planner({
     [error, setError] = useState(""),
     [routing, setRouting] = useState(false),
     [dayEditor, setDayEditor] = useState<DayPlan | null>(null),
-    [addingDay, setAddingDay] = useState(false),
+    [compactItems, setCompactItems] = useState(false),
     [focus, setFocus] = useState<MapFocus | null>(null),
     [dragTitle, setDragTitle] = useState<string | null>(null),
     [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
@@ -226,7 +227,9 @@ export function Planner({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
-  const current = useRef({ refresh });
+  const current = useRef({ refresh, days: snapshot.days });
+  const routedVersions = useRef(new globalThis.Map<string, number>()),
+    routeJobs = useRef(0);
   useEffect(() => {
     const workspace = workspaceRef.current;
     if (!workspace) return;
@@ -280,32 +283,50 @@ export function Planner({
     };
   }, [poolCollapsed, timelineCollapsed, view]);
   useEffect(() => {
-    current.current = { refresh };
-  }, [refresh]);
-  const routeDayId = day?.id,
-    routeVersion = day?.version,
-    hasRoutes = !!day?.legs.some((l) => l.mode !== "manual");
+    current.current = { refresh, days: snapshot.days };
+  }, [refresh, snapshot.days]);
+  const routeRevision = snapshot.days
+    .filter((d) => d.legs.some((l) => l.mode !== "manual"))
+    .map((d) => `${d.id}:${d.version}`)
+    .join("|");
   useEffect(() => {
-    if (!routeDayId || !editable || !hasRoutes) return;
+    if (!editable) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
+      const targets = current.current.days.filter(
+        (d) =>
+          d.legs.some((l) => l.mode !== "manual") &&
+          routedVersions.current.get(d.id) !== d.version,
+      );
+      if (!targets.length) return;
+      routeJobs.current++;
       setRouting(true);
       try {
-        await api(`/days/${routeDayId}/routes/recalculate`, "POST", {});
-        if (!cancelled) await current.current.refresh();
+        for (const target of targets) {
+          if (cancelled) break;
+          routedVersions.current.set(target.id, target.version);
+          try {
+            await api(`/days/${target.id}/routes/recalculate`, "POST", {});
+          } catch (e) {
+            routedVersions.current.delete(target.id);
+            throw e;
+          }
+        }
+        await current.current.refresh();
       } catch (e) {
         if (e instanceof ApiFailure && e.status === 409)
           await current.current.refresh();
         else if (!cancelled) setError((e as Error).message);
       } finally {
-        if (!cancelled) setRouting(false);
+        routeJobs.current--;
+        setRouting(routeJobs.current > 0);
       }
     }, 500);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [routeDayId, routeVersion, hasRoutes, editable]);
+  }, [routeRevision, editable]);
   useEffect(() => {
     const timer = setTimeout(
       () => window.dispatchEvent(new Event("resize")),
@@ -400,22 +421,6 @@ export function Planner({
     } catch (e) {
       setError((e as Error).message);
       if (e instanceof ApiFailure && e.status === 409) await refresh();
-    }
-  }
-  async function appendDay() {
-    const interaction = ++interactionSequence.current;
-    setAddingDay(true);
-    try {
-      await act(async () => {
-        const created = await mutate(
-          `/trips/${snapshot.trip.id}/days`,
-          "POST",
-          {},
-        );
-        if (interactionSequence.current === interaction) jumpToDay(created.id);
-      });
-    } finally {
-      setAddingDay(false);
     }
   }
   function focusLeg(targetDay: DayPlan, legId: string) {
@@ -699,49 +704,55 @@ export function Planner({
             data-collapsed={timelineCollapsed}
             aria-label="行程面板"
           >
-            <button
-              className="floating-panel-heading"
-              aria-label={timelineCollapsed ? "展开行程" : "折叠行程"}
-              aria-expanded={!timelineCollapsed}
-              aria-controls="timeline-panel-content"
-              onClick={() => setTimelineCollapsed(!timelineCollapsed)}
-            >
-              <List size={18} />
-              <strong>行程</strong>
-              <span>{snapshot.days.length} 天</span>
-              <ChevronDown
-                size={16}
-                className={timelineCollapsed ? "" : "rotate-180"}
-              />
-            </button>
+            <div className="timeline-panel-heading">
+              <button
+                className="floating-panel-heading"
+                aria-label={timelineCollapsed ? "展开行程" : "折叠行程"}
+                aria-expanded={!timelineCollapsed}
+                aria-controls="timeline-panel-content"
+                onClick={() => setTimelineCollapsed(!timelineCollapsed)}
+              >
+                <List size={18} />
+                <strong>行程</strong>
+                <span>{snapshot.days.length} 天</span>
+                <ChevronDown
+                  size={16}
+                  className={timelineCollapsed ? "" : "rotate-180"}
+                />
+              </button>
+              <button
+                type="button"
+                className="compact-view-toggle"
+                aria-pressed={compactItems}
+                onClick={() => setCompactItems(!compactItems)}
+              >
+                {compactItems ? "全部展开" : "全部折叠"}
+              </button>
+            </div>
             <div
               id="timeline-panel-content"
               className="floating-panel-content"
               hidden={timelineCollapsed}
             >
               <div className="day-bar planner-toolbar">
-                <div className="day-tabs">
-                  {snapshot.days.map((d) => (
-                    <button
-                      key={d.id}
-                      className={day?.id === d.id ? "active" : ""}
-                      onClick={() => jumpToDay(d.id)}
-                    >
-                      {d.title}
-                      <small>{d.date?.slice(5) ?? "日期待定"}</small>
-                    </button>
-                  ))}
-                  {editable && (
-                    <button
-                      className="add-day"
-                      disabled={addingDay}
-                      aria-label="添加一天"
-                      onClick={appendDay}
-                    >
-                      <Plus size={18} />
-                    </button>
-                  )}
-                </div>
+                <DayTabs
+                  days={snapshot.days}
+                  active={day?.id}
+                  editable={editable}
+                  select={jumpToDay}
+                  reorder={(dayIds) =>
+                    act(async () => {
+                      const interaction = ++interactionSequence.current;
+                      await mutate(
+                        `/trips/${snapshot.trip.id}/days/reorder`,
+                        "POST",
+                        { expectedVersion: snapshot.trip.version, dayIds },
+                      );
+                      if (day && interactionSequence.current === interaction)
+                        jumpToDay(day.id);
+                    })
+                  }
+                />
                 <div className="planner-toolbar-actions">
                   {routing && (
                     <span className="routing-state">
@@ -749,17 +760,13 @@ export function Planner({
                       算路中
                     </span>
                   )}
-                  {day && editable && (
-                    <button className="btn" onClick={() => setDayEditor(day)}>
-                      当天设置
-                    </button>
-                  )}
                 </div>
               </div>
 
               <div
                 ref={timelineRef}
                 className="timeline-pane continuous-timeline"
+                data-compact={compactItems}
                 onScroll={followScroll}
                 onWheel={() => {
                   navigationLock.current = false;
@@ -823,21 +830,24 @@ export function Planner({
                               }
                             >
                               {leg && (
-                                <LegCard
-                                  leg={leg}
-                                  destination={item}
-                                  arrival={entry}
-                                  editable={editable}
-                                  focus={() => focusLeg(targetDay, leg.id)}
-                                  mutate={(data) =>
-                                    mutate(`/legs/${leg.id}`, "PATCH", data)
-                                  }
-                                  recalculate={() =>
-                                    mutate(`/legs/${leg.id}/route`, "POST", {})
-                                  }
-                                />
+                                <div
+                                  className="timeline-leg"
+                                  hidden={compactItems}
+                                >
+                                  <LegCard
+                                    leg={leg}
+                                    destination={item}
+                                    arrival={entry}
+                                    editable={editable}
+                                    focus={() => focusLeg(targetDay, leg.id)}
+                                    mutate={(data) =>
+                                      mutate(`/legs/${leg.id}`, "PATCH", data)
+                                    }
+                                  />
+                                </div>
                               )}
                               <TimelineItem
+                                compact={compactItems}
                                 item={item}
                                 index={i}
                                 entry={entry}
@@ -921,28 +931,11 @@ export function Planner({
                           ))}
                         </div>
                       )}
-                      {targetDay.legs.length > 0 && editable && (
-                        <button
-                          className="day-recalculate"
-                          onClick={() =>
-                            act(() =>
-                              mutate(
-                                `/days/${targetDay.id}/routes/recalculate`,
-                                "POST",
-                                { force: true },
-                              ),
-                            )
-                          }
-                        >
-                          <RefreshCw size={12} />
-                          重新计算{targetDay.title}路线
-                        </button>
-                      )}
                     </DaySection>
                   );
                 })}
                 {!snapshot.days.length && (
-                  <div className="empty">添加一天后开始安排行程。</div>
+                  <div className="empty">在行程设置中选择日期范围。</div>
                 )}
               </div>
             </div>
@@ -1034,8 +1027,6 @@ export function Planner({
               void act(async () => {
                 await mutate(`/days/${dayEditor.id}`, "PATCH", {
                   expectedVersion: dayEditor.version,
-                  title: form.get("title"),
-                  date: form.get("date") || null,
                   startMinutes: readTime(form, "start") ?? 480,
                 });
                 setDayEditor(null);
@@ -1043,39 +1034,12 @@ export function Planner({
             }}
           >
             <ErrorText error={error} />
-            <label>
-              当天名称
-              <input name="title" required defaultValue={dayEditor.title} />
-            </label>
-            <label>
-              日期
-              <input
-                name="date"
-                type="date"
-                defaultValue={dayEditor.date ?? ""}
-              />
-            </label>
             <TimeField
               name="start"
               label="当天开始时间"
               value={dayEditor.startMinutes}
             />
             <div className="actions">
-              <button
-                type="button"
-                className="btn danger"
-                onClick={() => {
-                  if (window.confirm("删除这一天及其事项？费用记录会保留。"))
-                    void act(async () => {
-                      await mutate(`/days/${dayEditor.id}`, "DELETE", {
-                        expectedVersion: dayEditor.version,
-                      });
-                      setDayEditor(null);
-                    });
-                }}
-              >
-                删除这一天
-              </button>
               <button className="btn primary">保存</button>
             </div>
           </form>

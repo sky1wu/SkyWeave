@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "Amap Trip Planner",
+  title: "SkyWeave",
   icons: { icon: "/icon.svg" },
   description: "旅行规划、多人协作与费用结算。",
 };

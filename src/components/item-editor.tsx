@@ -4,6 +4,7 @@ import type { Item } from "@/domain/types";
 import { typeLabels } from "@/domain/types";
 import { placeCategories } from "@/domain/planning";
 import { ErrorText, Modal } from "./ui";
+import { SearchableSelect } from "./searchable-select";
 export function itemPayload(item: Item) {
   return {
     title: item.title,
@@ -145,20 +146,13 @@ export function ItemEditor({
             </select>
           </label>
         </div>
-        <label>
-          地点分类
-          <input
-            name="placeCategory"
-            list="item-place-categories"
-            maxLength={40}
-            defaultValue={item?.placeCategory ?? "未分类"}
-          />
-          <datalist id="item-place-categories">
-            {categories.map((c) => (
-              <option key={c} value={c} />
-            ))}
-          </datalist>
-        </label>
+        <SearchableSelect
+          label="地点分类"
+          name="placeCategory"
+          defaultValue={item?.placeCategory ?? "未分类"}
+          options={categories.map((value) => ({ value, label: value }))}
+          allowCustom
+        />
         <label>
           地址
           <input name="address" defaultValue={item?.address ?? ""} />

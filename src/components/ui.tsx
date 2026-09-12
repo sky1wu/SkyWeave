@@ -4,13 +4,11 @@ import Link from "next/link";
 import { X, Navigation2 } from "lucide-react";
 export function Brand() {
   return (
-    <Link href="/" className="brand">
+    <Link href="/" className="brand" aria-label="SkyWeave">
       <span className="brand-icon">
         <Navigation2 size={29} strokeWidth={1.8} />
       </span>
-      <span>
-        Amap<span className="brand-sub">TRIP PLANNER</span>
-      </span>
+      <span>SkyWeave</span>
     </Link>
   );
 }

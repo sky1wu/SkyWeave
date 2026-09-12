@@ -24,9 +24,11 @@ import {
 } from "@/domain/planning";
 import { typeLabels } from "@/domain/types";
 import { ErrorText, Modal } from "./ui";
+import { SearchableSelect } from "./searchable-select";
 import type { Mutate } from "./planner";
 import { cardDragListeners } from "./card-drag";
 import { PlaceCategory } from "./place-category";
+import { commonCities } from "@/domain/cities";
 
 function PoolEntry({
   place,
@@ -197,20 +199,13 @@ export function PoolPlaceEditor({
           />
         </label>
         <div className="field-grid">
-          <label>
-            地点分类
-            <input
-              name="placeCategory"
-              list="pool-category-options"
-              maxLength={40}
-              defaultValue={place?.placeCategory ?? "未分类"}
-            />
-            <datalist id="pool-category-options">
-              {categories.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-          </label>
+          <SearchableSelect
+            label="地点分类"
+            name="placeCategory"
+            defaultValue={place?.placeCategory ?? "未分类"}
+            options={categories.map((value) => ({ value, label: value }))}
+            allowCustom
+          />
           <label>
             事项类型
             <select name="type" defaultValue={place?.type ?? "place"}>
@@ -449,12 +444,22 @@ export function PlacePool({
                   }}
                 />
               </div>
-              <input
-                className="city-input"
-                aria-label="搜索城市"
-                placeholder="城市（可选）"
+              <SearchableSelect
+                label="城市"
+                className="city-select"
+                hideLabel
                 value={city}
-                onChange={(e) => setCity(e.target.value)}
+                onChange={(value) => {
+                  setCity(value);
+                  sequence.current++;
+                  setResults([]);
+                  setSearching(false);
+                }}
+                options={[
+                  { value: "", label: "不限城市" },
+                  ...commonCities.map((value) => ({ value, label: value })),
+                ]}
+                allowCustom
               />
             </form>
             {query && (

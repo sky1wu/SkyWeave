@@ -15,6 +15,7 @@ import { api, ApiFailure } from "@/lib/client";
 import type { Expense, Item, TripSnapshot } from "@/domain/types";
 import { currencies } from "@/domain/money";
 import { Brand, ErrorText, Modal } from "./ui";
+import { TripDateFields } from "./trip-date-fields";
 import { Planner, type Mutate } from "./planner";
 import { ExpenseEditor, Expenses } from "./expenses";
 import { Members } from "./members";
@@ -255,24 +256,10 @@ export function TripShell({
               行程名称
               <input name="title" defaultValue={data.trip.title} required />
             </label>
-            <div className="field-grid">
-              <label>
-                开始日期
-                <input
-                  name="startDate"
-                  type="date"
-                  defaultValue={data.trip.startDate ?? ""}
-                />
-              </label>
-              <label>
-                结束日期
-                <input
-                  name="endDate"
-                  type="date"
-                  defaultValue={data.trip.endDate ?? ""}
-                />
-              </label>
-            </div>
+            <TripDateFields
+              startDate={data.trip.startDate}
+              endDate={data.trip.endDate}
+            />
             <div className="field-grid">
               <label>
                 时区

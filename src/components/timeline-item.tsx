@@ -38,6 +38,7 @@ export function TimelineItem({
   moveDay,
   hasPrevious,
   hasNext,
+  compact = false,
 }: {
   item: Item;
   index: number;
@@ -57,6 +58,7 @@ export function TimelineItem({
   moveDay: (direction: -1 | 1) => void;
   hasPrevious: boolean;
   hasNext: boolean;
+  compact?: boolean;
 }) {
   const {
     attributes,
@@ -104,11 +106,29 @@ export function TimelineItem({
         transition,
         opacity: isDragging ? 0.55 : 1,
       }}
-      className={`timeline-item place-card ${editable ? "draggable-card" : ""} ${selected ? "selected" : ""} ${isDragging ? "dragging" : ""}`}
+      className={`timeline-item place-card ${compact ? "compact" : ""} ${editable ? "draggable-card" : ""} ${selected ? "selected" : ""} ${isDragging ? "dragging" : ""}`}
       id={`item-${item.id}`}
       data-testid={`item-${item.id}`}
       {...cardDragListeners(listeners)}
     >
+      {editable && (
+        <button
+          ref={setActivatorNodeRef}
+          data-drag-handle
+          className="drag-handle"
+          aria-label={`拖动 ${item.title}`}
+          title="拖动卡片排序；手机长按；Alt + 上下方向键移动"
+          {...attributes}
+          onKeyDown={(event) => {
+            if (event.altKey && ["ArrowUp", "ArrowDown"].includes(event.key)) {
+              event.preventDefault();
+              move(event.key === "ArrowUp" ? "up" : "down");
+            } else listeners?.onKeyDown?.(event);
+          }}
+        >
+          <GripVertical size={15} />
+        </button>
+      )}
       <div className="item-left">
         <span
           className="item-time"
@@ -119,31 +139,15 @@ export function TimelineItem({
         <span className="item-number">
           {String(index + 1).padStart(2, "0")}
         </span>
-        {editable && (
-          <button
-            ref={setActivatorNodeRef}
-            data-drag-handle
-            className="drag-handle"
-            aria-label={`拖动 ${item.title}`}
-            title="拖动卡片排序；手机长按；Alt + 上下方向键移动"
-            {...attributes}
-            onKeyDown={(event) => {
-              if (
-                event.altKey &&
-                ["ArrowUp", "ArrowDown"].includes(event.key)
-              ) {
-                event.preventDefault();
-                move(event.key === "ArrowUp" ? "up" : "down");
-              } else listeners?.onKeyDown?.(event);
-            }}
-          >
-            <GripVertical size={15} />
-          </button>
-        )}
       </div>
       <div className="item-body">
-        <div className="flex justify-between items-center gap-2">
-          <button className="item-title" data-card-drag onClick={select}>
+        <div className="item-heading flex justify-between items-center gap-2">
+          <button
+            className="item-title"
+            title={item.title}
+            data-card-drag
+            onClick={select}
+          >
             {item.title}
           </button>
           <div className="flex items-center gap-2">

@@ -1,7 +1,7 @@
 services:
   app:
     build: .
-    image: amap-trip-planner:local
+    image: skyweave:local
     ports:
       - "${PORT:-3000}:3000"
     env_file:

@@ -64,7 +64,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             </span>
           </div>
         </div>
-        <span className="text-xs opacity-60">Amap Trip Planner</span>
+        <span className="text-xs opacity-60">SkyWeave</span>
       </div>
       <div className="auth-form-side">
         <form className="auth-form" onSubmit={submit}>
