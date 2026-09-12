@@ -93,7 +93,10 @@ function SortableItem({
       data-testid={`item-${item.id}`}
     >
       <div className="item-left">
-        <span className="item-number">{index + 1}</span>
+        <span className="item-time">{formatTime(entry.start)}</span>
+        <span className="item-number">
+          {String(index + 1).padStart(2, "0")}
+        </span>
         {editable && (
           <button
             className="drag-handle"
@@ -117,7 +120,9 @@ function SortableItem({
       </div>
       <div className="item-body">
         <div className="flex justify-between items-center gap-2">
-          <span className="item-time">{formatTime(entry.start)}</span>
+          <button className="item-title" onClick={select}>
+            {item.title}
+          </button>
           <div className="flex items-center gap-2">
             <span className="pill">{typeLabels[item.type]}</span>
             {editable && (
@@ -131,9 +136,6 @@ function SortableItem({
             )}
           </div>
         </div>
-        <button className="item-title" onClick={select}>
-          {item.title}
-        </button>
         {item.address && <p className="item-address">{item.address}</p>}
         <div className="item-meta">
           {item.fixedTime && (
@@ -408,8 +410,7 @@ export function Planner({
         <section className="timeline-pane">
           <div className="timeline-heading">
             <div>
-              <span className="eyebrow">A DAY TO REMEMBER</span>
-              <h2>{day?.date ? `${day.date} 的安排` : "慢慢计划，好好出发"}</h2>
+              <h2>{day?.date ?? "当天行程"}</h2>
               <p>
                 {day
                   ? `${day.items.length} 个事项 · ${day.legs.length} 段路程`
@@ -451,7 +452,7 @@ export function Planner({
                       setQuery(e.target.value);
                       if (!e.target.value) setResults([]);
                     }}
-                    placeholder="搜索下一个想去的地方…"
+                    placeholder="搜索地点"
                   />
                   <button aria-label="搜索" type="submit">
                     <ArrowSearch />
@@ -460,7 +461,7 @@ export function Planner({
                 <input
                   className="city-input"
                   aria-label="搜索城市"
-                  placeholder="城市（可选，如香港）"
+                  placeholder="城市（可选）"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
                 />
@@ -511,7 +512,8 @@ export function Planner({
                     setEditing("new");
                   }}
                 >
-                  ＋ 手动添加事项
+                  <Plus size={14} />
+                  手动添加事项
                 </button>
                 <button
                   onClick={() => {
@@ -519,7 +521,8 @@ export function Planner({
                     setShowMap(true);
                   }}
                 >
-                  ⌖ {picking ? "取消选点" : "地图选点"}
+                  <MapPin size={14} />
+                  {picking ? "取消选点" : "地图选点"}
                 </button>
               </div>
             </div>
@@ -601,10 +604,8 @@ export function Planner({
                         size={33}
                         className="mx-auto mb-4 opacity-50"
                       />
-                      <p>从第一个想去的地方开始。</p>
-                      <p className="text-xs mt-3">
-                        搜索地点，或添加活动、酒店和手动安排。
-                      </p>
+                      <p>暂无行程事项</p>
+                      <p className="text-xs mt-3">搜索地点，或手动添加事项。</p>
                     </div>
                   )}
                 </div>

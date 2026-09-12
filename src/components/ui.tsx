@@ -1,12 +1,12 @@
 "use client";
 import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { X, Compass } from "lucide-react";
+import { X, Navigation2 } from "lucide-react";
 export function Brand() {
   return (
     <Link href="/" className="brand">
       <span className="brand-icon">
-        <Compass size={22} />
+        <Navigation2 size={29} strokeWidth={1.8} />
       </span>
       <span>
         Amap<span className="brand-sub">TRIP PLANNER</span>

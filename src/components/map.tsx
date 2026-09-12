@@ -179,7 +179,7 @@ export function TripMap({
         add(
           new sdk.Polyline({
             path: points.map((p) => mapPoint(p[0], p[1])),
-            strokeColor: leg.mode === "manual" ? "#a68d62" : "#3f8c68",
+            strokeColor: leg.mode === "manual" ? "#ed9045" : "#3264ef",
             strokeWeight: 5,
             strokeOpacity: 0.8,
             strokeStyle: leg.mode === "manual" ? "dashed" : "solid",
@@ -205,8 +205,8 @@ export function TripMap({
       {(error || (!sdk && !testMode)) && (
         <div className="map-unavailable">
           <MapPinned size={48} strokeWidth={1.2} />
-          <h3>{error ? "地图暂不可用" : "正在展开地图…"}</h3>
-          <p>{error || "旅途中的每一站，即将连成一条路。"}</p>
+          <h3>{error ? "地图暂不可用" : "地图加载中"}</h3>
+          <p>{error || "正在加载地点和路线。"}</p>
         </div>
       )}
       {testMode && (
@@ -225,12 +225,12 @@ export function TripMap({
                 <path
                   d="M 60 0 L 0 0 0 60"
                   fill="none"
-                  stroke="#d6ddcc"
+                  stroke="#e2e8f2"
                   strokeWidth="1"
                 />
               </pattern>
             </defs>
-            <rect width="700" height="600" fill="#e9eddf" />
+            <rect width="700" height="600" fill="#f3f6fc" />
             <rect width="700" height="600" fill="url(#grid)" />
             {day?.legs.map((leg) => {
               const a = points.findIndex((i) => i.id === leg.fromItemId),
@@ -247,7 +247,7 @@ export function TripMap({
                   y1={110 + Math.floor(a / 3) * 140}
                   x2={130 + (b % 3) * 180}
                   y2={110 + Math.floor(b / 3) * 140}
-                  stroke="#3f8c68"
+                  stroke="#3264ef"
                   strokeWidth="5"
                   strokeDasharray={leg.mode === "manual" ? "10 8" : undefined}
                 />
@@ -268,7 +268,7 @@ export function TripMap({
                   cx={130 + (i % 3) * 180}
                   cy={110 + Math.floor(i / 3) * 140}
                   r={20}
-                  fill={selected === item.id ? "#b77e45" : "#357b59"}
+                  fill={selected === item.id ? "#ff754f" : "#3264ef"}
                 />
                 <text
                   x={130 + (i % 3) * 180}
@@ -283,7 +283,7 @@ export function TripMap({
                   x={130 + (i % 3) * 180}
                   y={150 + Math.floor(i / 3) * 140}
                   textAnchor="middle"
-                  fill="#4b6451"
+                  fill="#455570"
                   fontSize="12"
                 >
                   {item.title.slice(0, 12)}

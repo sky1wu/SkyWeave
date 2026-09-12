@@ -126,7 +126,7 @@ export function ExpenseEditor({
     }
   }
   return (
-    <Modal title={expense ? "编辑费用" : "记一笔旅途开销"} close={close}>
+    <Modal title={expense ? "编辑费用" : "添加费用"} close={close}>
       <form onSubmit={submit}>
         <ErrorText error={error} />
         <label>
@@ -136,9 +136,7 @@ export function ExpenseEditor({
             required
             maxLength={200}
             defaultValue={expense?.title ?? ""}
-            placeholder={
-              item ? `${item.title} · 午餐 / 门票…` : "例如：大家一起吃的晚餐"
-            }
+            placeholder={item ? `${item.title} · 午餐 / 门票…` : "例如：晚餐"}
           />
         </label>
         <div className="field-grid">
@@ -280,7 +278,7 @@ export function ExpenseEditor({
           ))}
         </div>
         {preview && (
-          <p className="text-sm text-emerald-700">
+          <p className="text-sm accent-link">
             折合 {formatMoney(base, trip.baseCurrency)} · 汇率将在保存时锁定
           </p>
         )}
@@ -385,9 +383,7 @@ export function SettlementEditor({
           }
         }}
       >
-        <p className="text-sm muted">
-          转账完成后在这里登记。记录将更新双方余额。
-        </p>
+        <p className="text-sm muted">登记已完成的转账，更新双方余额。</p>
         <ErrorText error={error} />
         <div className="field-grid">
           <label>
@@ -529,8 +525,8 @@ export function Expenses({
     <main className="content-page">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">SHARED MOMENTS, SHARED COSTS</span>
-          <h2 className="section-title mt-2">一起花得明明白白</h2>
+          <h2 className="section-title">费用与结算</h2>
+          <p className="page-description">查看支出、每人余额和转账记录。</p>
         </div>
         {editable && (
           <div className="flex gap-2">
@@ -547,13 +543,15 @@ export function Expenses({
       <ErrorText error={error} />
       <div className="expense-overview">
         <section className="total-card">
-          <Wallet size={24} />
-          <p className="text-sm mt-6 opacity-75">旅途总支出</p>
+          <p className="total-label">
+            <Wallet size={18} />
+            总支出
+          </p>
           <strong>{formatMoney(total, base)}</strong>
-          <p className="text-xs opacity-65 mt-3">
+          <p className="total-description">
             {snapshot.expenses.length} 笔费用 · 统一以 {base} 结算
           </p>
-          <div className="flex flex-wrap gap-3 mt-6">
+          <div className="currency-totals">
             {currencyTotals.map((c) => (
               <span key={c.currency} className="text-xs">
                 {c.currency} {formatMoney(c.amount, c.currency)}
@@ -561,8 +559,8 @@ export function Expenses({
             ))}
           </div>
         </section>
-        <section className="panel p-6">
-          <h3 className="font-semibold mb-5">花在哪里</h3>
+        <section className="panel category-summary">
+          <h3 className="font-semibold mb-5">分类支出</h3>
           {categories.length ? (
             categories.map((c) => (
               <div className="mb-4" key={c.key}>
@@ -580,12 +578,12 @@ export function Expenses({
               </div>
             ))
           ) : (
-            <p className="muted text-sm">记下第一笔费用后，这里会显示分类。</p>
+            <p className="muted text-sm">暂无分类数据</p>
           )}
         </section>
       </div>
       <section className="panel mt-6 p-6">
-        <h3 className="font-semibold mb-5">每个人的账单</h3>
+        <h3 className="font-semibold mb-5">成员账单</h3>
         <div className="table-scroll">
           <table className="money-table">
             <thead>
@@ -700,7 +698,7 @@ export function Expenses({
             </div>
           ))
         ) : (
-          <div className="empty">还没有费用，记录第一笔旅途开销吧。</div>
+          <div className="empty">暂无费用记录</div>
         )}
       </section>
       <h3 className="font-semibold mt-9 mb-4">实际转账记录</h3>
@@ -726,7 +724,7 @@ export function Expenses({
             </div>
           ))
         ) : (
-          <p className="p-6 text-sm muted">完成转账后，可以在这里登记。</p>
+          <p className="p-6 text-sm muted">暂无转账记录</p>
         )}
       </section>
       {settle && (

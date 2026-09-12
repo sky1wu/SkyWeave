@@ -116,7 +116,9 @@ export function TripShell({
     setExpenseItem(item);
   }
   return (
-    <>
+    <div
+      className={`trip-workspace ${section === "plan" ? "planner-workspace" : ""}`}
+    >
       <header className="site-header trip-header">
         <Brand />
         <Link href="/" className="text-xs muted flex items-center gap-1">
@@ -176,9 +178,7 @@ export function TripShell({
           </a>
         ))}
         <span className="ml-auto text-xs muted hidden sm:block">
-          {data.role === "viewer"
-            ? "只读成员 · 可以评论"
-            : "一起安排，每一站都算数"}
+          {data.role === "viewer" ? "只读成员 · 可以评论" : "可编辑"}
         </span>
       </nav>
       {error && (
@@ -330,6 +330,6 @@ export function TripShell({
           </form>
         </Modal>
       )}
-    </>
+    </div>
   );
 }

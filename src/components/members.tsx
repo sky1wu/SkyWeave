@@ -36,8 +36,8 @@ export function Members({
     <main className="content-page">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">BETTER WITH GOOD COMPANY</span>
-          <h2 className="section-title mt-2">这一次，和谁一起出发</h2>
+          <h2 className="section-title">同行成员</h2>
+          <p className="page-description">管理成员权限、同行者和邀请链接。</p>
         </div>
         <div className="flex gap-2">
           {editable && (
@@ -65,8 +65,8 @@ export function Members({
         {snapshot.participants.map((p) => {
           const m = snapshot.members.find((m) => m.userId === p.userId);
           return (
-            <section className="panel member-card" key={p.id}>
-              <div className="flex gap-4 items-center">
+            <section className="member-card" key={p.id}>
+              <div className="member-identity">
                 <div className="avatar large">{p.name.slice(0, 1)}</div>
                 <div>
                   <h3 className="font-semibold">{p.name}</h3>
@@ -84,18 +84,18 @@ export function Members({
                 </div>
               </div>
               {m && (
-                <p className="text-xs muted flex gap-2 items-center mt-5">
+                <p className="member-detail">
                   <Mail size={13} />
                   {m.email}
                 </p>
               )}
               {!m && (
-                <p className="text-xs muted mt-5">
-                  可参与记账和结算。通过专属邀请加入后，历史账目会自动保留。
+                <p className="member-detail">
+                  可参与分摊，接受专属邀请后绑定账号。
                 </p>
               )}
               {owner && (
-                <div className="flex flex-wrap gap-2 mt-5">
+                <div className="member-actions">
                   {m && m.role !== "owner" && (
                     <>
                       <select
@@ -223,7 +223,7 @@ export function Members({
                 </div>
               ))
             ) : (
-              <div className="empty">还没有创建邀请。</div>
+              <div className="empty">暂无邀请记录。</div>
             )}
           </section>
         </>

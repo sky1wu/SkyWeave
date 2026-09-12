@@ -13,9 +13,9 @@ export function InvitePage({ token }: { token: string }) {
       <Brand />
       <div className="panel p-9 mt-12 text-center">
         <Users size={44} className="mx-auto text-emerald-700 mb-6" />
-        <h1 className="text-2xl font-semibold mb-4">这段旅程，就差你了</h1>
+        <h1 className="text-2xl font-semibold mb-4">加入行程</h1>
         <p className="muted mb-7 text-sm">
-          登录后接受邀请，一起查看行程、讨论安排和分摊费用。专属邀请会保留你已有的账目。
+          登录后可接受邀请。专属邀请会关联你已有的账目。
         </p>
         <ErrorText error={error} />
         <button

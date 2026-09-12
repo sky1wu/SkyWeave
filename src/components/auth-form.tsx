@@ -41,41 +41,38 @@ export function AuthForm({ register = false }: { register?: boolean }) {
       <div className="auth-story">
         <Brand />
         <div>
-          <span className="eyebrow">EVERY GOOD TRIP STARTS TOGETHER</span>
+          <span className="eyebrow">行程 · 协作 · 费用</span>
           <h1>
-            把想去的地方，
+            旅行规划
             <br />
-            变成一起走的路。
+            与费用管理
           </h1>
           <p>
-            从第一站到最后一笔，
+            安排每天的地点和路线，
             <br />
-            让每个人都在同一份旅程里。
+            与同行者一起编辑、记账和结算。
           </p>
           <div className="auth-features">
             <span>
-              <Route size={18} /> 一天，一条清晰的时间线
+              <Route size={18} /> 地点与路线
             </span>
             <span>
-              <Users size={18} /> 邀请朋友，一起安排
+              <Users size={18} /> 多人编辑
             </span>
             <span>
-              <Wallet size={18} /> 轻松分摊，清楚结算
+              <Wallet size={18} /> 费用分摊
             </span>
           </div>
         </div>
-        <span className="text-xs opacity-60">
-          AMAP TRIP PLANNER · 为下一次出发
-        </span>
+        <span className="text-xs opacity-60">Amap Trip Planner</span>
       </div>
       <div className="auth-form-side">
         <form className="auth-form" onSubmit={submit}>
-          <span className="eyebrow">LET’S GO SOMEWHERE</span>
-          <h2>{register ? "创建你的账号" : "欢迎回来"}</h2>
+          <h2>{register ? "创建账号" : "登录"}</h2>
           <p className="muted mb-8">
             {register
-              ? "下一段旅程，从这里开始。"
-              : "你的旅程和同行的人，都在这里。"}
+              ? "注册后即可创建行程或接受邀请。"
+              : "登录后查看和管理你的行程。"}
           </p>
           <ErrorText error={error} />
           {register && (
@@ -86,7 +83,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
                 autoComplete="name"
                 required
                 maxLength={100}
-                placeholder="大家怎么称呼你"
+                placeholder="输入昵称"
               />
             </label>
           )}
@@ -119,7 +116,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
           <div className="text-sm muted mt-5">
             {register ? "已有账号？" : "还没有账号？"}
             <a
-              className="text-emerald-700 ml-2"
+              className="accent-link ml-2"
               href="#"
               onClick={(e) => {
                 e.preventDefault();

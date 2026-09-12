@@ -47,7 +47,7 @@ export function Comments({
             </div>
           ))
         ) : (
-          <p className="muted text-sm py-5">这里还没有评论，聊聊你的想法吧。</p>
+          <p className="muted text-sm py-5">暂无评论</p>
         )}
       </div>
       <form
@@ -73,7 +73,7 @@ export function Comments({
         <ErrorText error={error} />
         <textarea
           aria-label="评论内容"
-          placeholder="分享安排、提醒或集合地点…"
+          placeholder="输入评论"
           rows={3}
           required
           maxLength={4000}
@@ -118,13 +118,12 @@ export function ActivityPage({
     <main className="content-page">
       <div className="page-heading">
         <div>
-          <span className="eyebrow">KEEP EVERYONE IN THE LOOP</span>
-          <h2 className="section-title mt-2">旅程里的新鲜事</h2>
+          <h2 className="section-title">协作动态</h2>
+          <p className="page-description">查看修改记录和行程评论。</p>
         </div>
-        <span className="pill">协作动态</span>
       </div>
       <div className="activity-grid">
-        <section className="panel p-6">
+        <section className="panel activity-feed">
           <h3 className="font-semibold mb-5">最近动态</h3>
           {snapshot.activity.map((a) => (
             <div className="activity-row" key={a.id}>
@@ -142,8 +141,8 @@ export function ActivityPage({
             </div>
           ))}
         </section>
-        <section className="panel p-6 self-start">
-          <h3 className="font-semibold mb-3">一起聊聊这次旅行</h3>
+        <section className="panel discussion-pane self-start">
+          <h3 className="font-semibold mb-3">行程评论</h3>
           <Comments
             snapshot={snapshot}
             target={{
