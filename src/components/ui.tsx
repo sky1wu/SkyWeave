@@ -1,12 +1,29 @@
 "use client";
-import { useEffect, useRef } from "react";
 import Link from "next/link";
-import { X, Navigation2 } from "lucide-react";
+import { Navigation2, X } from "lucide-react";
+import { useRef } from "react";
+import { useMediaQuery } from "@/hooks/use-media-query";
+import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "./ui/sheet";
+
 export function Brand() {
   return (
     <Link href="/" className="brand" aria-label="SkyWeave">
       <span className="brand-icon">
-        <Navigation2 size={29} strokeWidth={1.8} />
+        <Navigation2 size={27} strokeWidth={1.8} />
       </span>
       <span>SkyWeave</span>
     </Link>
@@ -21,68 +38,71 @@ export function Modal({
   close: () => void;
   children: React.ReactNode;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(close);
-  useEffect(() => {
-    closeRef.current = close;
-  }, [close]);
-  useEffect(() => {
-    const prior = document.activeElement as HTMLElement | null;
-    ref.current?.focus();
-    const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeRef.current();
-      if (e.key === "Tab") {
-        const elements = [
-          ...(ref.current?.querySelectorAll<HTMLElement>(
-            'button, input, select, textarea, a[href], [tabindex="0"]',
-          ) ?? []),
-        ].filter((e) => !e.hasAttribute("disabled"));
-        if (!elements.length) return;
-        const first = elements[0],
-          last = elements.at(-1)!;
-        if (
-          e.shiftKey &&
-          (document.activeElement === first ||
-            document.activeElement === ref.current)
-        ) {
-          last.focus();
-          e.preventDefault();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          first.focus();
-          e.preventDefault();
-        }
-      }
-    };
-    document.addEventListener("keydown", key);
-    return () => {
-      document.removeEventListener("keydown", key);
-      prior?.focus();
-    };
-  }, []);
+  const mobile = useMediaQuery("(max-width: 600px)");
+  const previousFocus = useRef<HTMLElement | null>(
+    typeof document === "undefined"
+      ? null
+      : (document.activeElement as HTMLElement),
+  );
+  const returnFocus = () =>
+    previousFocus.current?.isConnected ? previousFocus.current : true;
+  if (mobile)
+    return (
+      <Sheet
+        open
+        onOpenChange={(open) => {
+          if (!open) close();
+        }}
+      >
+        <SheetContent
+          side="bottom"
+          showCloseButton={false}
+          finalFocus={returnFocus}
+          aria-describedby={undefined}
+          className="sw-modal sw-mobile-sheet max-h-[94dvh] gap-0 rounded-t-xl"
+        >
+          <SheetHeader className="sw-modal-header flex-row items-center justify-between gap-4 border-b px-5 py-4">
+            <SheetTitle className="text-base font-semibold">{title}</SheetTitle>
+            <SheetClose
+              render={<Button variant="ghost" size="icon" aria-label="关闭" />}
+            >
+              <X className="size-4" />
+            </SheetClose>
+          </SheetHeader>
+          <div className="sw-modal-body min-h-0 overflow-y-auto overscroll-contain px-5 py-5">
+            {children}
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
   return (
-    <div
-      className="modal-shade"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) close();
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) close();
       }}
     >
-      <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        tabIndex={-1}
-        ref={ref}
+      <DialogContent
+        showCloseButton={false}
+        finalFocus={returnFocus}
+        aria-describedby={undefined}
+        className="sw-modal flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]"
       >
-        <div className="flex items-center justify-between gap-4">
-          <h2>{title}</h2>
-          <button className="btn mb-5" aria-label="关闭" onClick={close}>
-            <X size={16} />
-          </button>
+        <DialogHeader className="sw-modal-header flex-row items-center justify-between gap-4 border-b px-6 py-4">
+          <DialogTitle className="text-lg font-semibold leading-normal">
+            {title}
+          </DialogTitle>
+          <DialogClose
+            render={<Button variant="ghost" size="icon-sm" aria-label="关闭" />}
+          >
+            <X className="size-4" />
+          </DialogClose>
+        </DialogHeader>
+        <div className="sw-modal-body min-h-0 overflow-y-auto overscroll-contain px-6 py-5">
+          {children}
         </div>
-        {children}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 export function ErrorText({ error }: { error: string }) {

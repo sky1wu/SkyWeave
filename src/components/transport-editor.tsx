@@ -1,4 +1,9 @@
 "use client";
+import { Textarea } from "./ui/textarea";
+import { Label } from "./ui/label";
+import { NativeSelect } from "./ui/native-select";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
 import { useEffect, useRef, useState } from "react";
 import { MapPin, Search } from "lucide-react";
 import type { Item, PoolPlace } from "@/domain/types";
@@ -61,7 +66,7 @@ function EndpointField({
     <fieldset className="transport-endpoint-field">
       <legend>{label}</legend>
       <div className="transport-endpoint-search">
-        <input
+        <Input
           aria-label={`${label}名称`}
           required
           maxLength={200}
@@ -74,7 +79,8 @@ function EndpointField({
             setResults(null);
           }}
         />
-        <button
+        <Button
+          variant="outline"
           className="btn"
           type="button"
           aria-label={`搜索${label}`}
@@ -83,9 +89,9 @@ function EndpointField({
         >
           <Search size={15} />
           {busy ? "搜索中" : "搜索"}
-        </button>
+        </Button>
       </div>
-      <select
+      <NativeSelect
         aria-label={`从地点池选择${label}`}
         value=""
         onChange={(e) => {
@@ -111,7 +117,7 @@ function EndpointField({
             {p.title}
           </option>
         ))}
-      </select>
+      </NativeSelect>
       <ErrorText error={error} />
       {results && (
         <div className="transport-endpoint-results">
@@ -153,9 +159,9 @@ function EndpointField({
       <details>
         <summary>坐标</summary>
         <div className="field-grid">
-          <label>
+          <Label>
             纬度
-            <input
+            <Input
               aria-label={`${label}纬度`}
               type="number"
               step="any"
@@ -170,10 +176,10 @@ function EndpointField({
                 })
               }
             />
-          </label>
-          <label>
+          </Label>
+          <Label>
             经度
-            <input
+            <Input
               aria-label={`${label}经度`}
               type="number"
               step="any"
@@ -188,7 +194,7 @@ function EndpointField({
                 })
               }
             />
-          </label>
+          </Label>
         </div>
       </details>
     </fieldset>
@@ -263,9 +269,9 @@ export function TransportEditor({
       >
         <ErrorText error={error} />
         <div className="field-grid">
-          <label>
+          <Label>
             交通类型
-            <select
+            <NativeSelect
               name="mode"
               aria-label="交通类型"
               value={mode}
@@ -276,19 +282,19 @@ export function TransportEditor({
                   {label}
                 </option>
               ))}
-            </select>
-          </label>
-          <label>
+            </NativeSelect>
+          </Label>
+          <Label>
             确认状态
-            <select
+            <NativeSelect
               name="status"
               aria-label="确认状态"
               defaultValue={item?.transport?.status ?? "tentative"}
             >
               <option value="tentative">暂定</option>
               <option value="confirmed">已确认</option>
-            </select>
-          </label>
+            </NativeSelect>
+          </Label>
         </div>
         <EndpointField
           label="出发地"
@@ -303,18 +309,18 @@ export function TransportEditor({
           places={places}
         />
         <div className="field-grid">
-          <label>
+          <Label>
             班次（可选）
-            <input
+            <Input
               name="serviceNumber"
               maxLength={80}
               defaultValue={item?.transport?.serviceNumber ?? ""}
               placeholder={mode === "flight" ? "航班号" : "车次或班次"}
             />
-          </label>
-          <label>
+          </Label>
+          <Label>
             预计用时（分钟）
-            <input
+            <Input
               name="duration"
               type="number"
               min={0}
@@ -322,7 +328,7 @@ export function TransportEditor({
               defaultValue={item?.transport?.durationMinutes ?? ""}
               placeholder="待定"
             />
-          </label>
+          </Label>
         </div>
         <div className="field-grid">
           <TimeField name="start" label="出发时间" value={item?.startMinutes} />
@@ -331,22 +337,27 @@ export function TransportEditor({
         <p className="text-xs muted">
           时间可留空，使用行程时区；跨午夜请选择“次日”。
         </p>
-        <label>
+        <Label>
           名称（可选）
-          <input
+          <Input
             name="title"
             maxLength={200}
             defaultValue={item?.title ?? ""}
             placeholder="默认使用交通类型和起终点"
           />
-        </label>
-        <label>
+        </Label>
+        <Label>
           备注
-          <textarea name="notes" rows={2} defaultValue={item?.notes ?? ""} />
-        </label>
-        <button className="btn primary" disabled={busy}>
+          <Textarea name="notes" rows={2} defaultValue={item?.notes ?? ""} />
+        </Label>
+        <Button
+          variant="default"
+          type="submit"
+          className="btn primary"
+          disabled={busy}
+        >
           {busy ? "保存中…" : "保存交通"}
-        </button>
+        </Button>
       </form>
     </Modal>
   );

@@ -1,4 +1,9 @@
 "use client";
+import { useConfirmation } from "./confirmation";
+import { NativeSelect } from "./ui/native-select";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -33,6 +38,7 @@ export function TripShell({
   tripId: string;
   section: string;
 }) {
+  const { confirm, confirmation } = useConfirmation();
   const router = useRouter();
   const [data, setData] = useState<TripSnapshot | null>(null),
     [error, setError] = useState(""),
@@ -126,13 +132,16 @@ export function TripShell({
           <div>
             <h1>{data.trip.title}</h1>
             {data.role === "owner" && (
-              <button
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                type="button"
                 className="icon-btn"
                 aria-label="行程设置"
                 onClick={() => setSettings(true)}
               >
                 <Settings2 size={15} />
-              </button>
+              </Button>
             )}
           </div>
           <p>
@@ -252,18 +261,18 @@ export function TripShell({
             }}
           >
             <ErrorText error={error} />
-            <label>
+            <Label>
               行程名称
-              <input name="title" defaultValue={data.trip.title} required />
-            </label>
+              <Input name="title" defaultValue={data.trip.title} required />
+            </Label>
             <TripDateFields
               startDate={data.trip.startDate}
               endDate={data.trip.endDate}
             />
             <div className="field-grid">
-              <label>
+              <Label>
                 时区
-                <select name="timezone" defaultValue={data.trip.timezone}>
+                <NativeSelect name="timezone" defaultValue={data.trip.timezone}>
                   {[
                     "Asia/Shanghai",
                     "Asia/Hong_Kong",
@@ -272,11 +281,11 @@ export function TripShell({
                   ].map((z) => (
                     <option key={z}>{z}</option>
                   ))}
-                </select>
-              </label>
-              <label>
+                </NativeSelect>
+              </Label>
+              <Label>
                 结算币种
-                <select
+                <NativeSelect
                   name="baseCurrency"
                   defaultValue={data.trip.baseCurrency}
                   disabled={!!data.trip.baseCurrencyLockedAt}
@@ -284,21 +293,22 @@ export function TripShell({
                   {currencies.map((c) => (
                     <option key={c}>{c}</option>
                   ))}
-                </select>
-              </label>
+                </NativeSelect>
+              </Label>
             </div>
             {data.trip.baseCurrencyLockedAt && (
               <p className="text-xs muted">已有账目，结算币种已锁定。</p>
             )}
             <div className="actions">
-              <button
+              <Button
+                variant="destructive"
                 className="btn danger"
                 type="button"
                 onClick={async () => {
                   if (
-                    !window.confirm(
+                    !(await confirm(
                       `永久删除「${data.trip.title}」及全部行程、费用和结算？`,
-                    )
+                    ))
                   )
                     return;
                   try {
@@ -312,10 +322,13 @@ export function TripShell({
                 }}
               >
                 删除行程
-              </button>
-              <button className="btn primary">保存设置</button>
+              </Button>
+              <Button variant="default" type="submit" className="btn primary">
+                保存设置
+              </Button>
             </div>
           </form>
+          {confirmation}
         </Modal>
       )}
     </div>

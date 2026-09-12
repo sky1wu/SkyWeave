@@ -1,4 +1,6 @@
 "use client";
+import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
 import { useState } from "react";
 import { DateTime } from "luxon";
 import type { TripSnapshot } from "@/domain/types";
@@ -71,7 +73,7 @@ export function Comments({
         }}
       >
         <ErrorText error={error} />
-        <textarea
+        <Textarea
           aria-label="评论内容"
           placeholder="输入评论"
           rows={3}
@@ -80,12 +82,14 @@ export function Comments({
           value={content}
           onChange={(e) => setContent(e.target.value)}
         />
-        <button
+        <Button
+          variant="default"
+          type="submit"
           className="btn primary justify-self-end"
           disabled={busy || !content.trim()}
         >
           发表评论
-        </button>
+        </Button>
       </form>
     </div>
   );

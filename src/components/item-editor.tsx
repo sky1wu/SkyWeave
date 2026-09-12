@@ -1,5 +1,11 @@
 "use client";
+import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
+import { Input } from "./ui/input";
+import { NativeSelect } from "./ui/native-select";
+import { Label } from "./ui/label";
 import { useState } from "react";
+import { Checkbox } from "./ui/checkbox";
 import type { Item } from "@/domain/types";
 import { typeLabels } from "@/domain/types";
 import { placeCategories } from "@/domain/planning";
@@ -34,10 +40,10 @@ export function TimeField({
   value?: number | null;
 }) {
   return (
-    <label>
+    <Label>
       {label}
       <div className="flex gap-2 mt-1.5">
-        <select
+        <NativeSelect
           name={`${name}Day`}
           defaultValue={Math.floor((value ?? 0) / 1440)}
           aria-label={`${label}日期`}
@@ -48,8 +54,8 @@ export function TimeField({
               {d === 0 ? "当天" : d === 1 ? "次日" : `第 ${d + 1} 日`}
             </option>
           ))}
-        </select>
-        <input
+        </NativeSelect>
+        <Input
           name={name}
           type="time"
           aria-label={label}
@@ -60,7 +66,7 @@ export function TimeField({
           }
         />
       </div>
-    </label>
+    </Label>
   );
 }
 export function readTime(form: FormData, key: string): number | null {
@@ -125,26 +131,26 @@ export function ItemEditor({
       <form onSubmit={submit}>
         <ErrorText error={error} />
         <div className="field-grid">
-          <label>
+          <Label>
             名称
-            <input
+            <Input
               name="title"
               required
               maxLength={200}
               defaultValue={item?.title ?? (point ? "自选地点" : "")}
               placeholder="想去的地方或要做的事"
             />
-          </label>
-          <label>
+          </Label>
+          <Label>
             类型
-            <select name="type" defaultValue={item?.type ?? "place"}>
+            <NativeSelect name="type" defaultValue={item?.type ?? "place"}>
               {Object.entries(typeLabels).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>
               ))}
-            </select>
-          </label>
+            </NativeSelect>
+          </Label>
         </div>
         <SearchableSelect
           label="地点分类"
@@ -153,14 +159,14 @@ export function ItemEditor({
           options={categories.map((value) => ({ value, label: value }))}
           allowCustom
         />
-        <label>
+        <Label>
           地址
-          <input name="address" defaultValue={item?.address ?? ""} />
-        </label>
+          <Input name="address" defaultValue={item?.address ?? ""} />
+        </Label>
         <div className="field-grid">
-          <label>
+          <Label>
             纬度（WGS-84）
-            <input
+            <Input
               name="lat"
               type="number"
               step="any"
@@ -168,10 +174,10 @@ export function ItemEditor({
               max={90}
               defaultValue={point?.lat ?? item?.lat ?? ""}
             />
-          </label>
-          <label>
+          </Label>
+          <Label>
             经度（WGS-84）
-            <input
+            <Input
               name="lng"
               type="number"
               step="any"
@@ -179,46 +185,47 @@ export function ItemEditor({
               max={180}
               defaultValue={point?.lng ?? item?.lng ?? ""}
             />
-          </label>
+          </Label>
         </div>
         <div className="field-grid">
           <TimeField name="start" label="开始时间" value={item?.startMinutes} />
           <TimeField name="end" label="结束时间" value={item?.endMinutes} />
         </div>
         <div className="field-grid items-center">
-          <label>
+          <Label>
             停留时间（分钟）
-            <input
+            <Input
               name="stayMinutes"
               type="number"
               min={0}
               max={10080}
               defaultValue={item?.stayMinutes ?? 0}
             />
-          </label>
-          <label className="flex items-center gap-2 pt-6">
-            <input
-              name="fixedTime"
-              type="checkbox"
-              defaultChecked={item?.fixedTime}
-            />{" "}
+          </Label>
+          <Label className="flex items-center gap-2 pt-6">
+            <Checkbox name="fixedTime" defaultChecked={item?.fixedTime} />{" "}
             固定时间活动
-          </label>
+          </Label>
         </div>
         <p className="text-xs muted">
           固定活动保持原定结束时间。跨午夜请选择“次日”；结束时间留空时使用停留时长。
         </p>
-        <label>
+        <Label>
           说明
-          <input name="description" defaultValue={item?.description ?? ""} />
-        </label>
-        <label>
+          <Input name="description" defaultValue={item?.description ?? ""} />
+        </Label>
+        <Label>
           备注
-          <textarea name="notes" rows={2} defaultValue={item?.notes ?? ""} />
-        </label>
-        <button className="btn primary" disabled={busy}>
+          <Textarea name="notes" rows={2} defaultValue={item?.notes ?? ""} />
+        </Label>
+        <Button
+          variant="default"
+          type="submit"
+          className="btn primary"
+          disabled={busy}
+        >
           {busy ? "保存中…" : "保存事项"}
-        </button>
+        </Button>
       </form>
     </Modal>
   );

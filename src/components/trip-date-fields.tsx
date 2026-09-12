@@ -1,4 +1,6 @@
 "use client";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import { useState } from "react";
 import { DateTime } from "luxon";
 import { addDays, MAX_TRIP_DAYS, tripDayCount } from "@/domain/calendar";
@@ -18,9 +20,9 @@ export function TripDateFields({
   return (
     <>
       <div className="field-grid">
-        <label>
+        <Label>
           开始日期
-          <input
+          <Input
             name="startDate"
             type="date"
             required
@@ -32,10 +34,10 @@ export function TripDateFields({
                 setEnd(addDays(date, Number(count) - 1));
             }}
           />
-        </label>
-        <label>
+        </Label>
+        <Label>
           结束日期
-          <input
+          <Input
             name="endDate"
             type="date"
             required
@@ -50,11 +52,11 @@ export function TripDateFields({
               );
             }}
           />
-        </label>
+        </Label>
       </div>
-      <label className="trip-duration-field">
+      <Label className="trip-duration-field">
         行程天数
-        <input
+        <Input
           name="dayCount"
           type="number"
           required
@@ -68,7 +70,7 @@ export function TripDateFields({
               setEnd(addDays(start, n - 1));
           }}
         />
-      </label>
+      </Label>
     </>
   );
 }

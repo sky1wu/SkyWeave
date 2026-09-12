@@ -1,4 +1,11 @@
 "use client";
+import { Checkbox } from "./ui/checkbox";
+import { useConfirmation } from "./confirmation";
+import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
+import { NativeSelect } from "./ui/native-select";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import { useState } from "react";
 import { DateTime } from "luxon";
 import {
@@ -129,20 +136,20 @@ export function ExpenseEditor({
     <Modal title={expense ? "编辑费用" : "添加费用"} close={close}>
       <form onSubmit={submit}>
         <ErrorText error={error} />
-        <label>
+        <Label>
           费用名称
-          <input
+          <Input
             name="title"
             required
             maxLength={200}
             defaultValue={expense?.title ?? ""}
             placeholder={item ? `${item.title} · 午餐 / 门票…` : "例如：晚餐"}
           />
-        </label>
+        </Label>
         <div className="field-grid">
-          <label>
+          <Label>
             金额
-            <input
+            <Input
               aria-label="费用金额"
               inputMode="decimal"
               required
@@ -150,10 +157,10 @@ export function ExpenseEditor({
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
             />
-          </label>
-          <label>
+          </Label>
+          <Label>
             币种
-            <select
+            <NativeSelect
               aria-label="币种"
               value={currency}
               onChange={(e) => {
@@ -172,13 +179,13 @@ export function ExpenseEditor({
               {currencies.map((c) => (
                 <option key={c}>{c}</option>
               ))}
-            </select>
-          </label>
+            </NativeSelect>
+          </Label>
         </div>
         {currency !== trip.baseCurrency && (
-          <label>
+          <Label>
             汇率：1 {currency} = 多少 {trip.baseCurrency}
-            <input
+            <Input
               aria-label="汇率"
               required
               inputMode="decimal"
@@ -186,12 +193,12 @@ export function ExpenseEditor({
               onChange={(e) => setRate(e.target.value)}
               placeholder="输入本笔费用使用的汇率"
             />
-          </label>
+          </Label>
         )}
         <div className="field-grid">
-          <label>
+          <Label>
             付款人
-            <select
+            <NativeSelect
               name="payer"
               defaultValue={
                 expense?.payerParticipantId ??
@@ -204,22 +211,25 @@ export function ExpenseEditor({
                   {p.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <label>
+            </NativeSelect>
+          </Label>
+          <Label>
             分类
-            <select name="category" defaultValue={expense?.category ?? "food"}>
+            <NativeSelect
+              name="category"
+              defaultValue={expense?.category ?? "food"}
+            >
               {Object.entries(categoryLabels).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
                 </option>
               ))}
-            </select>
-          </label>
+            </NativeSelect>
+          </Label>
         </div>
-        <label>
+        <Label>
           分摊方式
-          <select
+          <NativeSelect
             aria-label="分摊方式"
             value={method}
             onChange={(e) => setMethod(e.target.value as SplitMethod)}
@@ -228,27 +238,26 @@ export function ExpenseEditor({
             <option value="exact">按金额分摊</option>
             <option value="percentage">按比例分摊</option>
             <option value="shares">按份数分摊</option>
-          </select>
-        </label>
+          </NativeSelect>
+        </Label>
         <div className="split-people">
           {people.map((p) => (
             <div key={p.id} className="split-row">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+              <Label className="flex items-center gap-2">
+                <Checkbox
                   checked={selected.includes(p.id)}
-                  onChange={(e) =>
+                  onCheckedChange={(checked) =>
                     setSelected(
-                      e.target.checked
+                      checked
                         ? [...selected, p.id]
                         : selected.filter((id) => id !== p.id),
                     )
                   }
                 />
                 {p.name}
-              </label>
+              </Label>
               {method !== "equal" && selected.includes(p.id) && (
-                <input
+                <Input
                   aria-label={`${p.name} 分摊值`}
                   className="max-w-24"
                   inputMode="decimal"
@@ -283,9 +292,9 @@ export function ExpenseEditor({
           </p>
         )}
         <div className="field-grid">
-          <label>
+          <Label>
             关联日期
-            <select
+            <NativeSelect
               value={dayId}
               onChange={(e) => {
                 setDayId(e.target.value);
@@ -298,11 +307,14 @@ export function ExpenseEditor({
                   {d.title}
                 </option>
               ))}
-            </select>
-          </label>
-          <label>
+            </NativeSelect>
+          </Label>
+          <Label>
             关联事项
-            <select value={itemId} onChange={(e) => setItemId(e.target.value)}>
+            <NativeSelect
+              value={itemId}
+              onChange={(e) => setItemId(e.target.value)}
+            >
               <option value="">不关联</option>
               {snapshot.days
                 .find((d) => d.id === dayId)
@@ -311,12 +323,12 @@ export function ExpenseEditor({
                     {i.title}
                   </option>
                 ))}
-            </select>
-          </label>
+            </NativeSelect>
+          </Label>
         </div>
-        <label>
+        <Label>
           发生时间（{trip.timezone}）
-          <input
+          <Input
             name="incurredAt"
             type="datetime-local"
             required
@@ -324,14 +336,19 @@ export function ExpenseEditor({
               .setZone(trip.timezone)
               .toFormat("yyyy-MM-dd'T'HH:mm")}
           />
-        </label>
-        <label>
+        </Label>
+        <Label>
           备注
-          <textarea name="notes" rows={2} defaultValue={expense?.notes ?? ""} />
-        </label>
-        <button className="btn primary" disabled={busy}>
+          <Textarea name="notes" rows={2} defaultValue={expense?.notes ?? ""} />
+        </Label>
+        <Button
+          variant="default"
+          type="submit"
+          className="btn primary"
+          disabled={busy}
+        >
           {busy ? "保存中…" : "保存费用"}
-        </button>
+        </Button>
       </form>
     </Modal>
   );
@@ -386,9 +403,9 @@ export function SettlementEditor({
         <p className="text-sm muted">登记已完成的转账，更新双方余额。</p>
         <ErrorText error={error} />
         <div className="field-grid">
-          <label>
+          <Label>
             转出人
-            <select
+            <NativeSelect
               name="from"
               defaultValue={
                 initial?.fromParticipantId ?? snapshot.participants[0]?.id
@@ -399,11 +416,11 @@ export function SettlementEditor({
                   {p.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <label>
+            </NativeSelect>
+          </Label>
+          <Label>
             收款人
-            <select
+            <NativeSelect
               name="to"
               defaultValue={
                 initial?.toParticipantId ?? snapshot.participants[1]?.id
@@ -414,13 +431,13 @@ export function SettlementEditor({
                   {p.name}
                 </option>
               ))}
-            </select>
-          </label>
+            </NativeSelect>
+          </Label>
         </div>
         <div className="field-grid">
-          <label>
+          <Label>
             转账金额
-            <input
+            <Input
               name="amount"
               required
               inputMode="decimal"
@@ -430,28 +447,28 @@ export function SettlementEditor({
                   : ""
               }
             />
-          </label>
-          <label>
+          </Label>
+          <Label>
             转账币种
-            <select
+            <NativeSelect
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
             >
               {currencies.map((c) => (
                 <option key={c}>{c}</option>
               ))}
-            </select>
-          </label>
+            </NativeSelect>
+          </Label>
         </div>
         {currency !== snapshot.trip.baseCurrency && (
-          <label>
+          <Label>
             汇率：1 {currency} = 多少 {snapshot.trip.baseCurrency}
-            <input name="rate" required inputMode="decimal" />
-          </label>
+            <Input name="rate" required inputMode="decimal" />
+          </Label>
         )}
-        <label>
+        <Label>
           转账时间
-          <input
+          <Input
             name="settledAt"
             type="datetime-local"
             required
@@ -459,14 +476,19 @@ export function SettlementEditor({
               .setZone(snapshot.trip.timezone)
               .toFormat("yyyy-MM-dd'T'HH:mm")}
           />
-        </label>
-        <label>
+        </Label>
+        <Label>
           备注
-          <input name="note" placeholder="例如：微信已转账" />
-        </label>
-        <button className="btn primary" disabled={busy}>
+          <Input name="note" placeholder="例如：微信已转账" />
+        </Label>
+        <Button
+          variant="default"
+          type="submit"
+          className="btn primary"
+          disabled={busy}
+        >
           {busy ? "登记中…" : "确认已转账"}
-        </button>
+        </Button>
       </form>
     </Modal>
   );
@@ -482,6 +504,7 @@ export function Expenses({
   edit: (expense?: Expense) => void;
   comment: (expense: Expense) => void;
 }) {
+  const { confirm, confirmation } = useConfirmation();
   const editable = snapshot.role !== "viewer",
     base = snapshot.trip.baseCurrency;
   const { balances, suggestions } = calculateBalances(
@@ -514,7 +537,7 @@ export function Expenses({
     >(null),
     [error, setError] = useState("");
   async function remove(path: string, version: number) {
-    if (!window.confirm("删除这条记录？余额将重新计算。")) return;
+    if (!(await confirm("删除这条记录？余额将重新计算。"))) return;
     try {
       await mutate(path, "DELETE", { expectedVersion: version });
     } catch (e) {
@@ -530,13 +553,23 @@ export function Expenses({
         </div>
         {editable && (
           <div className="flex gap-2">
-            <button className="btn" onClick={() => setSettle("new")}>
+            <Button
+              variant="outline"
+              type="button"
+              className="btn"
+              onClick={() => setSettle("new")}
+            >
               登记转账
-            </button>
-            <button className="btn primary" onClick={() => edit()}>
+            </Button>
+            <Button
+              variant="default"
+              type="button"
+              className="btn primary"
+              onClick={() => edit()}
+            >
               <Plus size={15} />
               记一笔
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -628,9 +661,14 @@ export function Expenses({
               <span>{name(s.toParticipantId)}</span>
               <b className="ml-auto">{formatMoney(s.amountMinor, base)}</b>
               {editable && (
-                <button className="btn" onClick={() => setSettle(s)}>
+                <Button
+                  variant="outline"
+                  type="button"
+                  className="btn"
+                  onClick={() => setSettle(s)}
+                >
                   登记转账
-                </button>
+                </Button>
               )}
             </div>
           ))
@@ -673,6 +711,7 @@ export function Expenses({
                 <div className="flex justify-end gap-3 mt-2">
                   {editable && (
                     <>
+                      {confirmation}
                       <button
                         aria-label={`编辑费用 ${e.title}`}
                         onClick={() => edit(e)}

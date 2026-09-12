@@ -1,7 +1,17 @@
 "use client";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { useId, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
+import { Button } from "./ui/button";
+import { Label } from "./ui/label";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+} from "./ui/combobox";
 
 export interface SelectOption {
   value: string;
@@ -32,240 +42,89 @@ export function SearchableSelect({
   className?: string;
 }) {
   const id = useId(),
-    trigger = useRef<HTMLButtonElement>(null),
-    popup = useRef<HTMLDivElement>(null),
-    search = useRef<HTMLInputElement>(null);
+    anchor = useRef<HTMLButtonElement>(null);
   const [local, setLocal] = useState(defaultValue),
-    [open, setOpen] = useState(false),
-    [query, setQuery] = useState(""),
-    [active, setActive] = useState(0);
-  const [position, setPosition] = useState({
-    left: 0,
-    top: 0,
-    width: 260,
-    height: 300,
-  });
-  const [portal, setPortal] = useState<HTMLElement | null>(null);
+    [query, setQuery] = useState("");
   const selected = value ?? local;
-  const searchText = query.trim().toLocaleLowerCase();
-  const filtered = options.filter((option) =>
-    `${option.label} ${option.keywords ?? ""}`
-      .toLocaleLowerCase()
-      .includes(searchText),
+  const selectedLabel =
+    options.find((o) => o.value === selected)?.label || selected || placeholder;
+  const search = query.trim().toLocaleLowerCase();
+  const filtered = options.filter((o) =>
+    `${o.label} ${o.keywords ?? ""}`.toLocaleLowerCase().includes(search),
   );
   const choices =
     allowCustom &&
-    searchText &&
-    !options.some((o) => o.label.toLocaleLowerCase() === searchText)
+    search &&
+    !options.some((o) => o.label.toLocaleLowerCase() === search)
       ? [...filtered, { value: query.trim(), label: `使用“${query.trim()}”` }]
       : filtered;
-  const index = Math.max(0, Math.min(active, choices.length - 1));
-  const measure = useCallback(() => {
-    if (!trigger.current) return;
-    const rect = trigger.current.getBoundingClientRect();
-    const viewport = window.visualViewport,
-      topEdge = viewport?.offsetTop ?? 0,
-      bottomEdge = topEdge + (viewport?.height ?? innerHeight);
-    const width = Math.min(Math.max(rect.width, 260), innerWidth - 24),
-      below = bottomEdge - rect.bottom - 12,
-      above = rect.top - topEdge - 12;
-    const upward = below < 210 && above > below,
-      height = Math.min(320, Math.max(120, upward ? above : below));
-    setPosition({
-      left: Math.max(12, Math.min(rect.left, innerWidth - width - 12)),
-      top: upward
-        ? Math.max(topEdge + 12, rect.top - height - 6)
-        : rect.bottom + 6,
-      width,
-      height,
-    });
-  }, []);
-  function show() {
-    measure();
-    setPortal(trigger.current?.closest<HTMLElement>(".modal") ?? document.body);
-    setQuery("");
-    setActive(
-      Math.max(
-        0,
-        options.findIndex((o) => o.value === selected),
-      ),
-    );
-    setOpen(true);
-  }
-  function choose(option: SelectOption) {
-    setLocal(option.value);
-    onChange?.(option.value);
-    setOpen(false);
-    trigger.current?.focus({ preventScroll: true });
-  }
-  useEffect(() => {
-    if (!open) return;
-    const focus = requestAnimationFrame(() =>
-      search.current?.focus({ preventScroll: true }),
-    );
-    let resize = 0;
-    const update = (event?: Event) => {
-      if (
-        event?.target instanceof Node &&
-        popup.current?.contains(event.target)
-      )
-        return;
-      cancelAnimationFrame(resize);
-      resize = requestAnimationFrame(measure);
-    };
-    const outside = (event: PointerEvent) => {
-      if (
-        !popup.current?.contains(event.target as Node) &&
-        !trigger.current?.contains(event.target as Node)
-      )
-        setOpen(false);
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      setOpen(false);
-      trigger.current?.focus({ preventScroll: true });
-    };
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    window.visualViewport?.addEventListener("resize", update);
-    document.addEventListener("pointerdown", outside);
-    document.addEventListener("keydown", escape, true);
-    return () => {
-      cancelAnimationFrame(focus);
-      cancelAnimationFrame(resize);
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
-      window.visualViewport?.removeEventListener("resize", update);
-      document.removeEventListener("pointerdown", outside);
-      document.removeEventListener("keydown", escape, true);
-    };
-  }, [open, measure]);
-  useEffect(() => {
-    if (open)
-      document
-        .getElementById(`${id}-option-${index}`)
-        ?.scrollIntoView({ block: "nearest" });
-  }, [id, index, open]);
   return (
-    <div className={`searchable-select ${className}`}>
-      {!hideLabel && <label htmlFor={id}>{label}</label>}
-      {name && <input type="hidden" name={name} value={selected} />}
-      <button
-        id={id}
-        ref={trigger}
-        type="button"
-        role="combobox"
-        className="select-trigger"
-        aria-label={label}
-        aria-expanded={open}
-        aria-controls={`${id}-list`}
-        aria-haspopup="listbox"
-        onClick={() => (open ? setOpen(false) : show())}
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && open) {
-            e.preventDefault();
-            e.stopPropagation();
-            setOpen(false);
-            return;
-          }
-          if (["ArrowDown", "ArrowUp"].includes(e.key)) {
-            e.preventDefault();
-            show();
+    <div className={cn("searchable-select grid min-w-0 gap-2", className)}>
+      {!hideLabel && <Label htmlFor={id}>{label}</Label>}
+      <Combobox
+        items={choices.map((o) => o.value)}
+        value={selected}
+        name={name}
+        itemToStringLabel={(value) =>
+          options.find((o) => o.value === value)?.label ?? value
+        }
+        itemToStringValue={(value) => value}
+        filter={null}
+        autoHighlight
+        inputValue={query}
+        onInputValueChange={setQuery}
+        onOpenChange={(open) => {
+          if (open) setQuery("");
+        }}
+        onValueChange={(option) => {
+          if (option !== null) {
+            setLocal(option);
+            onChange?.(option);
           }
         }}
       >
-        <span>
-          {options.find((o) => o.value === selected)?.label ||
-            selected ||
-            placeholder}
-        </span>
-        <ChevronDown size={14} />
-      </button>
-      {open &&
-        portal &&
-        createPortal(
-          <div
-            ref={popup}
-            className="select-popup"
-            style={{
-              left: position.left,
-              top: position.top,
-              width: position.width,
-              maxHeight: position.height,
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                setOpen(false);
-                trigger.current?.focus({ preventScroll: true });
-              } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                event.preventDefault();
-                setActive((i) =>
-                  choices.length
-                    ? (i +
-                        (event.key === "ArrowDown" ? 1 : -1) +
-                        choices.length) %
-                      choices.length
-                    : 0,
-                );
-              } else if (event.key === "Enter") {
-                event.preventDefault();
-                if (choices[index]) choose(choices[index]);
-              } else if (event.key === "Tab") {
-                setOpen(false);
-                trigger.current?.focus({ preventScroll: true });
-              }
-            }}
-          >
-            <div className="select-search">
-              <Search size={15} />
-              <input
-                ref={search}
-                aria-label={`搜索${label}`}
-                aria-controls={`${id}-list`}
-                aria-activedescendant={
-                  choices.length ? `${id}-option-${index}` : undefined
-                }
-                autoComplete="off"
-                maxLength={40}
-                placeholder={allowCustom ? "搜索或输入" : "搜索"}
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setActive(0);
-                }}
-              />
-            </div>
-            <div
-              id={`${id}-list`}
-              role="listbox"
-              aria-label={`${label}选项`}
-              className="select-options"
-            >
-              {choices.map((option, i) => (
-                <button
-                  type="button"
-                  role="option"
-                  tabIndex={-1}
-                  id={`${id}-option-${i}`}
-                  key={option.value}
-                  aria-selected={selected === option.value}
-                  className={i === index ? "highlighted" : ""}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => choose(option)}
-                >
-                  <span>{option.label}</span>
-                  {selected === option.value && <Check size={14} />}
-                </button>
-              ))}
-              {!choices.length && <p className="muted">没有匹配项</p>}
-            </div>
-          </div>,
-          portal,
-        )}
+        <ComboboxTrigger
+          ref={anchor}
+          id={id}
+          render={<Button variant="outline" />}
+          role="combobox"
+          aria-label={label}
+          className={cn(
+            "select-trigger h-9 w-full min-w-0 justify-between px-3 font-normal",
+            hideLabel && "gap-1 px-2 text-xs",
+          )}
+        >
+          <span className="truncate">{selectedLabel}</span>
+        </ComboboxTrigger>
+        <ComboboxContent
+          anchor={anchor}
+          aria-label={`${label}选择`}
+          className="sw-combobox w-[max(var(--anchor-width),260px)] max-w-[min(var(--available-width),calc(100vw-24px))] data-open:animate-none data-closed:hidden data-closed:animate-none"
+        >
+          <ComboboxInput
+            showTrigger={false}
+            aria-label={`搜索${label}`}
+            placeholder={allowCustom ? "搜索或输入" : "搜索"}
+            maxLength={40}
+            autoComplete="off"
+            className="h-9"
+          />
+          <ComboboxEmpty className="p-4 text-sm text-muted-foreground">
+            没有匹配项
+          </ComboboxEmpty>
+          <ComboboxList aria-label={`${label}选项`} className="max-h-64 p-1">
+            {(option: string) => (
+              <ComboboxItem
+                key={option}
+                value={option}
+                className="min-h-9 px-3 pr-8 text-[13px]"
+              >
+                {choices.find((o) => o.value === option)?.label ?? option}
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
     </div>
   );
 }

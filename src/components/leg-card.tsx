@@ -1,4 +1,8 @@
 "use client";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { NativeSelect } from "./ui/native-select";
+import { Label } from "./ui/label";
 import { useState } from "react";
 import {
   ChevronDown,
@@ -100,9 +104,9 @@ export function LegCard({
           <ErrorText error={error} />
           <FixedArrival item={destination} entry={arrival} />
           {editable && (
-            <label>
+            <Label>
               交通方式
-              <select
+              <NativeSelect
                 aria-label="交通方式"
                 value={leg.mode}
                 disabled={busy}
@@ -120,8 +124,8 @@ export function LegCard({
                     {text}
                   </option>
                 ))}
-              </select>
-            </label>
+              </NativeSelect>
+            </Label>
           )}
           {leg.mode === "manual" ? (
             editable && (
@@ -146,38 +150,43 @@ export function LegCard({
                   );
                 }}
               >
-                <label>
+                <Label>
                   手动交通说明
-                  <input
+                  <Input
                     name="description"
                     defaultValue={leg.manualDescription ?? ""}
                     placeholder="例如：过关后步行至落马洲站"
                   />
-                </label>
+                </Label>
                 <div className="field-grid">
-                  <label>
+                  <Label>
                     预计时间（分钟）
-                    <input
+                    <Input
                       name="duration"
                       type="number"
                       min={0}
                       max={10080}
                       defaultValue={leg.manualDurationMinutes ?? ""}
                     />
-                  </label>
-                  <label>
+                  </Label>
+                  <Label>
                     距离（米，可选）
-                    <input
+                    <Input
                       name="distance"
                       type="number"
                       min={0}
                       defaultValue={leg.manualDistanceMeters ?? ""}
                     />
-                  </label>
+                  </Label>
                 </div>
-                <button className="btn" disabled={busy}>
+                <Button
+                  variant="outline"
+                  type="submit"
+                  className="btn"
+                  disabled={busy}
+                >
                   保存手动交通
-                </button>
+                </Button>
               </form>
             )
           ) : (
@@ -208,7 +217,9 @@ export function LegCard({
                       <p className="text-amber-700 mt-2">无法完整绘制路线</p>
                     )}
                     {editable && a.id !== leg.selectedAlternativeId && (
-                      <button
+                      <Button
+                        variant="outline"
+                        type="button"
                         className="btn mt-3"
                         disabled={busy}
                         onClick={() =>
@@ -221,7 +232,7 @@ export function LegCard({
                         }
                       >
                         使用{a.label}
-                      </button>
+                      </Button>
                     )}
                     <details className="mt-2">
                       <summary className="cursor-pointer muted">

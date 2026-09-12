@@ -1,4 +1,8 @@
 "use client";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { NativeSelect } from "./ui/native-select";
+import { Button } from "./ui/button";
 import { useState, useEffect } from "react";
 import { UserPlus, Link2, Copy, Users, Mail, Ban } from "lucide-react";
 import type { TripSnapshot, Participant } from "@/domain/types";
@@ -41,13 +45,20 @@ export function Members({
         </div>
         <div className="flex gap-2">
           {editable && (
-            <button className="btn" onClick={() => setNewPerson(true)}>
+            <Button
+              variant="outline"
+              type="button"
+              className="btn"
+              onClick={() => setNewPerson(true)}
+            >
               <UserPlus size={15} />
               添加同行者
-            </button>
+            </Button>
           )}
           {owner && (
-            <button
+            <Button
+              variant="default"
+              type="button"
               className="btn primary"
               onClick={() => {
                 setUrl("");
@@ -56,7 +67,7 @@ export function Members({
             >
               <Link2 size={15} />
               邀请朋友
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -98,7 +109,7 @@ export function Members({
                 <div className="member-actions">
                   {m && m.role !== "owner" && (
                     <>
-                      <select
+                      <NativeSelect
                         className="max-w-32 text-xs"
                         aria-label={`${p.name} 角色`}
                         value={m.role}
@@ -117,8 +128,10 @@ export function Members({
                       >
                         <option value="editor">共同编辑</option>
                         <option value="viewer">只读成员</option>
-                      </select>
-                      <button
+                      </NativeSelect>
+                      <Button
+                        variant="outline"
+                        type="button"
                         className="btn"
                         onClick={() =>
                           act(() =>
@@ -135,11 +148,13 @@ export function Members({
                         }
                       >
                         {m.status === "active" ? "移出行程" : "恢复成员"}
-                      </button>
+                      </Button>
                     </>
                   )}
                   {!m && p.status === "active" && (
-                    <button
+                    <Button
+                      variant="outline"
+                      type="button"
                       className="btn"
                       onClick={() => {
                         setUrl("");
@@ -148,13 +163,20 @@ export function Members({
                     >
                       <Link2 size={13} />
                       专属邀请
-                    </button>
+                    </Button>
                   )}
-                  <button className="btn" onClick={() => setRename(p)}>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    className="btn"
+                    onClick={() => setRename(p)}
+                  >
                     修改姓名
-                  </button>
+                  </Button>
                   {!m && (
-                    <button
+                    <Button
+                      variant="outline"
+                      type="button"
                       className="btn"
                       onClick={() =>
                         act(() =>
@@ -171,7 +193,7 @@ export function Members({
                       }
                     >
                       {p.status === "active" ? "停用" : "恢复"}
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
@@ -204,7 +226,9 @@ export function Members({
                     </p>
                   </div>
                   {!i.revokedAt && (
-                    <button
+                    <Button
+                      variant="outline"
+                      type="button"
                       className="btn"
                       onClick={() =>
                         act(() =>
@@ -218,7 +242,7 @@ export function Members({
                     >
                       <Ban size={13} />
                       撤销
-                    </button>
+                    </Button>
                   )}
                 </div>
               ))
@@ -245,19 +269,21 @@ export function Members({
             }}
           >
             <ErrorText error={error} />
-            <label>
+            <Label>
               同行者姓名
-              <input
+              <Input
                 name="name"
                 required
                 maxLength={100}
                 placeholder="例如：小林"
               />
-            </label>
+            </Label>
             <p className="text-sm muted">
               无需注册即可参与费用分摊，之后可通过专属邀请绑定账号。
             </p>
-            <button className="btn primary">添加同行者</button>
+            <Button variant="default" type="submit" className="btn primary">
+              添加同行者
+            </Button>
           </form>
         </Modal>
       )}
@@ -278,16 +304,18 @@ export function Members({
             }}
           >
             <ErrorText error={error} />
-            <label>
+            <Label>
               姓名
-              <input
+              <Input
                 name="name"
                 required
                 maxLength={100}
                 defaultValue={rename.name}
               />
-            </label>
-            <button className="btn primary">保存</button>
+            </Label>
+            <Button variant="default" type="submit" className="btn primary">
+              保存
+            </Button>
           </form>
         </Modal>
       )}
@@ -301,13 +329,15 @@ export function Members({
               <p className="text-sm muted">
                 将链接复制给朋友。链接只在创建时展示，请妥善保存。
               </p>
-              <input
+              <Input
                 aria-label="邀请链接"
                 readOnly
                 value={url}
                 onFocus={(e) => e.target.select()}
               />
-              <button
+              <Button
+                variant="default"
+                type="button"
                 className="btn primary"
                 onClick={async () => {
                   try {
@@ -320,7 +350,7 @@ export function Members({
               >
                 <Copy size={15} />
                 {copied ? "已复制" : "复制邀请链接"}
-              </button>
+              </Button>
               <ErrorText error={error} />
             </div>
           ) : (
@@ -346,35 +376,35 @@ export function Members({
               }}
             >
               <ErrorText error={error} />
-              <label>
+              <Label>
                 加入后的权限
-                <select name="role">
+                <NativeSelect name="role">
                   <option value="editor">共同编辑行程和费用</option>
                   <option value="viewer">只读，可发表评论</option>
-                </select>
-              </label>
+                </NativeSelect>
+              </Label>
               <div className="field-grid">
-                <label>
+                <Label>
                   有效天数
-                  <input
+                  <Input
                     name="days"
                     type="number"
                     min={1}
                     max={365}
                     defaultValue={7}
                   />
-                </label>
+                </Label>
                 {invite === "general" && (
-                  <label>
+                  <Label>
                     可使用次数
-                    <input
+                    <Input
                       name="maxUses"
                       type="number"
                       min={1}
                       max={1000}
                       defaultValue={10}
                     />
-                  </label>
+                  </Label>
                 )}
               </div>
               {invite !== "general" && (
@@ -383,10 +413,10 @@ export function Members({
                   」的已有账目身份。
                 </p>
               )}
-              <button className="btn primary">
+              <Button variant="default" type="submit" className="btn primary">
                 <Users size={15} />
                 生成邀请链接
-              </button>
+              </Button>
             </form>
           )}
         </Modal>

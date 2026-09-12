@@ -14,6 +14,8 @@ COPY --from=build --chown=node:node /app/.next/static ./.next/static
 COPY --from=build --chown=node:node /app/public ./public
 COPY --from=build --chown=node:node /app/drizzle ./drizzle
 COPY --chown=node:node scripts/docker-entrypoint.mjs ./docker-entrypoint.mjs
+COPY --chown=node:node licenses ./licenses
+COPY --chown=node:node THIRD_PARTY_NOTICES.md ./THIRD_PARTY_NOTICES.md
 RUN mkdir -p /app/data && chown node:node /app/data
 USER node
 EXPOSE 3000

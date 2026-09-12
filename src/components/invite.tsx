@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/client";
@@ -18,7 +19,9 @@ export function InvitePage({ token }: { token: string }) {
           登录后可接受邀请。专属邀请会关联你已有的账目。
         </p>
         <ErrorText error={error} />
-        <button
+        <Button
+          variant="default"
+          type="button"
           className="btn primary mt-4"
           disabled={busy}
           onClick={async () => {
@@ -37,7 +40,7 @@ export function InvitePage({ token }: { token: string }) {
           }}
         >
           {busy ? "正在加入…" : "接受邀请"}
-        </button>
+        </Button>
       </div>
     </main>
   );

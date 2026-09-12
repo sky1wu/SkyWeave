@@ -1,4 +1,8 @@
 "use client";
+import { NativeSelect } from "./ui/native-select";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -50,7 +54,9 @@ export function Trips() {
       <header className="site-header">
         <Brand />
         <div className="flex items-center gap-5">
-          <button
+          <Button
+            variant="outline"
+            type="button"
             className="btn"
             aria-label="退出登录"
             onClick={() =>
@@ -58,7 +64,7 @@ export function Trips() {
             }
           >
             <LogOut size={16} />
-          </button>
+          </Button>
         </div>
       </header>
       <main className="trips-main">
@@ -72,9 +78,14 @@ export function Trips() {
               管理每日安排、同行成员和共同费用。
             </p>
           </div>
-          <button className="btn primary" onClick={() => setOpen(true)}>
+          <Button
+            variant="default"
+            type="button"
+            className="btn primary"
+            onClick={() => setOpen(true)}
+          >
             <Plus size={18} /> 创建行程
-          </button>
+          </Button>
         </div>
         <ErrorText error={error} />
         <div className="trip-list-heading" aria-hidden="true">
@@ -138,42 +149,47 @@ export function Trips() {
         <Modal title="创建新行程" close={() => setOpen(false)}>
           <form onSubmit={create}>
             <ErrorText error={error} />
-            <label>
+            <Label>
               行程名称
-              <input
+              <Input
                 name="title"
                 required
                 maxLength={200}
                 placeholder="例如：香港 Girls Band Cry"
                 autoFocus
               />
-            </label>
+            </Label>
             <TripDateFields />
             <div className="field-grid">
-              <label>
+              <Label>
                 统一结算币种
-                <select name="baseCurrency">
+                <NativeSelect name="baseCurrency">
                   {currencies.map((c) => (
                     <option key={c}>{c}</option>
                   ))}
-                </select>
-              </label>
-              <label>
+                </NativeSelect>
+              </Label>
+              <Label>
                 行程时区
-                <select name="timezone">
+                <NativeSelect name="timezone">
                   <option>Asia/Shanghai</option>
                   <option>Asia/Hong_Kong</option>
                   <option>Asia/Macau</option>
                   <option>Asia/Taipei</option>
-                </select>
-              </label>
+                </NativeSelect>
+              </Label>
             </div>
             <p className="text-xs muted">
               记账后结算币种将锁定；每笔费用仍可使用不同币种。
             </p>
-            <button className="btn primary" disabled={busy}>
+            <Button
+              variant="default"
+              type="submit"
+              className="btn primary"
+              disabled={busy}
+            >
               {busy ? "创建中…" : "创建行程"}
-            </button>
+            </Button>
           </form>
         </Modal>
       )}

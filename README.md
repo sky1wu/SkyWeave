@@ -83,6 +83,7 @@ E2E 使用独立的临时 SQLite 和显式测试 provider，自动启动生产�
 - [悬浮面板、卡片交互与界面预览](docs/ui-style.md)
 - [地图地点与独立交通](docs/map-and-transport.md)
 - [日历、精简排序与选择控件](docs/calendar-and-controls.md)
+- [shadcn/ui 组件与 SkyWeave 主题](docs/design-system.md)
 - [算法、坐标和高德接入](docs/algorithms.md)
 - [验收结果](docs/validation.md)
 - [范围依据](docs/task-spec.md)

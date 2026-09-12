@@ -1,4 +1,10 @@
 "use client";
+import { useConfirmation } from "./confirmation";
+import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
+import { NativeSelect } from "./ui/native-select";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import { useEffect, useRef, useState } from "react";
 import {
   SortableContext,
@@ -189,15 +195,15 @@ export function PoolPlaceEditor({
         }}
       >
         <ErrorText error={error} />
-        <label>
+        <Label>
           地点名称
-          <input
+          <Input
             name="title"
             required
             maxLength={200}
             defaultValue={place?.title ?? ""}
           />
-        </label>
+        </Label>
         <div className="field-grid">
           <SearchableSelect
             label="地点分类"
@@ -206,25 +212,25 @@ export function PoolPlaceEditor({
             options={categories.map((value) => ({ value, label: value }))}
             allowCustom
           />
-          <label>
+          <Label>
             事项类型
-            <select name="type" defaultValue={place?.type ?? "place"}>
+            <NativeSelect name="type" defaultValue={place?.type ?? "place"}>
               {Object.entries(typeLabels).map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
                 </option>
               ))}
-            </select>
-          </label>
+            </NativeSelect>
+          </Label>
         </div>
-        <label>
+        <Label>
           地址
-          <input name="address" defaultValue={place?.address ?? ""} />
-        </label>
+          <Input name="address" defaultValue={place?.address ?? ""} />
+        </Label>
         <div className="field-grid">
-          <label>
+          <Label>
             纬度（WGS-84）
-            <input
+            <Input
               name="lat"
               type="number"
               step="any"
@@ -232,10 +238,10 @@ export function PoolPlaceEditor({
               max={90}
               defaultValue={point?.lat ?? place?.lat ?? ""}
             />
-          </label>
-          <label>
+          </Label>
+          <Label>
             经度（WGS-84）
-            <input
+            <Input
               name="lng"
               type="number"
               step="any"
@@ -243,15 +249,20 @@ export function PoolPlaceEditor({
               max={180}
               defaultValue={point?.lng ?? place?.lng ?? ""}
             />
-          </label>
+          </Label>
         </div>
-        <label>
+        <Label>
           备注
-          <textarea name="notes" rows={2} defaultValue={place?.notes ?? ""} />
-        </label>
-        <button className="btn primary" disabled={busy}>
+          <Textarea name="notes" rows={2} defaultValue={place?.notes ?? ""} />
+        </Label>
+        <Button
+          variant="default"
+          type="submit"
+          className="btn primary"
+          disabled={busy}
+        >
           {busy ? "保存中…" : "保存地点"}
-        </button>
+        </Button>
       </form>
     </Modal>
   );
@@ -279,6 +290,7 @@ export function PlacePool({
   selectedId?: string | null;
   revealRequest?: number;
 }) {
+  const { confirm, confirmation } = useConfirmation();
   const [query, setQuery] = useState(""),
     [city, setCity] = useState(""),
     [results, setResults] = useState<Place[]>([]),
@@ -429,8 +441,9 @@ export function PlacePool({
             >
               <div className="search-input">
                 <Search size={16} />
-                <input
+                <Input
                   aria-label="搜索地点"
+                  className="pl-8 text-[13px]"
                   placeholder="搜索地点"
                   value={query}
                   onChange={(e) => {
@@ -500,8 +513,9 @@ export function PlacePool({
           </>
         )}
         <div className="pool-filters">
-          <select
+          <NativeSelect
             aria-label="筛选地点分类"
+            controlClassName="h-8 rounded-none border-0 border-b pl-0 text-xs text-muted-foreground"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
           >
@@ -509,16 +523,17 @@ export function PlacePool({
             {categories.map((c) => (
               <option key={c}>{c}</option>
             ))}
-          </select>
-          <select
+          </NativeSelect>
+          <NativeSelect
             aria-label="安排状态"
+            controlClassName="h-8 rounded-none border-0 border-b pl-0 text-xs text-muted-foreground"
             value={arranged}
             onChange={(e) => setArranged(e.target.value)}
           >
             <option value="all">全部地点</option>
             <option value="pending">未安排</option>
             <option value="scheduled">已安排</option>
-          </select>
+          </NativeSelect>
         </div>
         <ErrorText error={error} />
         {status && (
@@ -548,9 +563,9 @@ export function PlacePool({
                 const target = visible[index + direction];
                 if (target) reorder(place, target);
               }}
-              remove={() => {
+              remove={async () => {
                 if (
-                  window.confirm(
+                  await confirm(
                     `从地点池移除「${place.title}」？已安排的事项会保留。`,
                   )
                 )
@@ -573,6 +588,7 @@ export function PlacePool({
           </p>
         )}
       </div>
+      {confirmation}
       {editor && (
         <PoolPlaceEditor
           place={editor === "new" ? undefined : editor}

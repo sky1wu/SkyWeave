@@ -285,7 +285,7 @@ test("深圳—香港：手动过关、固定活动迟到、同址活动与跨�
   await expect(page.getByText("次日 00:12", { exact: true })).toBeVisible();
   await expect(page.locator(".manual-leg")).toContainText("手动");
   await page.getByRole("button", { name: "INCUBASE Arena 更多操作" }).click();
-  await page.getByRole("button", { name: "复制事项", exact: true }).click();
+  await page.getByRole("menuitem", { name: "复制事项", exact: true }).click();
   await expect(
     page.locator(".item-title").filter({ hasText: "INCUBASE Arena（副本）" }),
   ).toBeVisible();
@@ -474,9 +474,7 @@ test("地点池、自动日期、连续滚动、路线聚焦和关联账单", as
     .getByRole("button", { name: "编辑地点池 西安SKP", exact: true })
     .click();
   await page.getByRole("combobox", { name: "地点分类", exact: true }).click();
-  await page
-    .getByRole("textbox", { name: "搜索地点分类", exact: true })
-    .fill("购物清单");
+  await page.getByLabel("搜索地点分类", { exact: true }).fill("购物清单");
   await page
     .getByRole("option", { name: "使用“购物清单”", exact: true })
     .click();
@@ -605,15 +603,14 @@ test("地点池、自动日期、连续滚动、路线聚焦和关联账单", as
   await expect(bill).toContainText("活动门票");
   await expect(bill).toContainText("30.00");
   await bill.click();
-  await expect(page.getByRole("dialog")).toHaveAttribute(
-    "aria-label",
-    "编辑费用",
-  );
+  await expect(
+    page.getByRole("dialog", { name: "编辑费用", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await page
     .getByRole("button", { name: "固定活动 更多操作", exact: true })
     .click();
-  await page.getByRole("button", { name: "移至后一天", exact: true }).click();
+  await page.getByRole("menuitem", { name: "移至后一天", exact: true }).click();
   await expect
     .poll(
       async () =>
@@ -1015,7 +1012,7 @@ test("独立交通：暂定城市、补齐车站班次、接驳路线、跨午�
   await card
     .getByRole("button", { name: "北上火车 更多操作", exact: true })
     .click();
-  await card.getByRole("button", { name: "移至后一天", exact: true }).click();
+  await page.getByRole("menuitem", { name: "移至后一天", exact: true }).click();
   await expect
     .poll(
       async () =>
@@ -1086,6 +1083,11 @@ test("SkyWeave：精简排序、日历拖动、自动路线、分类和城市选
   await expect(page.getByRole("button", { name: /重新计算/ })).toHaveCount(0);
   await page.getByRole("button", { name: "全部折叠", exact: true }).click();
   await expect(page.locator(".timeline-item.compact")).toHaveCount(4);
+  await expect(
+    page
+      .getByTestId(`item-${a.id}`)
+      .getByRole("button", { name: "地点 A 更多操作", exact: true }),
+  ).not.toBeVisible();
   await expect(
     page.getByTestId(`item-${a.id}`).locator(".item-address"),
   ).not.toBeVisible();
@@ -1161,19 +1163,19 @@ test("SkyWeave：精简排序、日历拖动、自动路线、分类和城市选
       .getByRole("listbox", { name: "地点分类选项", exact: true })
       .getByRole("option", { name: "景点", exact: true }),
   ).toBeVisible();
-  await page
-    .getByRole("textbox", { name: "搜索地点分类", exact: true })
-    .fill("咖啡");
+  await page.getByLabel("搜索地点分类", { exact: true }).fill("咖啡");
   await page.getByRole("option", { name: "使用“咖啡”", exact: true }).click();
   await category.click();
+  await expect(category).toHaveAttribute("aria-expanded", "true");
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(category).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    page.getByRole("dialog", { name: "编辑行程事项", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "保存事项", exact: true }).click();
   await expect(page.getByTestId(`item-${a.id}`)).toContainText("咖啡");
   await page.getByRole("combobox", { name: "城市", exact: true }).click();
-  await page
-    .getByRole("textbox", { name: "搜索城市", exact: true })
-    .fill("香港");
+  await page.getByLabel("搜索城市", { exact: true }).fill("香港");
   await page.getByRole("option", { name: "香港", exact: true }).click();
   await expect(
     page.getByRole("combobox", { name: "城市", exact: true }),
@@ -1215,4 +1217,109 @@ test("SkyWeave：精简排序、日历拖动、自动路线、分类和城市选
     path: "test-results/skyweave-planner.png",
     fullPage: true,
   });
+});
+
+test("组件库交互：嵌套下拉、焦点返回、删除确认和手机抽屉", async ({ page }) => {
+  await register(page, "Components");
+  const id = await createTrip(page, "组件交互");
+  const snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  const item = await call<{ id: string }>(
+    page,
+    `/days/${snapshot.days[0].id}/items`,
+    "POST",
+    { title: "保留事项", type: "note" },
+  );
+  const card = page.getByTestId(`item-${item.id}`),
+    edit = card.getByRole("button", { name: "编辑", exact: true });
+  await edit.click();
+  const dialog = page.getByRole("dialog", {
+    name: "编辑行程事项",
+    exact: true,
+  });
+  await expect(dialog).toHaveAttribute("data-slot", "dialog-content");
+  await dialog.getByLabel("名称", { exact: true }).fill("未提交修改");
+  const category = dialog.getByRole("combobox", {
+    name: "地点分类",
+    exact: true,
+  });
+  await category.click();
+  await page.getByLabel("搜索地点分类", { exact: true }).fill("餐");
+  await page.keyboard.press("Enter");
+  await expect(category).toHaveText("餐饮");
+  await category.click();
+  await expect(category).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("名称", { exact: true })).toHaveValue(
+    "未提交修改",
+  );
+  for (let n = 0; n < 16; n++) {
+    await page.keyboard.press("Tab");
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              !!document.activeElement?.closest('[data-slot="dialog-content"]'),
+          ),
+        { timeout: 2000 },
+      )
+      .toBe(true);
+  }
+  await dialog.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(edit).toBeFocused();
+  expect(
+    (await call<TripSnapshot>(page, `/trips/${id}`)).days[0].items[0].title,
+  ).toBe("保留事项");
+  await card
+    .getByRole("button", { name: "保留事项 更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "删除事项", exact: true }).click();
+  const confirmation = page.getByRole("alertdialog", {
+    name: "确认删除",
+    exact: true,
+  });
+  await expect(confirmation).toContainText("相关费用将保留");
+  await confirmation.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(card).toBeVisible();
+  await card
+    .getByRole("button", { name: "保留事项 更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "删除事项", exact: true }).click();
+  await confirmation.getByRole("button", { name: "删除", exact: true }).click();
+  await expect(card).not.toBeVisible();
+  await page.getByRole("button", { name: "行程设置", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "行程设置", exact: true });
+  await settings.getByRole("button", { name: "删除行程", exact: true }).click();
+  await expect(confirmation).toContainText("永久删除");
+  await confirmation.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(settings).toBeVisible();
+  await settings.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page
+    .getByRole("button", { name: "向第 1 天添加事项", exact: true })
+    .click();
+  const sheet = page.getByRole("dialog", { name: "添加行程事项", exact: true });
+  await expect(sheet).toHaveAttribute("data-slot", "sheet-content");
+  await expect(sheet).toHaveAttribute("data-side", "bottom");
+  await sheet.getByLabel("名称", { exact: true }).fill("手机事项");
+  await sheet.getByRole("combobox", { name: "地点分类", exact: true }).click();
+  await page.getByLabel("搜索地点分类", { exact: true }).fill("住宿");
+  await page.getByRole("option", { name: "住宿", exact: true }).click();
+  await sheet
+    .getByRole("checkbox", { name: "固定时间活动", exact: true })
+    .check();
+  await sheet.getByLabel("开始时间", { exact: true }).fill("09:00");
+  await sheet.getByLabel("结束时间", { exact: true }).fill("10:00");
+  await sheet.getByRole("button", { name: "保存事项", exact: true }).click();
+  await expect(sheet).not.toBeVisible();
+  await expect(page.locator(".item-title")).toHaveText("手机事项");
+  expect(
+    (await call<TripSnapshot>(page, `/trips/${id}`)).days[0].items[0],
+  ).toMatchObject({ fixedTime: true, startMinutes: 540, endMinutes: 600 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });

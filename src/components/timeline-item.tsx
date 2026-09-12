@@ -1,5 +1,12 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { Button } from "./ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -73,31 +80,6 @@ export function TimelineItem({
     data: { kind: "item", dayId: item.dayId, title: item.title },
     disabled: !editable,
   });
-  const [menu, setMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null),
-    moreRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!menu) return;
-    const outside = (event: PointerEvent) => {
-      if (
-        !menuRef.current?.contains(event.target as Node) &&
-        !moreRef.current?.contains(event.target as Node)
-      )
-        setMenu(false);
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setMenu(false);
-        moreRef.current?.focus();
-      }
-    };
-    document.addEventListener("pointerdown", outside);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", outside);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [menu]);
   return (
     <article
       ref={setNodeRef}
@@ -150,18 +132,57 @@ export function TimelineItem({
           >
             {item.title}
           </button>
-          <div className="flex items-center gap-2">
+          <div className={compact ? "hidden" : "flex items-center gap-2"}>
             {editable && (
-              <button
-                ref={moreRef}
-                aria-label={`${item.title} 更多操作`}
-                aria-expanded={menu}
-                aria-controls={`item-menu-${item.id}`}
-                onClick={() => setMenu(!menu)}
-                className="icon-btn"
-              >
-                <MoreHorizontal size={18} />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="icon-btn"
+                    />
+                  }
+                  aria-label={`${item.title} 更多操作`}
+                >
+                  <MoreHorizontal size={17} />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  data-no-drag
+                  align="end"
+                  className="sw-item-menu w-44"
+                  aria-label={`${item.title}操作`}
+                >
+                  <DropdownMenuItem onClick={copy}>复制事项</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => move("up")}>
+                    上移
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => move("down")}>
+                    下移
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => move("first")}>
+                    设为当天起点
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => move("last")}>
+                    设为当天终点
+                  </DropdownMenuItem>
+                  {hasPrevious && (
+                    <DropdownMenuItem onClick={() => moveDay(-1)}>
+                      移至前一天
+                    </DropdownMenuItem>
+                  )}
+                  {hasNext && (
+                    <DropdownMenuItem onClick={() => moveDay(1)}>
+                      移至后一天
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={remove}>
+                    删除事项
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
@@ -302,78 +323,6 @@ export function TimelineItem({
           )}
           <button onClick={comment}>评论</button>
         </div>
-        {menu && (
-          <div
-            ref={menuRef}
-            id={`item-menu-${item.id}`}
-            className="item-menu"
-            data-no-drag
-          >
-            <button
-              onClick={() => {
-                copy();
-                setMenu(false);
-              }}
-            >
-              复制事项
-            </button>
-            <button
-              onClick={() => {
-                move("up");
-                setMenu(false);
-              }}
-            >
-              上移
-            </button>
-            <button
-              onClick={() => {
-                move("down");
-                setMenu(false);
-              }}
-            >
-              下移
-            </button>
-            <button
-              onClick={() => {
-                move("first");
-                setMenu(false);
-              }}
-            >
-              设为当天起点
-            </button>
-            <button
-              onClick={() => {
-                move("last");
-                setMenu(false);
-              }}
-            >
-              设为当天终点
-            </button>
-            {hasPrevious && (
-              <button
-                onClick={() => {
-                  moveDay(-1);
-                  setMenu(false);
-                }}
-              >
-                移至前一天
-              </button>
-            )}
-            {hasNext && (
-              <button
-                onClick={() => {
-                  moveDay(1);
-                  setMenu(false);
-                }}
-              >
-                移至后一天
-              </button>
-            )}
-            <button className="text-red-700" onClick={remove}>
-              删除事项
-            </button>
-          </div>
-        )}
       </div>
     </article>
   );

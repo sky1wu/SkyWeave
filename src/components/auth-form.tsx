@@ -1,4 +1,7 @@
 "use client";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/client";
@@ -76,30 +79,30 @@ export function AuthForm({ register = false }: { register?: boolean }) {
           </p>
           <ErrorText error={error} />
           {register && (
-            <label>
+            <Label>
               昵称
-              <input
+              <Input
                 name="name"
                 autoComplete="name"
                 required
                 maxLength={100}
                 placeholder="输入昵称"
               />
-            </label>
+            </Label>
           )}
-          <label>
+          <Label>
             邮箱
-            <input
+            <Input
               name="email"
               type="email"
               autoComplete="email"
               required
               placeholder="you@example.com"
             />
-          </label>
-          <label>
+          </Label>
+          <Label>
             密码
-            <input
+            <Input
               name="password"
               type="password"
               autoComplete={register ? "new-password" : "current-password"}
@@ -108,11 +111,16 @@ export function AuthForm({ register = false }: { register?: boolean }) {
               maxLength={128}
               placeholder="至少 8 个字符"
             />
-          </label>
-          <button className="btn primary w-full mt-2" disabled={busy}>
+          </Label>
+          <Button
+            variant="default"
+            type="submit"
+            className="btn primary w-full mt-2"
+            disabled={busy}
+          >
             {busy ? "请稍候…" : register ? "创建账号" : "登录"}
             <ArrowRight size={16} />
-          </button>
+          </Button>
           <div className="text-sm muted mt-5">
             {register ? "已有账号？" : "还没有账号？"}
             <a

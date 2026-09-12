@@ -1,4 +1,6 @@
 "use client";
+import { useConfirmation } from "./confirmation";
+import { Button } from "./ui/button";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DndContext,
@@ -48,6 +50,7 @@ import { TripMap, type MapFocus, type MapInsets } from "./map";
 import { LegCard } from "./leg-card";
 import { TimelineItem } from "./timeline-item";
 import { DayTabs } from "./day-tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { TransportEditor } from "./transport-editor";
 import { PlacePool, PoolPlaceEditor } from "./place-pool";
 import { ErrorText, Modal } from "./ui";
@@ -113,20 +116,26 @@ function DaySection({
                 <TrainFront size={14} />
                 交通
               </button>
-              <button
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                type="button"
                 className="icon-btn"
                 aria-label={`向${day.title}添加事项`}
                 onClick={addItem}
               >
                 <Plus size={16} />
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                type="button"
                 className="icon-btn"
                 aria-label={`${day.title}设置`}
                 onClick={settings}
               >
                 <Settings2 size={15} />
-              </button>
+              </Button>
             </>
           )}
         </div>
@@ -177,6 +186,7 @@ export function Planner({
   editExpense: (expense: Expense) => void;
   addComment: (item: Item) => void;
 }) {
+  const { confirm, confirmation } = useConfirmation();
   const [selectedDay, setSelectedDay] = useState<string | null>(null),
     [selected, setSelected] = useState<string | null>(null),
     [selectedPool, setSelectedPool] = useState<string | null>(null),
@@ -597,6 +607,7 @@ export function Planner({
           </button>
         </div>
       )}
+      {confirmation}
       <DndContext
         sensors={sensors}
         collisionDetection={collision}
@@ -720,14 +731,25 @@ export function Planner({
                   className={timelineCollapsed ? "" : "rotate-180"}
                 />
               </button>
-              <button
-                type="button"
-                className="compact-view-toggle"
-                aria-pressed={compactItems}
-                onClick={() => setCompactItems(!compactItems)}
-              >
-                {compactItems ? "全部展开" : "全部折叠"}
-              </button>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      className="compact-view-toggle"
+                      aria-pressed={compactItems}
+                      onClick={() => setCompactItems(!compactItems)}
+                    >
+                      {compactItems ? "全部展开" : "全部折叠"}
+                    </button>
+                  }
+                />
+                <TooltipContent>
+                  {compactItems
+                    ? "恢复时间、路线和账单详情"
+                    : "仅显示名称，便于排序"}
+                </TooltipContent>
+              </Tooltip>
             </div>
             <div
               id="timeline-panel-content"
@@ -864,9 +886,9 @@ export function Planner({
                                 edit={() =>
                                   setEditing({ dayId: targetDay.id, item })
                                 }
-                                remove={() => {
+                                remove={async () => {
                                   if (
-                                    window.confirm(
+                                    await confirm(
                                       `删除「${item.title}」？相关费用将保留。`,
                                     )
                                   )
@@ -1040,7 +1062,9 @@ export function Planner({
               value={dayEditor.startMinutes}
             />
             <div className="actions">
-              <button className="btn primary">保存</button>
+              <Button variant="default" type="submit" className="btn primary">
+                保存
+              </Button>
             </div>
           </form>
         </Modal>
