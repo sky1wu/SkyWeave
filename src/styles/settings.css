@@ -139,6 +139,36 @@
 .settings-success svg {
   flex-shrink: 0;
 }
+.mcp-token-created {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--muted);
+}
+.mcp-token-created .settings-form-footer {
+  margin-top: 12px;
+}
+.mcp-token-list {
+  margin-top: 20px;
+}
+.mcp-token-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+.mcp-token-list li > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mcp-token-list p {
+  margin-top: 4px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
 .settings-signout {
   display: flex;
   align-items: center;

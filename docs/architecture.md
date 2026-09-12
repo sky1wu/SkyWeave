@@ -13,7 +13,7 @@
 
 ## 数据库
 
-认证：users / sessions / accounts / verifications。
+认证：users / sessions / accounts / verifications；Agent 令牌：mcp_tokens（只保存摘要，绑定用户与可选行程范围）。
 协作：trips / trip_members / trip_participants / trip_invites。
 规划：trip_places / days / day_items / travel_legs / route_alternatives。
 账目：expenses / expense_splits / settlements。
@@ -37,6 +37,8 @@ DayItem 变更 → 事务更新相邻 TravelLeg → 客户端触发当天重算 
 
 / 行程列表；/login；/register；/invite/:token；/trips/:id/plan、expenses、members、activity。
 src/app 页面和 Route Handler；src/components 界面；src/domain 纯函数与类型；src/server 数据与服务；src/geo 坐标；src/amap 高德；tests、e2e、drizzle、docs。
+
+`/api/mcp` 使用官方 MCP SDK 的无状态 Streamable HTTP。每个请求验证个人令牌，工具层检查令牌范围、实体行程归属，并复用 service / places / routing 的权限、事务和版本检查。日程与费用使用独立读取工具，写入进入原有活动记录与 SSE 同步流程。配置和工具约定见 [MCP 接口](mcp.md)。
 
 ## 实施顺序
 

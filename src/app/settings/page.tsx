@@ -3,6 +3,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { UserSettings } from "@/components/user-settings";
 import { auth } from "@/server/auth";
+import { listTrips } from "@/server/service";
+import { listMcpTokens } from "@/server/mcp-tokens";
 
 export const metadata: Metadata = { title: "用户设置 · SkyWeave" };
 
@@ -13,6 +15,14 @@ export default async function Page() {
   return (
     <UserSettings
       user={{ name: session.user.name, email: session.user.email }}
+      mcp={{
+        endpoint: new URL(
+          "/api/mcp",
+          process.env.BETTER_AUTH_URL || "http://localhost:3000",
+        ).href,
+        tokens: listMcpTokens(session.user),
+        trips: listTrips(session.user).map(({ id, title }) => ({ id, title })),
+      }}
     />
   );
 }

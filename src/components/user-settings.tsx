@@ -9,6 +9,7 @@ import { Brand, ErrorText } from "./ui";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { McpSettings, type McpSettingsProps } from "./mcp-settings";
 
 function authError(error: { status: number; code?: string }, fallback: string) {
   if (error.status === 401) {
@@ -44,8 +45,10 @@ function SuccessText({ message }: { message: string }) {
 
 export function UserSettings({
   user,
+  mcp,
 }: {
   user: { name: string; email: string };
+  mcp: McpSettingsProps;
 }) {
   const router = useRouter();
   const [name, setName] = useState(user.name);
@@ -156,7 +159,9 @@ export function UserSettings({
       <main className="settings-main">
         <div className="settings-heading">
           <h1>用户设置</h1>
-          <p className="page-description">管理你的个人资料与登录密码。</p>
+          <p className="page-description">
+            管理个人资料、登录密码与 Agent 访问。
+          </p>
         </div>
         <div className="settings-layout">
           <aside className="settings-identity" aria-label="当前账号">
@@ -292,6 +297,7 @@ export function UserSettings({
                 </fieldset>
               </form>
             </section>
+            <McpSettings {...mcp} />
             <section
               className="settings-section settings-signout"
               aria-labelledby="signout-heading"

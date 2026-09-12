@@ -9,6 +9,11 @@ import { calculateDay, calculateLeg } from "@/server/routing";
 import type { Expense, Leg } from "@/domain/types";
 import { events } from "@/server/events";
 import {
+  listMcpTokens,
+  createMcpToken,
+  revokeMcpToken,
+} from "@/server/mcp-tokens";
+import {
   savePoolPlace,
   deletePoolPlace,
   schedulePlace,
@@ -49,7 +54,11 @@ async function handler(request: Request, context: Context): Promise<Response> {
       z.object({ expectedVersion: z.number().int().positive() }).parse(data)
         .expectedVersion;
     let result: unknown;
-    if (root === "trips" && !id) {
+    if (root === "mcp-tokens" && !action) {
+      if (method === "GET" && !id) result = listMcpTokens(user);
+      else if (method === "POST" && !id) result = createMcpToken(user, data);
+      else if (method === "DELETE" && id) result = revokeMcpToken(user, id);
+    } else if (root === "trips" && !id) {
       if (method === "GET") result = s.listTrips(user);
       else if (method === "POST") result = s.createTrip(user, data);
     } else if (root === "trips" && id && !action) {

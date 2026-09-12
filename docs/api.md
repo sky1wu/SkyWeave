@@ -1,6 +1,8 @@
 # API 与数据约定
 
-除健康检查和认证入口外，接口需要会话 Cookie。写入使用 JSON 和同源 Origin；更新、删除携带 `expectedVersion`。版本冲突返回 `409 CONFLICT`，不自动合并。错误格式：`{ error: { code, message }, requestId }`。
+除健康检查、认证入口和 MCP 外，接口需要会话 Cookie。REST 写入使用 JSON 和同源 Origin；更新、删除携带 `expectedVersion`。版本冲突返回 `409 CONFLICT`，不自动合并。错误格式：`{ error: { code, message }, requestId }`。
+
+`/api/mcp` 使用独立的 Bearer Token 和 Streamable HTTP，支持日程、费用与结算读写。令牌管理入口为 `GET/POST /api/mcp-tokens`、`DELETE /api/mcp-tokens/:id`，仍需网页登录会话与同源写入。详见 [MCP 接口](mcp.md)。
 
 ## 入口
 

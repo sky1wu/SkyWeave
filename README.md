@@ -63,6 +63,8 @@ npm start
 
 owner 管理成员、邀请及 Trip 设置；owner/editor 可编辑行程、费用和结算；viewer 只读并可评论。成员移出后撤销访问，历史账目仍保留。
 
+Agent 接入：在「用户设置 → Agent 访问 · MCP」创建令牌，选择行程范围和只读/读写权限。Agent 通过 Streamable HTTP 连接 `/api/mcp`，使用 Bearer Token 认证，即可读写日程、费用与结算记录。完整配置、工具列表和调用示例见 [MCP 接口](docs/mcp.md)。
+
 ## 验证与文档
 
 ```sh
@@ -80,6 +82,7 @@ E2E 使用独立的临时 SQLite 和显式测试 provider，自动启动生产�
 - [架构、数据流及目录](docs/architecture.md)
 - [数据库字段与索引](src/server/schema.ts)，[初始迁移](drizzle/0000_bouncy_stryfe.sql)
 - [API 与数据约定](docs/api.md)
+- [Agent MCP 连接、日程与费用工具](docs/mcp.md)
 - [地点池与连续规划](docs/planner-update.md)
 - [悬浮面板、卡片交互与界面预览](docs/ui-style.md)
 - [地图地点与独立交通](docs/map-and-transport.md)
@@ -115,4 +118,4 @@ docker compose cp app:/app/data/backup.sqlite ./backup.sqlite
 - 高德候选、时长和可用路线随查询时间变化。相邻景点可能没有公交方案；过关等场景使用明确的手动段。缺几何的有效候选保留时间信息，不伪造道路连线。
 - 坐标转换区域沿用上游近似地理边界；数值回归不等于测绘精度。香港、澳门及台湾已做实际 POI 接口核对，西安和香港完成真实底图视觉检查。
 - 同一 Day 可以跨午夜，首版不自动连接不同 Day 的最后与第一个事项。
-- v0.2 可增加活动分页、按实体局部刷新、邀请身份手动合并、密码恢复、可选自动汇率、独立退款、导入导出及更多币种。AI、票务和导航仍需单独确定范围。
+- v0.2 可增加活动分页、按实体局部刷新、邀请身份手动合并、密码恢复、可选自动汇率、独立退款、导入导出及更多币种。内置 AI 助手、票务和导航仍需单独确定范围；外部 Agent 已可通过 MCP 接入。
