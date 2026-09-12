@@ -3,13 +3,95 @@ import { DateTime } from "luxon";
 import { currencies } from "@/domain/money";
 export const id = z.string().min(1).max(100);
 export const version = z.number().int().positive();
-export const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => DateTime.fromISO(v).isValid, "无效日期");
+export const date = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((v) => DateTime.fromISO(v).isValid, "无效日期");
 const minutes = z.number().int().min(0).max(10080);
 const title = z.string().trim().min(1).max(200);
 const optionalText = z.string().max(4000).nullable().optional();
-export const tripInput = z.strictObject({ title, startDate: date.nullable().optional(), endDate: date.nullable().optional(), timezone: z.string().refine(v => DateTime.now().setZone(v).isValid, "无效时区").default("Asia/Shanghai"), baseCurrency: z.enum(currencies).default("CNY") });
-export const dayInput = z.strictObject({ title, date: date.nullable().optional(), startMinutes: minutes.default(480) });
-export const itemInput = z.strictObject({ title, type: z.enum(["place", "event", "hotel", "transport", "border", "note"]).default("place"), description: optionalText, amapPoiId: z.string().regex(/^[a-zA-Z0-9]{1,64}$/).nullable().optional(), address: optionalText, lat: z.number().finite().min(-90).max(90).nullable().optional(), lng: z.number().finite().min(-180).max(180).nullable().optional(), startMinutes: minutes.nullable().optional(), endMinutes: minutes.nullable().optional(), stayMinutes: minutes.default(0), fixedTime: z.boolean().default(false), notes: optionalText });
-export const legInput = z.strictObject({ expectedVersion: version, mode: z.enum(["walking", "driving", "cycling", "transit", "manual"]).optional(), selectedAlternativeId: id.optional(), manualDurationMinutes: minutes.nullable().optional(), manualDistanceMeters: z.number().int().min(0).max(50000000).nullable().optional(), manualDescription: optionalText });
-export const expenseInput = z.strictObject({ title, category: z.enum(["transport", "food", "hotel", "ticket", "shopping", "activity", "other"]), amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), currency: z.enum(currencies), payerParticipantId: id, exchangeRateToBase: z.string().regex(/^\d{1,15}(?:\.\d{1,12})?$/), splitMethod: z.enum(["equal", "exact", "percentage", "shares"]), splitMeta: z.array(z.strictObject({ participantId: id, value: z.string().max(40) })).min(1).max(100), dayId: id.nullable().optional(), dayItemId: id.nullable().optional(), incurredAt: z.number().int().min(0).max(8640000000000000), notes: optionalText });
-export const settlementInput = z.strictObject({ fromParticipantId: id, toParticipantId: id, amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER), currency: z.enum(currencies), exchangeRateToBase: z.string().regex(/^\d{1,15}(?:\.\d{1,12})?$/), settledAt: z.number().int().min(0).max(8640000000000000), note: optionalText });
+export const tripInput = z.strictObject({
+  title,
+  startDate: date.nullable().optional(),
+  endDate: date.nullable().optional(),
+  timezone: z
+    .string()
+    .refine((v) => DateTime.now().setZone(v).isValid, "无效时区")
+    .default("Asia/Shanghai"),
+  baseCurrency: z.enum(currencies).default("CNY"),
+});
+export const dayInput = z.strictObject({
+  title,
+  date: date.nullable().optional(),
+  startMinutes: minutes.default(480),
+});
+export const itemInput = z.strictObject({
+  title,
+  type: z
+    .enum(["place", "event", "hotel", "transport", "border", "note"])
+    .default("place"),
+  description: optionalText,
+  amapPoiId: z
+    .string()
+    .regex(/^[a-zA-Z0-9]{1,64}$/)
+    .nullable()
+    .optional(),
+  address: optionalText,
+  lat: z.number().finite().min(-90).max(90).nullable().optional(),
+  lng: z.number().finite().min(-180).max(180).nullable().optional(),
+  startMinutes: minutes.nullable().optional(),
+  endMinutes: minutes.nullable().optional(),
+  stayMinutes: minutes.default(0),
+  fixedTime: z.boolean().default(false),
+  notes: optionalText,
+});
+export const legInput = z.strictObject({
+  expectedVersion: version,
+  mode: z
+    .enum(["walking", "driving", "cycling", "transit", "manual"])
+    .optional(),
+  selectedAlternativeId: id.optional(),
+  manualDurationMinutes: minutes.nullable().optional(),
+  manualDistanceMeters: z
+    .number()
+    .int()
+    .min(0)
+    .max(50000000)
+    .nullable()
+    .optional(),
+  manualDescription: optionalText,
+});
+export const expenseInput = z.strictObject({
+  title,
+  category: z.enum([
+    "transport",
+    "food",
+    "hotel",
+    "ticket",
+    "shopping",
+    "activity",
+    "other",
+  ]),
+  amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  currency: z.enum(currencies),
+  payerParticipantId: id,
+  exchangeRateToBase: z.string().regex(/^\d{1,15}(?:\.\d{1,12})?$/),
+  splitMethod: z.enum(["equal", "exact", "percentage", "shares"]),
+  splitMeta: z
+    .array(z.strictObject({ participantId: id, value: z.string().max(40) }))
+    .min(1)
+    .max(100),
+  dayId: id.nullable().optional(),
+  dayItemId: id.nullable().optional(),
+  incurredAt: z.number().int().min(0).max(8640000000000000),
+  notes: optionalText,
+});
+export const settlementInput = z.strictObject({
+  fromParticipantId: id,
+  toParticipantId: id,
+  amountMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  currency: z.enum(currencies),
+  exchangeRateToBase: z.string().regex(/^\d{1,15}(?:\.\d{1,12})?$/),
+  settledAt: z.number().int().min(0).max(8640000000000000),
+  note: optionalText,
+});
