@@ -60,12 +60,14 @@ Manrope 用于拉丁字母与数字，中文使用 PingFang SC / Microsoft YaHei
 - 每日标签、当前导航、地图模式具有明确的选中状态。
 - 保留 250ms 手机长按拖动、普通触摸滚动、键盘排序、独立交通与手动路线的语义。
 - 动效只用于交互反馈，并尊重 `prefers-reduced-motion`。
+- 用户设置页沿用现有颜色与字体，桌面左侧显示账号身份，右侧以分隔线区分个人资料、修改密码和退出登录；手机改为单列。各表单独立显示保存结果，登录邮箱只读，首页和行程页均提供入口。
 
 ## 样式组织
 
 - `src/app/globals.css`：语义颜色、字体、全局基础规则。
 - `src/styles/layout.css`：规划、拖动、地图等已有结构规则。
 - `src/styles/skyweave.css`：城市漫游手册主题与各页面的响应式布局。
+- `src/styles/settings.css`：用户设置页与账号入口的响应式布局。
 - `src/components/journey-art.tsx`：原创路线示意插画。
 - `src/components/ui/`：基础控件，使用统一语义 token。
 

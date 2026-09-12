@@ -21,6 +21,7 @@ import type { Expense, Item, TripSnapshot } from "@/domain/types";
 import { currencies } from "@/domain/money";
 import { Brand, ErrorText, Modal } from "./ui";
 import { TripDateFields } from "./trip-date-fields";
+import { SettingsLink } from "./settings-link";
 import { Planner, type Mutate } from "./planner";
 import { ExpenseEditor, Expenses } from "./expenses";
 import { Members } from "./members";
@@ -163,6 +164,7 @@ export function TripShell({
           <ChevronLeft size={14} />
           <span>所有行程</span>
         </Link>
+        <SettingsLink />
       </header>
       <nav className="trip-nav" aria-label="行程导航">
         {tabs.map((tab) => (

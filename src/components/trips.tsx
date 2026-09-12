@@ -21,6 +21,7 @@ import { currencies } from "@/domain/money";
 import { Brand, ErrorText, Modal } from "./ui";
 import { JourneyArt } from "./journey-art";
 import { TripDateFields } from "./trip-date-fields";
+import { SettingsLink } from "./settings-link";
 export function Trips() {
   const router = useRouter();
   const [trips, setTrips] = useState<
@@ -60,7 +61,8 @@ export function Trips() {
     <>
       <header className="site-header">
         <Brand />
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-3">
+          <SettingsLink />
           <Button
             variant="outline"
             type="button"
