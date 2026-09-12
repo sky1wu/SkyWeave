@@ -32,6 +32,6 @@ the Base UI / Nova registry. Project theme and application wrappers are customiz
 
 - shadcn/ui: <https://github.com/shadcn-ui/ui>, MIT; see `licenses/shadcn-ui-MIT.md`.
 - Base UI: <https://github.com/mui/base-ui>, MIT; see `licenses/base-ui-MIT.txt`.
-- Geist font: <https://github.com/vercel/geist-font>, SIL Open Font License 1.1;
-  see `licenses/Geist-OFL.txt`. Loaded through Next.js font handling and served
+- Manrope font: <https://github.com/sharanda/manrope>, SIL Open Font License 1.1;
+  see `licenses/Manrope-OFL.txt`. Loaded through Next.js font handling and served
   with the application's static assets.

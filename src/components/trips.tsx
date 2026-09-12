@@ -7,7 +7,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Plus,
-  ArrowUpRight,
+  ChevronRight,
+  Search,
+  MapPinned,
   CalendarDays,
   Users,
   Navigation2,
@@ -17,6 +19,7 @@ import { api, authClient } from "@/lib/client";
 import type { Trip } from "@/domain/types";
 import { currencies } from "@/domain/money";
 import { Brand, ErrorText, Modal } from "./ui";
+import { JourneyArt } from "./journey-art";
 import { TripDateFields } from "./trip-date-fields";
 export function Trips() {
   const router = useRouter();
@@ -25,6 +28,7 @@ export function Trips() {
     >(null),
     [error, setError] = useState(""),
     [open, setOpen] = useState(false),
+    [query, setQuery] = useState(""),
     [busy, setBusy] = useState(false);
   useEffect(() => {
     api<(Trip & { memberCount: number; dayCount: number })[]>("/trips")
@@ -49,6 +53,9 @@ export function Trips() {
       setBusy(false);
     }
   }
+  const visibleTrips = trips?.filter((trip) =>
+    trip.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+  );
   return (
     <>
       <header className="site-header">
@@ -68,78 +75,102 @@ export function Trips() {
         </div>
       </header>
       <main className="trips-main">
-        <div className="trips-hero">
-          <div>
+        <section className="trips-hero">
+          <div className="trips-hero-copy">
             <h1>
-              我的行程{" "}
-              <span className="trip-count">{trips?.length ?? "—"}</span>
+              下一段旅程，
+              <br />
+              从这里开始。
             </h1>
             <p className="page-description">
-              管理每日安排、同行成员和共同费用。
+              收藏想去的地方，安排每一天，和朋友一起出发。
             </p>
+            <Button
+              variant="default"
+              type="button"
+              className="btn primary"
+              onClick={() => setOpen(true)}
+            >
+              <Plus size={18} /> 创建行程
+            </Button>
           </div>
-          <Button
-            variant="default"
-            type="button"
-            className="btn primary"
-            onClick={() => setOpen(true)}
-          >
-            <Plus size={18} /> 创建行程
-          </Button>
-        </div>
+          <JourneyArt />
+        </section>
         <ErrorText error={error} />
-        <div className="trip-list-heading" aria-hidden="true">
-          <span>序号</span>
-          <span>行程</span>
-          <span>协作成员</span>
-          <span>天数</span>
-          <span />
+        <div className="trips-library-heading">
+          <h2>
+            我的行程 <span className="trip-count">{trips?.length ?? "—"}</span>
+          </h2>
+          <div className="trip-search">
+            <Search size={17} aria-hidden="true" />
+            <Input
+              className="bg-white pl-10"
+              aria-label="搜索行程"
+              placeholder="搜索行程名称"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
         </div>
         <div className="trip-list">
-          {trips?.map((trip, index) => (
+          {visibleTrips?.map((trip) => (
             <a
               className="trip-row"
               key={trip.id}
               href={`/trips/${trip.id}/plan`}
             >
-              <span className="trip-order">
-                {String(index + 1).padStart(2, "0")}
-              </span>
+              <div className="trip-ticket-top">
+                <span className="trip-ticket-symbol">
+                  <MapPinned size={23} strokeWidth={1.5} />
+                </span>
+                <span className="trip-ticket-duration">
+                  {trip.dayCount} 天的旅程
+                </span>
+              </div>
               <div className="trip-summary">
-                <h2>{trip.title}</h2>
+                <h3>{trip.title}</h3>
                 <p>
                   <CalendarDays size={14} />
                   {trip.startDate
-                    ? `${trip.startDate}${trip.endDate ? ` — ${trip.endDate}` : ""}`
-                    : "日期待定"}
-                </p>
-                <p className="trip-mobile-meta">
-                  {trip.memberCount} 人协作 · {trip.dayCount} 天 ·{" "}
-                  {trip.baseCurrency}
+                    ? `${trip.startDate}${trip.endDate ? ` 至 ${trip.endDate}` : ""}`
+                    : "日期待定，先收藏想去的地方"}
                 </p>
               </div>
-              <div className="trip-people">
-                <Users size={17} />
-                <span>{trip.memberCount} 人协作</span>
+              <div className="trip-ticket-bottom">
+                <span>
+                  <Users size={15} /> {trip.memberCount} 人协作
+                </span>
+                <span>
+                  打开行程 <ChevronRight size={14} />
+                </span>
               </div>
-              <div className="trip-days">
-                {trip.dayCount}
-                <small>天</small>
-              </div>
-              <ArrowUpRight size={22} className="trip-open" />
             </a>
           ))}
+          {trips && trips.length > 0 && visibleTrips?.length === 0 && (
+            <div className="trip-empty">
+              <Search size={30} strokeWidth={1.5} />
+              <h2>没有找到这个行程</h2>
+              <p>试试其他名称，或查看全部行程。</p>
+              <Button
+                variant="outline"
+                className="mt-5"
+                onClick={() => setQuery("")}
+              >
+                清空搜索
+              </Button>
+            </div>
+          )}
           {trips?.length === 0 && (
             <div className="trip-empty">
               <Navigation2 size={36} strokeWidth={1.4} />
-              <h2>暂无行程</h2>
-              <p>创建行程后可查看和编辑。</p>
+              <h2>第一段旅程，等你来安排</h2>
+              <p>点击「创建行程」，日期没定也可以先开始。</p>
             </div>
           )}
-          {trips && (
+          {trips && !query.trim() && (
             <button className="new-trip-action" onClick={() => setOpen(true)}>
               <Plus size={17} />
-              添加行程
+              规划另一段旅程
             </button>
           )}
         </div>
@@ -155,7 +186,7 @@ export function Trips() {
                 name="title"
                 required
                 maxLength={200}
-                placeholder="例如：香港 Girls Band Cry"
+                placeholder="例如：香港周末漫游"
                 autoFocus
               />
             </Label>

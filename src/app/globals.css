@@ -8,50 +8,50 @@
 
 :root {
   color-scheme: light;
-  --background: #ffffff;
-  --foreground: #202b3d;
+  --background: #f5f8fc;
+  --foreground: #18324b;
   --card: #ffffff;
-  --card-foreground: #202b3d;
+  --card-foreground: #18324b;
   --popover: #ffffff;
-  --popover-foreground: #202b3d;
-  --primary: #3264ef;
+  --popover-foreground: #18324b;
+  --primary: #0762df;
   --primary-foreground: #ffffff;
-  --secondary: #f1f4f9;
-  --secondary-foreground: #41516a;
-  --muted: #f7f9fc;
-  --muted-foreground: #738097;
-  --accent: #edf3ff;
-  --accent-foreground: #2855c6;
-  --destructive: #c84e50;
-  --border: #e3e8f0;
-  --input: #dbe2ec;
-  --ring: #779af4;
-  --radius: 0.375rem;
+  --secondary: #edf3fa;
+  --secondary-foreground: #425e78;
+  --muted: #f5f8fc;
+  --muted-foreground: #5d7186;
+  --accent: #e5f1ff;
+  --accent-foreground: #0762df;
+  --destructive: #b34438;
+  --border: #dbe5f0;
+  --input: #c9d8e8;
+  --ring: #4697fa;
+  --radius: 0.625rem;
   --sidebar: #ffffff;
-  --sidebar-foreground: #202b3d;
-  --sidebar-primary: #3264ef;
+  --sidebar-foreground: #18324b;
+  --sidebar-primary: #0762df;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #edf3ff;
-  --sidebar-accent-foreground: #2855c6;
-  --sidebar-border: #e3e8f0;
-  --sidebar-ring: #779af4;
-  --chart-1: #3264ef;
-  --chart-2: #429885;
-  --chart-3: #bd874b;
-  --chart-4: #946ba7;
-  --chart-5: #6b8fab;
+  --sidebar-accent: #e5f1ff;
+  --sidebar-accent-foreground: #0762df;
+  --sidebar-border: #dbe5f0;
+  --sidebar-ring: #4697fa;
+  --chart-1: #0762df;
+  --chart-2: #17aec4;
+  --chart-3: #d4a318;
+  --chart-4: #8c6bda;
+  --chart-5: #509ddd;
   --ink: var(--foreground);
   --paper: var(--background);
   --surface: var(--muted);
   --line: var(--border);
-  --coral: #e88967;
+  --coral: #ffd452;
 }
 @theme inline {
   --font-sans:
-    var(--font-geist), "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC",
+    var(--font-manrope), "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC",
     sans-serif;
   --font-heading:
-    var(--font-geist), "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC",
+    var(--font-manrope), "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC",
     sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -153,6 +153,6 @@
     color: var(--muted-foreground);
   }
   ::selection {
-    background: #3264ef20;
+    background: #0762df20;
   }
 }

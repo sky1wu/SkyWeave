@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/client";
 import { Brand, ErrorText } from "./ui";
-import { ArrowRight, Route, Users, Wallet } from "lucide-react";
+import { Route, Users, Wallet } from "lucide-react";
+import { JourneyArt } from "./journey-art";
 export function AuthForm({ register = false }: { register?: boolean }) {
   const router = useRouter();
   const [error, setError] = useState(""),
@@ -43,17 +44,16 @@ export function AuthForm({ register = false }: { register?: boolean }) {
     <main className="auth-layout">
       <div className="auth-story">
         <Brand />
-        <div>
-          <span className="eyebrow">行程 · 协作 · 费用</span>
+        <div className="auth-intro">
           <h1>
-            旅行规划
+            下一站，
             <br />
-            与费用管理
+            一起出发。
           </h1>
           <p>
-            安排每天的地点和路线，
+            把想去的地方，连成一段旅程。
             <br />
-            与同行者一起编辑、记账和结算。
+            和同行的人一起安排、记账，轻松出发。
           </p>
           <div className="auth-features">
             <span>
@@ -67,11 +67,12 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             </span>
           </div>
         </div>
-        <span className="text-xs opacity-60">SkyWeave</span>
+        <JourneyArt />
+        <p className="auth-story-footer">每一天的安排，都在一张地图上。</p>
       </div>
       <div className="auth-form-side">
         <form className="auth-form" onSubmit={submit}>
-          <h2>{register ? "创建账号" : "登录"}</h2>
+          <h2>{register ? "创建账号" : "欢迎回来"}</h2>
           <p className="muted mb-8">
             {register
               ? "注册后即可创建行程或接受邀请。"
@@ -119,7 +120,6 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             disabled={busy}
           >
             {busy ? "请稍候…" : register ? "创建账号" : "登录"}
-            <ArrowRight size={16} />
           </Button>
           <div className="text-sm muted mt-5">
             {register ? "已有账号？" : "还没有账号？"}

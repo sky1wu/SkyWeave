@@ -42,7 +42,6 @@ export function TripShell({
   const router = useRouter();
   const [data, setData] = useState<TripSnapshot | null>(null),
     [error, setError] = useState(""),
-    [connected, setConnected] = useState(false),
     [settings, setSettings] = useState(false),
     [expense, setExpense] = useState<Expense | "new" | null>(null),
     [expenseItem, setExpenseItem] = useState<Item | undefined>(),
@@ -73,14 +72,11 @@ export function TripShell({
         180,
       );
     };
-    events.onopen = () => setConnected(true);
-    events.onerror = () => setConnected(false);
     events.addEventListener("sync", sync);
     events.addEventListener("change", sync);
     events.addEventListener("revoked", () => {
       events.close();
       fetchSequence.current++;
-      setConnected(false);
       setData(null);
       setError("你已没有访问此行程的权限");
     });
@@ -162,66 +158,65 @@ export function TripShell({
                 </span>
               ))}
           </div>
-          <span className="sync-state">
-            <i className={connected ? "online" : ""} />
-            {connected ? "协作已连接" : "重新连接中"}
-          </span>
         </div>
-        <Link href="/" className="workspace-back">
+        <Link href="/" className="workspace-back" aria-label="所有行程">
           <ChevronLeft size={14} />
           <span>所有行程</span>
         </Link>
       </header>
-      <nav className="trip-nav">
+      <nav className="trip-nav" aria-label="行程导航">
         {tabs.map((tab) => (
           <a
             key={tab.key}
             href={`/trips/${tripId}/${tab.key}`}
             className={section === tab.key ? "active" : ""}
+            aria-current={section === tab.key ? "page" : undefined}
           >
             <tab.icon size={15} />
             {tab.label}
           </a>
         ))}
-        <span className="ml-auto text-xs muted hidden sm:block">
-          {data.role === "viewer" ? "只读成员 · 可以评论" : "可编辑"}
+        <span className="workspace-permission">
+          {data.role === "viewer" ? "只读，可评论" : "共同编辑"}
         </span>
       </nav>
-      {error && (
-        <div className="px-6 pt-3">
-          <ErrorText error={error} />
-        </div>
-      )}
-      {section === "plan" && (
-        <Planner
-          snapshot={data}
-          mutate={mutate}
-          refresh={refresh}
-          addExpense={(item) => openExpense(undefined, item)}
-          editExpense={(expense) =>
-            data.role === "viewer"
-              ? router.push(`/trips/${tripId}/expenses#expense-${expense.id}`)
-              : openExpense(expense)
-          }
-          addComment={(item) =>
-            setComment({ type: "day_item", id: item.id, title: item.title })
-          }
-        />
-      )}{" "}
-      {section === "expenses" && (
-        <Expenses
-          snapshot={data}
-          mutate={mutate}
-          edit={openExpense}
-          comment={(e) =>
-            setComment({ type: "expense", id: e.id, title: e.title })
-          }
-        />
-      )}{" "}
-      {section === "members" && <Members snapshot={data} mutate={mutate} />}{" "}
-      {section === "activity" && (
-        <ActivityPage snapshot={data} mutate={mutate} />
-      )}{" "}
+      <div className="workspace-content">
+        {error && (
+          <div className="px-6 pt-3">
+            <ErrorText error={error} />
+          </div>
+        )}
+        {section === "plan" && (
+          <Planner
+            snapshot={data}
+            mutate={mutate}
+            refresh={refresh}
+            addExpense={(item) => openExpense(undefined, item)}
+            editExpense={(expense) =>
+              data.role === "viewer"
+                ? router.push(`/trips/${tripId}/expenses#expense-${expense.id}`)
+                : openExpense(expense)
+            }
+            addComment={(item) =>
+              setComment({ type: "day_item", id: item.id, title: item.title })
+            }
+          />
+        )}{" "}
+        {section === "expenses" && (
+          <Expenses
+            snapshot={data}
+            mutate={mutate}
+            edit={openExpense}
+            comment={(e) =>
+              setComment({ type: "expense", id: e.id, title: e.title })
+            }
+          />
+        )}{" "}
+        {section === "members" && <Members snapshot={data} mutate={mutate} />}{" "}
+        {section === "activity" && (
+          <ActivityPage snapshot={data} mutate={mutate} />
+        )}{" "}
+      </div>
       {expense && (
         <ExpenseEditor
           snapshot={data}

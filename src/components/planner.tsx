@@ -637,6 +637,7 @@ export function Planner({
                 <button
                   key={tab.key}
                   className={view === tab.key ? "active" : ""}
+                  aria-pressed={view === tab.key}
                   onClick={() => {
                     setView(tab.key);
                     if (tab.key === "pool") {

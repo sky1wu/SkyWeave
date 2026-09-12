@@ -10,10 +10,10 @@ export function InvitePage({ token }: { token: string }) {
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   return (
-    <main className="max-w-lg mx-auto px-6 py-16">
+    <main className="invite-page">
       <Brand />
-      <div className="panel p-9 mt-12 text-center">
-        <Users size={44} className="mx-auto text-emerald-700 mb-6" />
+      <div className="invite-card">
+        <Users size={44} className="mx-auto text-primary mb-6" />
         <h1 className="text-2xl font-semibold mb-4">加入行程</h1>
         <p className="muted mb-7 text-sm">
           登录后可接受邀请。专属邀请会关联你已有的账目。

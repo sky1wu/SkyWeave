@@ -229,7 +229,7 @@ export function TripMap({
       if (points.length >= 2) {
         const line = new sdk.Polyline({
           path: points.map((p) => mapPoint(p[0], p[1])),
-          strokeColor: leg.mode === "manual" ? "#ed9045" : "#3264ef",
+          strokeColor: leg.mode === "manual" ? "#ed9045" : "#0762DF",
           strokeWeight: 4,
           strokeOpacity: 0.85,
           strokeStyle: leg.mode === "manual" ? "dashed" : "solid",
@@ -393,7 +393,7 @@ export function TripMap({
         y1={110 + Math.floor(a / 3) * 140}
         x2={130 + (b % 3) * 180}
         y2={110 + Math.floor(b / 3) * 140}
-        stroke={independent ? "#8c70ad" : "#3264ef"}
+        stroke={independent ? "#8c70ad" : "#0762DF"}
         strokeWidth="4"
         strokeDasharray={
           independent || alternative === "manual" ? "10 8" : undefined
@@ -431,12 +431,12 @@ export function TripMap({
                 <path
                   d="M 60 0 L 0 0 0 60"
                   fill="none"
-                  stroke="#e2e8f2"
+                  stroke="#DBE5F0"
                   strokeWidth="1"
                 />
               </pattern>
             </defs>
-            <rect width="700" height="2000" fill="#f3f6fc" />
+            <rect width="700" height="2000" fill="#F0F6FD" />
             <rect width="700" height="2000" fill="url(#grid)" />
             {day?.legs.map(
               (leg) =>
@@ -513,7 +513,7 @@ export function TripMap({
                       x={150 + (i % 3) * 180}
                       y={99 + Math.floor(i / 3) * 140}
                       fontSize="13"
-                      fill="#324c75"
+                      fill="#18324B"
                     >
                       {point.number}
                     </text>
@@ -523,7 +523,7 @@ export function TripMap({
                     x={130 + (i % 3) * 180}
                     y={150 + Math.floor(i / 3) * 140}
                     textAnchor="middle"
-                    fill="#455570"
+                    fill="#425E78"
                     fontSize="12"
                   >
                     {point.title}
