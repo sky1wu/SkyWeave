@@ -5,14 +5,16 @@
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
-    "start": "next start --hostname 0.0.0.0",
-    "typecheck": "tsc --noEmit",
+    "start": "node scripts/start.mjs",
+    "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
-    "check": "npm run typecheck && npm run lint && npm test && npm run build"
+    "check": "npm run typecheck && npm run lint && npm test && npm run build",
+    "format:check": "prettier --check src tests e2e scripts",
+    "smoke:amap": "tsx scripts/smoke-amap.ts"
   },
   "engines": {
     "node": ">=22"
@@ -50,5 +52,10 @@
     "typescript": "^6.0.3",
     "vitest": "^5.0.0"
   },
-  "type": "module"
+  "type": "module",
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "^0.25.12"
+    }
+  }
 }

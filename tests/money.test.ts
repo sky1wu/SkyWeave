@@ -4,8 +4,18 @@ import {
   splitExpense,
   calculateBalances,
   parseMoney,
+  moneyText,
+  formatMoney,
 } from "@/domain/money";
 describe("money", () => {
+  it("round trips large monetary values without losing a minor unit in the editor", () => {
+    const amount = Number.MAX_SAFE_INTEGER;
+    expect(moneyText(amount, "CNY")).toBe("90071992547409.91");
+    expect(parseMoney(moneyText(amount, "CNY"), "CNY")).toBe(amount);
+    expect(parseMoney(moneyText(amount, "JPY"), "JPY")).toBe(amount);
+    expect(formatMoney(amount, "CNY")).toContain("90,071,992,547,409.91");
+    expect(formatMoney(-1, "CNY")).toContain("-¥0.01");
+  });
   it("converts decimal rates using the currencies' minor units", () => {
     expect(convertMoney(24000, "HKD", "CNY", "0.9182")).toBe(22037);
     expect(convertMoney(1000, "JPY", "CNY", "0.05")).toBe(5000);

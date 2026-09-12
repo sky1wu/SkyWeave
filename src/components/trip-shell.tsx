@@ -72,6 +72,7 @@ export function TripShell({
     events.addEventListener("change", sync);
     events.addEventListener("revoked", () => {
       events.close();
+      fetchSequence.current++;
       setConnected(false);
       setData(null);
       setError("你已没有访问此行程的权限");

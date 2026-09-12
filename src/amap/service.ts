@@ -25,14 +25,38 @@ export class AmapService {
     ttl: number,
     fn: () => Promise<T>,
   ): Promise<T> {
+    const started = performance.now();
+    const operation = key.startsWith("[") ? "route" : key.split(":")[0];
+    const record = (cacheHit: boolean, status = 200) => {
+      if (process.env.NODE_ENV !== "test")
+        console.info(
+          JSON.stringify({
+            requestId: crypto.randomUUID(),
+            endpoint: "amap",
+            provider: "amap",
+            operation,
+            duration: Math.round(performance.now() - started),
+            status,
+            cacheHit,
+          }),
+        );
+    };
     const hit = this.cache.get(key);
-    if (hit !== undefined) return hit as T;
+    if (hit !== undefined) {
+      record(true);
+      return hit as T;
+    }
     const active = this.pending.get(key);
     if (active) return active as Promise<T>;
     const promise = fn()
       .then((result) => {
         this.cache.set(key, result, ttl);
+        record(false);
         return result;
+      })
+      .catch((error) => {
+        record(false, error instanceof AppError ? error.status : 502);
+        throw error;
       })
       .finally(() => this.pending.delete(key));
     this.pending.set(key, promise);

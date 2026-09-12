@@ -6,14 +6,14 @@ import { one } from "@/server/db";
 import { amap } from "@/amap/service";
 import { routeRequestSchema } from "@/amap/requests";
 import { calculateDay, calculateLeg } from "@/server/routing";
-import type { Expense } from "@/domain/types";
+import type { Expense, Leg } from "@/domain/types";
 import { events } from "@/server/events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ path: string[] }> };
 async function handler(request: Request, context: Context): Promise<Response> {
-  const started = Date.now(),
+  const started = performance.now(),
     requestId = crypto.randomUUID();
   let status = 200,
     endpoint = "unknown";
@@ -98,11 +98,22 @@ async function handler(request: Request, context: Context): Promise<Response> {
       else if (method === "DELETE") result = s.deleteItem(id, user, expected());
     } else if (root === "legs" && method === "PATCH" && !action)
       result = s.editLeg(id, user, data);
-    else if (root === "legs" && method === "POST" && action === "route")
-      result = await calculateLeg(id, user, true);
-    else if (root === "routes" && method === "POST")
+    else if (root === "legs" && method === "POST" && action === "route") {
+      await calculateLeg(id, user, true);
+      const leg = requireValue(
+        one<Leg>("SELECT * FROM travel_legs WHERE id=?", id),
+      );
+      result = requireValue(s.getDay(leg.dayId).legs.find((l) => l.id === id));
+    } else if (root === "routes" && method === "POST")
       result = {
-        alternatives: await amap.routes(routeRequestSchema.parse(data)),
+        alternatives: (await amap.routes(routeRequestSchema.parse(data))).map(
+          (a, index) => ({
+            ...a,
+            id: s.uid(),
+            label: `方案 ${index + 1}`,
+            fetchedAt: Date.now(),
+          }),
+        ),
       };
     else if (root === "places" && method === "GET") {
       if (["search", "autocomplete"].includes(id)) {
@@ -198,7 +209,7 @@ async function handler(request: Request, context: Context): Promise<Response> {
         requestId,
         endpoint,
         operation: request.method,
-        duration: Date.now() - started,
+        duration: Math.round(performance.now() - started),
         status,
       }),
     );

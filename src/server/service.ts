@@ -267,6 +267,13 @@ export function editTrip(tripId: string, actor: Actor, body: unknown) {
       updatedAt: Date.now(),
       updatedByUserId: actor.id,
     });
+    if (data.timezone && data.timezone !== trip.timezone)
+      run(
+        "UPDATE days SET version=version+1, updatedAt=?, updatedByUserId=? WHERE tripId=?",
+        Date.now(),
+        actor.id,
+        tripId,
+      );
     log(tripId, actor, "trip.updated", "trip", tripId, "更新了行程信息");
     return { id: tripId };
   });
@@ -963,6 +970,16 @@ export function saveExpense(
       tripId,
     );
     // Check aggregate overflow inside the transaction, so invalid ledgers roll back.
+    for (const total of many<{ amount: number }>(
+      "SELECT sum(amountMinor) amount FROM expenses WHERE tripId=? GROUP BY currency",
+      tripId,
+    ))
+      if (!Number.isSafeInteger(total.amount))
+        throw new AppError(
+          400,
+          "INVALID_MONEY",
+          "此币种累计金额超出可安全计算范围",
+        );
     balances(tripId, actor);
     log(
       tripId,

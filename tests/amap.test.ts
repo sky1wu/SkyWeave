@@ -75,6 +75,28 @@ describe("coordinate boundaries", () => {
   });
 });
 describe("route mapping and upstream behavior", () => {
+  it("retries transient QPS errors once but does not retry exhausted daily quota", async () => {
+    let count = 0;
+    const fetcher = vi.fn(async () =>
+      Response.json(
+        ++count === 1
+          ? { status: "0", infocode: "10021" }
+          : { status: "1", infocode: "10000", pois: [] },
+      ),
+    );
+    await new AmapClient(
+      { ...config, AMAP_MIN_INTERVAL_MS: 5 },
+      fetcher,
+    ).search({});
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const quota = vi.fn(async () =>
+      Response.json({ status: "0", infocode: "10003" }),
+    );
+    await expect(
+      new AmapClient({ ...config, AMAP_MIN_INTERVAL_MS: 5 }, quota).search({}),
+    ).rejects.toMatchObject({ code: "AMAP_QUOTA_EXCEEDED" });
+    expect(quota).toHaveBeenCalledTimes(1);
+  });
   it("keeps complete alternatives, tolerates empty transit segments, and uses lng/lat order", () => {
     const r = mapRoute(plan, true)!;
     expect(r.durationSeconds).toBe(2520);

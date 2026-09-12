@@ -26,7 +26,7 @@ export function safeInteger(n: bigint): number {
   return v;
 }
 function decimal(value: string): { n: bigint; d: bigint } {
-  if (!/^\d{1,15}(?:\.\d{1,12})?$/.test(value))
+  if (!/^\d{1,16}(?:\.\d{1,12})?$/.test(value))
     throw new Error("请输入有效的非负十进制数");
   const [whole, fraction = ""] = value.split(".");
   return { n: BigInt(whole + fraction), d: 10n ** BigInt(fraction.length) };
@@ -34,7 +34,7 @@ function decimal(value: string): { n: bigint; d: bigint } {
 export function parseMoney(value: string, currency: string): number {
   const digits = minorDigits(currency);
   if (
-    !new RegExp(`^\\d{1,15}${digits ? `(?:\\.\\d{1,${digits}})?` : ""}$`).test(
+    !new RegExp(`^\\d{1,16}${digits ? `(?:\\.\\d{1,${digits}})?` : ""}$`).test(
       value,
     )
   )
@@ -43,12 +43,27 @@ export function parseMoney(value: string, currency: string): number {
   return safeInteger((v.n * 10n ** BigInt(digits)) / v.d);
 }
 export function moneyText(amount: number, currency: string): string {
-  return (amount / 10 ** minorDigits(currency)).toFixed(minorDigits(currency));
+  const digits = minorDigits(currency),
+    value = BigInt(amount),
+    magnitude = value < 0n ? -value : value,
+    scale = 10n ** BigInt(digits);
+  return `${value < 0n ? "-" : ""}${magnitude / scale}${digits ? `.${String(magnitude % scale).padStart(digits, "0")}` : ""}`;
 }
 export function formatMoney(amount: number, currency: string): string {
-  return new Intl.NumberFormat("zh-CN", { style: "currency", currency }).format(
-    amount / 10 ** minorDigits(currency),
-  );
+  const digits = minorDigits(currency),
+    value = BigInt(amount),
+    whole = value / 10n ** BigInt(digits);
+  const fraction = moneyText(amount < 0 ? -amount : amount, currency).split(
+    ".",
+  )[1];
+  const formatted = new Intl.NumberFormat("zh-CN", {
+    style: "currency",
+    currency,
+  })
+    .formatToParts(whole)
+    .map((part) => (part.type === "fraction" ? fraction : part.value))
+    .join("");
+  return value < 0n && whole === 0n ? `-${formatted}` : formatted;
 }
 export function convertMoney(
   amount: number,
@@ -162,6 +177,7 @@ export function calculateBalances(
     baseAmountMinor: number;
   }[],
 ) {
+  safeInteger(expenses.reduce((sum, e) => sum + BigInt(e.baseAmountMinor), 0n));
   const rows = new Map(
     participantIds.map((id) => [
       id,

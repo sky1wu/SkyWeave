@@ -12,3 +12,4 @@ data/
 .tmp/
 .codex/agent-memory*
 *.tsbuildinfo
+next-env.d.ts

@@ -67,7 +67,10 @@ export class AmapClient {
       const interval = this.config.AMAP_MIN_INTERVAL_MS ?? 0;
       if (interval > 0) {
         if (this.queued >= 16) throw new ApiError(503, "Request queue is full");
-        const start = Math.max(Date.now(), this.nextStart.get(path) ?? 0);
+        const start = Math.max(
+          performance.now(),
+          this.nextStart.get(path) ?? 0,
+        );
         this.nextStart.set(path, start + interval);
         this.queued++;
         try {
@@ -82,7 +85,7 @@ export class AmapClient {
                 signal?.removeEventListener("abort", abort);
                 resolve();
               },
-              Math.max(0, start - Date.now()),
+              Math.max(0, start - performance.now()),
             );
             if (signal?.aborted) abort();
             else signal?.addEventListener("abort", abort, { once: true });

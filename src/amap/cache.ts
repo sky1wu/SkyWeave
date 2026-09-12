@@ -3,7 +3,7 @@ export class TtlCache<T> {
 
   constructor(
     private readonly maxEntries = 1000,
-    private readonly now = Date.now,
+    private readonly now = () => performance.now(),
   ) {}
 
   get(key: string): T | undefined {
