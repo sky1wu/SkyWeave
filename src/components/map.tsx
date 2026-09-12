@@ -69,18 +69,31 @@ function load(key: string): Promise<SDK> {
   });
   return window.tripMapLoader;
 }
+export type MapFocus =
+  | { kind: "leg" | "item"; id: string; request: number }
+  | {
+      kind: "point";
+      lat: number;
+      lng: number;
+      title?: string;
+      request: number;
+    };
 export function TripMap({
   day,
   selected,
   select,
   pick,
   picking,
+  focus,
+  view,
 }: {
   day: DayPlan | undefined;
   selected: string | null;
   select: (item: Item) => void;
   pick: (point: { lat: number; lng: number }) => void;
   picking: boolean;
+  focus: MapFocus | null;
+  view: "pool" | "timeline" | "map";
 }) {
   const container = useRef<HTMLDivElement>(null),
     instance = useRef<MapObject | null>(null),
@@ -146,6 +159,8 @@ export function TripMap({
       overlays.current.push(object);
     };
     const markers: unknown[] = [];
+    const markerByItem = new globalThis.Map<string, unknown>();
+    const lineByLeg = new globalThis.Map<string, unknown>();
     for (const [i, item] of (day?.items ?? []).entries())
       if (located(item) && item.type !== "note") {
         const node = document.createElement("button");
@@ -161,6 +176,7 @@ export function TripMap({
         marker.on("click", () => callbacks.current.select(item));
         add(marker);
         markers.push(marker);
+        markerByItem.set(item.id, marker);
       }
     for (const leg of day?.legs ?? []) {
       const alternative = leg.alternatives.find(
@@ -175,32 +191,105 @@ export function TripMap({
               [b.lng!, b.lat!],
             ]
           : (alternative?.polyline ?? []);
-      if (points.length >= 2)
-        add(
-          new sdk.Polyline({
-            path: points.map((p) => mapPoint(p[0], p[1])),
-            strokeColor: leg.mode === "manual" ? "#ed9045" : "#3264ef",
-            strokeWeight: 5,
-            strokeOpacity: 0.8,
-            strokeStyle: leg.mode === "manual" ? "dashed" : "solid",
-            lineJoin: "round",
-            zIndex: 30,
-          }),
-        );
+      if (points.length >= 2) {
+        const line = new sdk.Polyline({
+          path: points.map((p) => mapPoint(p[0], p[1])),
+          strokeColor: leg.mode === "manual" ? "#ed9045" : "#3264ef",
+          strokeWeight: 5,
+          strokeOpacity: 0.8,
+          strokeStyle: leg.mode === "manual" ? "dashed" : "solid",
+          lineJoin: "round",
+          zIndex: focus?.kind === "leg" && focus.id === leg.id ? 50 : 30,
+        });
+        add(line);
+        lineByLeg.set(leg.id, line);
+      }
     }
-    const signature = JSON.stringify([
+    let targets = markers;
+    const focusedLeg =
+      focus?.kind === "leg"
+        ? day?.legs.find((l) => l.id === focus.id)
+        : undefined;
+    let signature = JSON.stringify([
       day?.id,
       day?.items.map((i) => [i.id, i.lat, i.lng]),
+      view,
     ]);
-    if (signature !== fit.current && markers.length) {
-      map.setFitView(markers, true, [80, 65, 80, 65]);
-      fit.current = signature;
+    if (focusedLeg && focus) {
+      targets = [
+        markerByItem.get(focusedLeg.fromItemId),
+        markerByItem.get(focusedLeg.toItemId),
+        lineByLeg.get(focusedLeg.id),
+      ].filter(Boolean);
+      signature = JSON.stringify([
+        day?.id,
+        focus.request,
+        focusedLeg.id,
+        focusedLeg.selectedAlternativeId,
+        focusedLeg.manualDurationMinutes,
+        view,
+      ]);
+    } else if (focus?.kind === "item" && markerByItem.has(focus.id)) {
+      targets = [markerByItem.get(focus.id)];
+      signature = JSON.stringify([
+        focus,
+        day?.items.find((i) => i.id === focus.id)?.lat,
+        day?.items.find((i) => i.id === focus.id)?.lng,
+        view,
+      ]);
+    } else if (focus?.kind === "point") {
+      const node = document.createElement("span");
+      node.className = "map-marker pool-preview-marker";
+      node.textContent = "·";
+      node.title = focus.title ?? "地点预览";
+      const marker = new sdk.Marker({
+        position: mapPoint(focus.lng, focus.lat),
+        content: node,
+        offset: new sdk.Pixel(-15, -15),
+        zIndex: 250,
+      });
+      add(marker);
+      targets = [marker];
+      signature = JSON.stringify([focus, view]);
     }
-  }, [sdk, day, selected]);
+    const timer = setTimeout(() => {
+      if (
+        signature !== fit.current &&
+        targets.length &&
+        container.current?.clientWidth &&
+        container.current?.clientHeight
+      ) {
+        map.setFitView(targets, true, [65, 50, 65, 50]);
+        fit.current = signature;
+      }
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [sdk, day, selected, focus, view]);
   const points =
     day?.items.filter((i) => located(i) && i.type !== "note") ?? [];
+  const focusedLeg =
+    focus?.kind === "leg"
+      ? day?.legs.find((l) => l.id === focus.id)
+      : undefined;
+  const focusIds = focusedLeg
+    ? [focusedLeg.fromItemId, focusedLeg.toItemId]
+    : focus?.kind === "item"
+      ? [focus.id]
+      : [];
+  const selectedPoints = points.flatMap((item, i) =>
+    focusIds.includes(item.id)
+      ? [{ x: 130 + (i % 3) * 180, y: 110 + Math.floor(i / 3) * 140 }]
+      : [],
+  );
+  const testViewBox = selectedPoints.length
+    ? `${Math.min(...selectedPoints.map((p) => p.x)) - 80} ${Math.min(...selectedPoints.map((p) => p.y)) - 80} ${Math.max(200, Math.max(...selectedPoints.map((p) => p.x)) - Math.min(...selectedPoints.map((p) => p.x)) + 160)} ${Math.max(180, Math.max(...selectedPoints.map((p) => p.y)) - Math.min(...selectedPoints.map((p) => p.y)) + 160)}`
+    : "0 0 700 600";
   return (
-    <div className={`trip-map ${picking ? "picking" : ""}`}>
+    <div
+      className={`trip-map ${picking ? "picking" : ""}`}
+      data-map-day={day?.id}
+      data-focused-leg={focusedLeg?.id ?? ""}
+    >
       <div ref={container} className="map-container" />
       {(error || (!sdk && !testMode)) && (
         <div className="map-unavailable">
@@ -214,7 +303,7 @@ export function TripMap({
           <span className="pill absolute top-5 left-5">
             模拟高德 · 仅测试环境
           </span>
-          <svg viewBox="0 0 700 600" role="img" aria-label="测试地图">
+          <svg viewBox={testViewBox} role="img" aria-label="测试地图">
             <defs>
               <pattern
                 id="grid"

@@ -7,6 +7,7 @@ export default defineConfig({
   expect: { timeout: 12000 },
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
+    actionTimeout: 15000,
     baseURL: "http://127.0.0.1:3100",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",

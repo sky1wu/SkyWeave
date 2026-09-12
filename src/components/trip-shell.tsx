@@ -119,16 +119,10 @@ export function TripShell({
     <div
       className={`trip-workspace ${section === "plan" ? "planner-workspace" : ""}`}
     >
-      <header className="site-header trip-header">
+      <header className="site-header trip-header compact-trip-header">
         <Brand />
-        <Link href="/" className="text-xs muted flex items-center gap-1">
-          <ChevronLeft size={14} />
-          所有行程
-        </Link>
-      </header>
-      <section className="trip-banner">
-        <div>
-          <div className="flex items-center gap-3">
+        <div className="compact-trip-heading">
+          <div>
             <h1>{data.trip.title}</h1>
             {data.role === "owner" && (
               <button
@@ -136,17 +130,15 @@ export function TripShell({
                 aria-label="行程设置"
                 onClick={() => setSettings(true)}
               >
-                <Settings2 size={17} />
+                <Settings2 size={15} />
               </button>
             )}
           </div>
-          <p className="flex items-center gap-2">
-            <CalendarDays size={13} />
+          <p>
+            <CalendarDays size={11} />
             {data.trip.startDate ?? "日期待定"}
             {data.trip.endDate ? ` — ${data.trip.endDate}` : ""}
-            <span className="mx-1">·</span>
-            {data.days.length} 天的旅行
-            <span className="hidden sm:inline"> · {data.trip.timezone}</span>
+            <span>· {data.days.length} 天</span>
           </p>
         </div>
         <div className="collaborators">
@@ -162,10 +154,14 @@ export function TripShell({
           </div>
           <span className="sync-state">
             <i className={connected ? "online" : ""} />
-            {connected ? "协作已连接" : "正在重新连接"}
+            {connected ? "协作已连接" : "重新连接中"}
           </span>
         </div>
-      </section>
+        <Link href="/" className="workspace-back">
+          <ChevronLeft size={14} />
+          <span>所有行程</span>
+        </Link>
+      </header>
       <nav className="trip-nav">
         {tabs.map((tab) => (
           <a
@@ -192,6 +188,11 @@ export function TripShell({
           mutate={mutate}
           refresh={refresh}
           addExpense={(item) => openExpense(undefined, item)}
+          editExpense={(expense) =>
+            data.role === "viewer"
+              ? router.push(`/trips/${tripId}/expenses#expense-${expense.id}`)
+              : openExpense(expense)
+          }
           addComment={(item) =>
             setComment({ type: "day_item", id: item.id, title: item.title })
           }

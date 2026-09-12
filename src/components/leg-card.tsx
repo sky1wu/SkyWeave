@@ -9,7 +9,9 @@ import {
   PencilLine,
   Check,
 } from "lucide-react";
-import type { DayPlan } from "@/domain/types";
+import type { DayPlan, Item } from "@/domain/types";
+import type { TimelineEntry } from "@/domain/timeline";
+import { FixedArrival } from "./fixed-arrival";
 import { modeLabels } from "@/domain/types";
 import { ErrorText } from "./ui";
 const icons = {
@@ -24,11 +26,17 @@ export function LegCard({
   editable,
   mutate,
   recalculate,
+  focus,
+  destination,
+  arrival,
 }: {
   leg: DayPlan["legs"][number];
   editable: boolean;
   mutate: (data: unknown) => Promise<unknown>;
   recalculate: () => Promise<unknown>;
+  focus: () => void;
+  destination: Item;
+  arrival: TimelineEntry;
 }) {
   const [open, setOpen] = useState(false),
     [error, setError] = useState(""),
@@ -49,7 +57,9 @@ export function LegCard({
     setBusy(true);
     setError("");
     try {
+      focus();
       await fn();
+      focus();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -57,11 +67,17 @@ export function LegCard({
     }
   }
   return (
-    <div className={`leg-card ${leg.mode === "manual" ? "manual-leg" : ""}`}>
+    <div
+      data-leg-id={leg.id}
+      className={`leg-card ${leg.mode === "manual" ? "manual-leg" : ""}`}
+    >
       <button
         className="leg-summary"
         aria-expanded={open}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (!open) focus();
+          setOpen(!open);
+        }}
       >
         <Icon size={15} />
         <span>
@@ -77,6 +93,7 @@ export function LegCard({
           : selected?.summary ||
             (leg.status === "pending" ? "等待计算路线" : leg.error)}
       </p>
+      <FixedArrival item={destination} entry={arrival} />
       {open && (
         <div className="leg-details">
           <ErrorText error={error} />

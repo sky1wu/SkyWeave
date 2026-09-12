@@ -15,11 +15,19 @@
 
 认证：users / sessions / accounts / verifications。
 协作：trips / trip_members / trip_participants / trip_invites。
-规划：days / day_items / travel_legs / route_alternatives。
+规划：trip_places / days / day_items / travel_legs / route_alternatives。
 账目：expenses / expense_splits / settlements。
 交流：comments / activity_logs。
 
 费用付款人、分摊人和结算双方使用 participantId；操作人使用 userId。所有关联校验 Trip 归属。移除成员保留参与者，删除事项解除费用关联。SQLite 外键、WAL、busy timeout；生成式迁移在启动时运行。
+
+## 地点池与连续时间线
+
+Trip 级地点池独立于 DayItem，保存分类和地点资料。拖入时复制为当天事项并记录 sourcePlaceId，原地点保留；重复用于其他日期时创建新的事项。分类初始继承，之后可分别编辑。
+
+全部 Day 连续呈现在同一个滚动区域中，搜索位于独立的固定面板。点击日期与用户滚动分别处理，异步保存不覆盖后续导航。展开交通段以两端和当前 polyline 调整地图范围。
+
+跨日移动保留 Item ID、评论及 Expense 关联，原日和目标日的顺序、TravelLeg 与版本在同一事务中维护。
 
 ## 路线数据流
 

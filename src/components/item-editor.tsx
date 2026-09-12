@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { Item } from "@/domain/types";
 import { typeLabels } from "@/domain/types";
+import { placeCategories } from "@/domain/planning";
 import { ErrorText, Modal } from "./ui";
 export function itemPayload(item: Item) {
   return {
@@ -17,6 +18,8 @@ export function itemPayload(item: Item) {
     stayMinutes: item.stayMinutes,
     fixedTime: item.fixedTime,
     notes: item.notes,
+    sourcePlaceId: item.sourcePlaceId,
+    placeCategory: item.placeCategory,
   };
 }
 export function TimeField({
@@ -69,11 +72,13 @@ export function ItemEditor({
   point,
   close,
   save,
+  categories = placeCategories,
 }: {
   item?: Item;
   point?: { lat: number; lng: number };
   close: () => void;
   save: (data: Record<string, unknown>) => Promise<unknown>;
+  categories?: string[];
 }) {
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -90,6 +95,7 @@ export function ItemEditor({
       await save({
         title: f.get("title"),
         type: f.get("type"),
+        placeCategory: f.get("placeCategory") || "未分类",
         address: f.get("address") || null,
         description: f.get("description") || null,
         notes: f.get("notes") || null,
@@ -138,6 +144,20 @@ export function ItemEditor({
             </select>
           </label>
         </div>
+        <label>
+          地点分类
+          <input
+            name="placeCategory"
+            list="item-place-categories"
+            maxLength={40}
+            defaultValue={item?.placeCategory ?? "未分类"}
+          />
+          <datalist id="item-place-categories">
+            {categories.map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+        </label>
         <label>
           地址
           <input name="address" defaultValue={item?.address ?? ""} />

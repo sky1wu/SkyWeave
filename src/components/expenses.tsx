@@ -648,7 +648,7 @@ export function Expenses({
       <section className="panel overflow-hidden">
         {snapshot.expenses.length ? (
           snapshot.expenses.map((e) => (
-            <div className="expense-row" key={e.id}>
+            <div className="expense-row" key={e.id} id={`expense-${e.id}`}>
               <div className="expense-icon">
                 <ReceiptText size={20} />
               </div>

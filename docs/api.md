@@ -18,7 +18,7 @@
 
 | 方法             | 路径                                | 行为                                                         |
 | ---------------- | ----------------------------------- | ------------------------------------------------------------ |
-| POST             | `/api/trips/:id/days`               | 创建 Day                                                     |
+| POST             | `/api/trips/:id/days`               | 创建 Day；省略 title/date 时自动递增，可发送 `{}`            |
 | GET/PATCH/DELETE | `/api/days/:id`                     | 当天快照 / 修改 / 删除                                       |
 | POST             | `/api/days/:id/items`               | 添加事项                                                     |
 | PATCH/DELETE     | `/api/items/:id`                    | 修改 / 删除事项并维护路线关系                                |
@@ -45,6 +45,21 @@
 坐标输入和响应使用 WGS-84；路线折线为 `[lng, lat][]`。端点可带 `amapPoiId`。查询候选 ID 是临时 ID；切换已保存交通段时只能使用该段自身的候选 ID。
 
 Day 使用 `position` 排序，`startMinutes` 默认 480。DayItem 使用 `position`、`startMinutes`、`endMinutes`、`stayMinutes`、`fixedTime`；时间为相对 Day 零点的分钟偏移，例如次日 01:00 为 1500。没有坐标时 lat/lng 同时为空。
+
+## 地点池与跨日移动
+
+| 方法         | 路径                                      | 行为                                                 |
+| ------------ | ----------------------------------------- | ---------------------------------------------------- |
+| GET/POST     | `/api/trips/:id/places`                   | 查看 / 收藏地点；同一 Trip 内相同高德 POI 不重复收藏 |
+| PATCH/DELETE | `/api/trips/:id/places/:placeId`          | 编辑 / 移除地点；删除池中地点不删除已安排事项        |
+| POST         | `/api/trips/:id/places/:placeId/schedule` | 将地点复制到目标日期，保留池中原地点                 |
+| POST         | `/api/items/:id/move`                     | 在同一 Trip 内移动事项，保留 ID 并同步其账单日期     |
+
+地点池字段：`title`、`type`、`placeCategory`、`amapPoiId`、`address`、`lat`、`lng`、`notes`。分类为最多 40 字符的非空文本，支持常用选项和自定义值。DayItem 新增 `sourcePlaceId` 和 `placeCategory`，用于来源关联及分类副本。
+
+安排地点请求为 `{ dayId, beforeItemId?, expectedVersion, expectedDayVersion }`，其中 expectedVersion 是池中地点版本；省略 beforeItemId 时添加到当天末尾。
+
+移动事项请求为 `{ dayId, beforeItemId?, expectedVersion, expectedSourceDayVersion, expectedTargetDayVersion }`。所有版本及 Trip 归属在同一事务中验证，冲突返回 409；关联费用的 dayItemId 保持不变、dayId 随事项更新。
 
 ## 成员与协作
 

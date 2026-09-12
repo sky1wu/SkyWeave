@@ -46,6 +46,13 @@ async function searchAdd(page: Page, name: string) {
     .filter({ hasText: name })
     .first()
     .click();
+  const poolEntry = page
+    .locator(".pool-entry")
+    .filter({ has: page.locator(".pool-place-title", { hasText: name }) });
+  await expect(poolEntry).toBeVisible();
+  await poolEntry
+    .getByRole("button", { name: new RegExp(`安排 ${name} 到`) })
+    .click();
   await expect(
     page.locator(".item-title").filter({ hasText: name }),
   ).toBeVisible();
@@ -128,6 +135,10 @@ test("西安：搜索、四种交通、候选切换、键盘排序、手机视�
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page
+    .locator(".mobile-switch")
+    .getByRole("button", { name: "地点池", exact: true })
+    .click();
   await expect(page.getByLabel("搜索地点", { exact: true })).toBeVisible();
   expect(
     await page.evaluate(
@@ -398,4 +409,183 @@ test("权限和实时恢复：viewer 不可修改，断线后补齐变化，移�
   const blocked = await viewer.request.get(`${origin}/api/trips/${id}`);
   expect(blocked.status()).toBe(404);
   await context.close();
+});
+
+test("地点池、自动日期、连续滚动、路线聚焦和关联账单", async ({ page }) => {
+  await register(page, "PoolPlanner");
+  const id = await createTrip(page, "连续规划验收");
+  let snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  const first = snapshot.days[0].id;
+  await page.getByRole("button", { name: "添加一天", exact: true }).click();
+  await expect
+    .poll(
+      async () => (await call<TripSnapshot>(page, `/trips/${id}`)).days.length,
+    )
+    .toBe(2);
+  snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  const second = snapshot.days[1].id;
+  expect(snapshot.days[1].date).toBe("2026-10-03");
+  await page
+    .locator(".day-tabs")
+    .getByRole("button", { name: /第 1 天/ })
+    .click();
+  await page.getByLabel("搜索地点", { exact: true }).fill("西安SKP");
+  await page.getByRole("button", { name: "收藏 西安SKP", exact: true }).click();
+  await expect(page.locator(".pool-entry")).toHaveCount(1);
+  expect(
+    (await call<TripSnapshot>(page, `/trips/${id}`)).days.flatMap(
+      (d) => d.items,
+    ),
+  ).toHaveLength(0);
+  await page
+    .getByRole("button", { name: "编辑地点池 西安SKP", exact: true })
+    .click();
+  await page.getByLabel("地点分类", { exact: true }).fill("购物清单");
+  await page.getByRole("button", { name: "保存地点", exact: true }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  const poolHandle = await page
+    .getByRole("button", { name: "拖动地点池 西安SKP", exact: true })
+    .boundingBox();
+  const drop = await page.locator(`[data-day-end="${first}"]`).boundingBox();
+  expect(poolHandle).not.toBeNull();
+  expect(drop).not.toBeNull();
+  await page.mouse.move(poolHandle!.x + 7, poolHandle!.y + 7);
+  await page.mouse.down();
+  await page.mouse.move(poolHandle!.x + 16, poolHandle!.y + 12, { steps: 3 });
+  await page.mouse.move(drop!.x + drop!.width / 2, drop!.y + drop!.height / 2, {
+    steps: 15,
+  });
+  await page.mouse.up();
+  await expect
+    .poll(
+      async () =>
+        (await call<TripSnapshot>(page, `/trips/${id}`)).days[0].items.length,
+    )
+    .toBe(1);
+  snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  expect(snapshot.poolPlaces).toHaveLength(1);
+  expect(snapshot.days[0].items[0].placeCategory).toBe("购物清单");
+  await expect(page.locator(".pool-entry")).toContainText("已安排 1 次");
+  // dnd-kit suppresses click propagation for 50ms after a pointer drop.
+  await page.waitForTimeout(60);
+  await page
+    .locator(".day-tabs")
+    .getByRole("button", { name: /第 2 天/ })
+    .click();
+  await page
+    .getByRole("button", { name: "安排 西安SKP 到第 2 天", exact: true })
+    .click();
+  await expect(page.locator(".pool-entry")).toContainText("已安排 2 次");
+  for (let n = 0; n < 9; n++)
+    await call(page, `/days/${first}/items`, "POST", {
+      title: `备注 ${n + 1}`,
+      type: "note",
+    });
+  await expect(page.locator(`#day-${first} .timeline-item`)).toHaveCount(10);
+  const searchTop = (await page
+    .getByLabel("搜索地点", { exact: true })
+    .boundingBox())!.y;
+  const scroll = page.locator(".continuous-timeline");
+  await scroll.hover();
+  await page.mouse.wheel(0, 10000);
+  await expect(page.locator(".trip-map")).toHaveAttribute(
+    "data-map-day",
+    second,
+  );
+  expect(
+    (await page.getByLabel("搜索地点", { exact: true }).boundingBox())!.y,
+  ).toBe(searchTop);
+  await page.mouse.wheel(0, -10000);
+  await expect(page.locator(".trip-map")).toHaveAttribute(
+    "data-map-day",
+    first,
+  );
+  const toolbar = await page.locator(".planner-toolbar").boundingBox();
+  expect(toolbar!.y + toolbar!.height).toBeLessThan(165);
+  const place = await call<{ id: string }>(
+    page,
+    `/trips/${id}/places`,
+    "POST",
+    { title: "固定活动", lat: 22.32, lng: 114.18, placeCategory: "活动" },
+  );
+  snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  const fixed = await call<{ id: string }>(
+    page,
+    `/trips/${id}/places/${place.id}/schedule`,
+    "POST",
+    {
+      dayId: first,
+      beforeItemId: snapshot.days[0].items[1].id,
+      expectedVersion: 1,
+      expectedDayVersion: snapshot.days[0].version,
+    },
+  );
+  snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  const eventItem = snapshot.days[0].items.find((i) => i.id === fixed.id)!;
+  await call(page, `/items/${fixed.id}`, "PATCH", {
+    expectedVersion: eventItem.version,
+    fixedTime: true,
+    startMinutes: 720,
+    endMinutes: 780,
+  });
+  snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  await call(page, `/days/${first}`, "PATCH", {
+    expectedVersion: snapshot.days[0].version,
+    startMinutes: 660,
+  });
+  await ready(page, id);
+  await expect(page.locator(".leg-card .fixed-arrival")).toContainText(
+    "距开始还剩 18 分钟",
+  );
+  snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  const leg = snapshot.days[0].legs[0];
+  await page.locator(`[data-leg-id="${leg.id}"] .leg-summary`).click();
+  await expect(page.locator(".trip-map")).toHaveAttribute(
+    "data-focused-leg",
+    leg.id,
+  );
+  await expect(page.getByTestId("test-map").locator("svg")).not.toHaveAttribute(
+    "viewBox",
+    "0 0 700 600",
+  );
+  await page.getByRole("button", { name: "使用方案 2", exact: true }).click();
+  await expect(page.locator(".leg-card .fixed-arrival")).toContainText(
+    "距开始还剩 14 分钟",
+  );
+  const payer = snapshot.participants[0].id;
+  await call(page, `/trips/${id}/expenses`, "POST", {
+    title: "活动门票",
+    category: "ticket",
+    amountMinor: 3000,
+    currency: "CNY",
+    exchangeRateToBase: "1",
+    payerParticipantId: payer,
+    splitMethod: "equal",
+    splitMeta: [{ participantId: payer, value: "1" }],
+    incurredAt: Date.now(),
+    dayItemId: fixed.id,
+  });
+  const bill = page.locator(`#item-${fixed.id} .item-bill`);
+  await expect(bill).toContainText("活动门票");
+  await expect(bill).toContainText("30.00");
+  await bill.click();
+  await expect(page.getByRole("dialog")).toHaveAttribute(
+    "aria-label",
+    "编辑费用",
+  );
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await page
+    .getByRole("button", { name: "固定活动 更多操作", exact: true })
+    .click();
+  await page.getByRole("button", { name: "移至后一天", exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (await call<TripSnapshot>(page, `/trips/${id}`)).expenses[0].dayId,
+    )
+    .toBe(second);
+  await page.reload();
+  snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  expect(snapshot.poolPlaces).toHaveLength(2);
+  expect(snapshot.days[1].items.some((i) => i.id === fixed.id)).toBe(true);
 });

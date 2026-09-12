@@ -6,6 +6,8 @@ export default defineConfig([
   ...ts,
   globalIgnores([
     ".next/**",
+    ".tmp/**",
+    ".codex/**",
     "drizzle/**",
     "playwright-report/**",
     "test-results/**",
