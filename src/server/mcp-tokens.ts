@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { McpToken } from "@/domain/mcp";
 import { insert, many, one, run } from "./db";
 import { AppError } from "./errors";
-import { access, tx, type Actor } from "./service";
+import { access, tx, type Actor } from "./service-core";
 import { id } from "./validation";
 
 const tokenInput = z.strictObject({

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { UserSettings } from "@/components/user-settings";
 import { auth } from "@/server/auth";
-import { listTrips } from "@/server/service";
+import { listTrips } from "@/server/trip-service";
 import { listMcpTokens } from "@/server/mcp-tokens";
 
 export const metadata: Metadata = { title: "用户设置 · SkyWeave" };

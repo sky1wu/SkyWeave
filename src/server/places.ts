@@ -8,11 +8,11 @@ import {
   revision,
   checkVersion,
   log,
-  createItem,
   touchDay,
   rebuildLegs,
   type Actor,
-} from "./service";
+} from "./service-core";
+import { createItem } from "./planning-service";
 import { requireValue, AppError } from "./errors";
 import { poolInput, id, version } from "./validation";
 import { inferPlaceCategory } from "@/domain/planning";

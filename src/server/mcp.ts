@@ -10,7 +10,23 @@ import { AppError, requireValue } from "./errors";
 import { mcpAccess, type McpPrincipal } from "./mcp-tokens";
 import { moveItem, savePoolPlace, schedulePlace } from "./places";
 import { calculateDay } from "./routing";
-import * as s from "./service";
+import { checkVersion, getDay, getTrip, tx } from "./service-core";
+import { editTrip, listTrips, reorderDays, snapshot } from "./trip-service";
+import {
+  createItem,
+  deleteItem,
+  editDay,
+  editItem,
+  editLeg,
+  reorder,
+} from "./planning-service";
+import {
+  balances,
+  createSettlement,
+  deleteExpense,
+  deleteSettlement,
+  saveExpense,
+} from "./finance-service";
 import * as v from "./validation";
 
 function result(data: Record<string, unknown>): CallToolResult {
@@ -97,7 +113,7 @@ export function createMcpServer(principal: McpPrincipal) {
   }
 
   function dayInTrip(tripId: string, dayId: string) {
-    const day = s.getDay(dayId);
+    const day = getDay(dayId);
     if (day.tripId !== tripId)
       throw new AppError(404, "NOT_FOUND", "日期不属于此行程");
     return day;
@@ -110,13 +126,13 @@ export function createMcpServer(principal: McpPrincipal) {
     return item;
   }
   function dayResult(dayId: string) {
-    const day = s.getDay(dayId);
+    const day = getDay(dayId);
     return { day, timeline: calculateTimeline(day) };
   }
   function itinerary(tripId: string) {
     const role = mcpAccess(principal, tripId).role;
     return {
-      trip: s.getTrip(tripId),
+      trip: getTrip(tripId),
       role,
       days: many<Day>(
         "SELECT * FROM days WHERE tripId=? ORDER BY position",
@@ -130,7 +146,7 @@ export function createMcpServer(principal: McpPrincipal) {
   }
   function finances(tripId: string) {
     mcpAccess(principal, tripId);
-    const data = s.snapshot(tripId, user);
+    const data = snapshot(tripId, user);
     return {
       tripId,
       baseCurrency: data.trip.baseCurrency,
@@ -163,8 +179,7 @@ export function createMcpServer(principal: McpPrincipal) {
     {},
     false,
     () => ({
-      trips: s
-        .listTrips(user)
+      trips: listTrips(user)
         .filter((entry) => !principal.tripId || entry.id === principal.tripId),
       permission: principal.permission,
     }),
@@ -174,7 +189,7 @@ export function createMcpServer(principal: McpPrincipal) {
     "读取行程设置、全部日期、事项、路线、推算时间线和地点池。",
     trip,
     false,
-    ({ tripId }) => s.tx(() => itinerary(tripId)),
+    ({ tripId }) => tx(() => itinerary(tripId)),
   );
   register(
     "get_day",
@@ -182,10 +197,10 @@ export function createMcpServer(principal: McpPrincipal) {
     day,
     false,
     ({ tripId, dayId }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId);
         dayInTrip(tripId, dayId);
-        return { trip: s.getTrip(tripId), ...dayResult(dayId) };
+        return { trip: getTrip(tripId), ...dayResult(dayId) };
       }),
   );
   register(
@@ -201,9 +216,9 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, expectedVersion, changes }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
-        s.editTrip(tripId, user, { ...changes, expectedVersion });
+        editTrip(tripId, user, { ...changes, expectedVersion });
         return itinerary(tripId);
       }),
   );
@@ -217,10 +232,10 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, dayId, ...data }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
         dayInTrip(tripId, dayId);
-        s.editDay(dayId, user, data);
+        editDay(dayId, user, data);
         return dayResult(dayId);
       }),
   );
@@ -234,10 +249,10 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, dayId, expectedDayVersion, item }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
-        s.checkVersion(dayInTrip(tripId, dayId), expectedDayVersion);
-        const created = s.createItem(dayId, user, item);
+        checkVersion(dayInTrip(tripId, dayId), expectedDayVersion);
+        const created = createItem(dayId, user, item);
         return { ...created, ...dayResult(dayId) };
       }),
     { destructive: false },
@@ -258,10 +273,10 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, itemId, expectedVersion, changes }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
         const item = itemInTrip(tripId, itemId);
-        s.editItem(itemId, user, { ...changes, expectedVersion });
+        editItem(itemId, user, { ...changes, expectedVersion });
         return dayResult(item.dayId);
       }),
   );
@@ -274,10 +289,10 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, itemId, expectedVersion }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
         const item = itemInTrip(tripId, itemId);
-        s.deleteItem(itemId, user, expectedVersion);
+        deleteItem(itemId, user, expectedVersion);
         return { deleted: true, ...dayResult(item.dayId) };
       }),
   );
@@ -291,10 +306,10 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, dayId, ...data }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
         dayInTrip(tripId, dayId);
-        s.reorder(dayId, user, data);
+        reorder(dayId, user, data);
         return dayResult(dayId);
       }),
   );
@@ -311,7 +326,7 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, itemId, ...data }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
         const item = itemInTrip(tripId, itemId);
         dayInTrip(tripId, data.dayId);
@@ -329,9 +344,9 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, ...data }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
-        s.reorderDays(tripId, user, data);
+        reorderDays(tripId, user, data);
         return itinerary(tripId);
       }),
   );
@@ -345,13 +360,13 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, legId, ...data }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
         const leg = requireValue(
           one<Leg>("SELECT * FROM travel_legs WHERE id=?", legId),
         );
         dayInTrip(tripId, leg.dayId);
-        s.editLeg(legId, user, data);
+        editLeg(legId, user, data);
         return dayResult(leg.dayId);
       }),
   );
@@ -396,7 +411,7 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, place }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
         return savePoolPlace(tripId, user, place);
       }),
@@ -414,7 +429,7 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, placeId, ...data }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
         dayInTrip(tripId, data.dayId);
         const created = schedulePlace(tripId, placeId, user, data);
@@ -427,7 +442,7 @@ export function createMcpServer(principal: McpPrincipal) {
     "读取行程费用、分摊明细、参与者 ID、实际结算记录和余额；currencies 给出各币种小数位。费用记录含最新 version。",
     trip,
     false,
-    ({ tripId }) => s.tx(() => finances(tripId)),
+    ({ tripId }) => tx(() => finances(tripId)),
   );
   register(
     "get_balances",
@@ -435,11 +450,11 @@ export function createMcpServer(principal: McpPrincipal) {
     trip,
     false,
     ({ tripId }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId);
         return {
-          baseCurrency: s.getTrip(tripId).baseCurrency,
-          ...s.balances(tripId, user),
+          baseCurrency: getTrip(tripId).baseCurrency,
+          ...balances(tripId, user),
         };
       }),
   );
@@ -468,9 +483,9 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, expense }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
-        const created = s.saveExpense(tripId, user, expense);
+        const created = saveExpense(tripId, user, expense);
         return { ...created, ...finances(tripId) };
       }),
     { destructive: false },
@@ -486,9 +501,9 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, expenseId, expectedVersion, expense }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
-        s.saveExpense(tripId, user, { ...expense, expectedVersion }, expenseId);
+        saveExpense(tripId, user, { ...expense, expectedVersion }, expenseId);
         return finances(tripId);
       }),
   );
@@ -502,7 +517,7 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, expenseId, expectedVersion }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
         requireValue(
           one(
@@ -511,7 +526,7 @@ export function createMcpServer(principal: McpPrincipal) {
             tripId,
           ),
         );
-        s.deleteExpense(expenseId, user, expectedVersion);
+        deleteExpense(expenseId, user, expectedVersion);
         return { deleted: true, ...finances(tripId) };
       }),
   );
@@ -524,9 +539,9 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, settlement }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
-        const created = s.createSettlement(tripId, user, settlement);
+        const created = createSettlement(tripId, user, settlement);
         return { ...created, ...finances(tripId) };
       }),
     { destructive: false },
@@ -541,7 +556,7 @@ export function createMcpServer(principal: McpPrincipal) {
     },
     true,
     ({ tripId, settlementId, expectedVersion }) =>
-      s.tx(() => {
+      tx(() => {
         mcpAccess(principal, tripId, true);
         requireValue(
           one(
@@ -550,7 +565,7 @@ export function createMcpServer(principal: McpPrincipal) {
             tripId,
           ),
         );
-        s.deleteSettlement(settlementId, user, expectedVersion);
+        deleteSettlement(settlementId, user, expectedVersion);
         return { deleted: true, ...finances(tripId) };
       }),
   );

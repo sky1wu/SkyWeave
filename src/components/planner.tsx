@@ -1,25 +1,10 @@
 "use client";
 import { useConfirmation } from "./confirmation";
 import { Button } from "./ui/button";
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  DndContext,
-  DragOverlay,
-  closestCenter,
-  pointerWithin,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  useDroppable,
-  type DragEndEvent,
-  type DragOverEvent,
-  type CollisionDetection,
-} from "@dnd-kit/core";
+import { useRef, useState } from "react";
+import { DndContext, DragOverlay, useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
-  sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import {
@@ -34,19 +19,13 @@ import {
   LocateFixed,
   TrainFront,
 } from "lucide-react";
-import { api, ApiFailure } from "@/lib/client";
-import type {
-  DayPlan,
-  Item,
-  PoolPlace,
-  Expense,
-  TripSnapshot,
-} from "@/domain/types";
+import { ApiFailure } from "@/lib/client";
+import type { DayPlan, Item, Expense, TripSnapshot } from "@/domain/types";
 import { calculateTimeline } from "@/domain/timeline";
 import { formatMoney } from "@/domain/money";
 import { placeCategories } from "@/domain/planning";
 import { ItemEditor, itemPayload, TimeField, readTime } from "./item-editor";
-import { TripMap, type MapFocus, type MapInsets } from "./map";
+import { TripMap, type MapFocus } from "./map";
 import { LegCard } from "./leg-card";
 import { TimelineItem } from "./timeline-item";
 import { DayTabs } from "./day-tabs";
@@ -54,15 +33,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { TransportEditor } from "./transport-editor";
 import { PlacePool, PoolPlaceEditor } from "./place-pool";
 import { ErrorText, Modal } from "./ui";
-export type Mutate = <T = { id: string }>(
-  path: string,
-  method: string,
-  data: unknown,
-) => Promise<T>;
-interface DropTarget {
-  dayId: string;
-  beforeItemId: string | null;
-}
+import { useDayNavigation } from "./planner/use-day-navigation";
+import { useMapFocus } from "./planner/use-map-focus";
+import { usePlannerDnD } from "./planner/use-planner-dnd";
+import { useRouteRecalculation } from "./planner/use-route-recalculation";
+import type { DropTarget, Mutate, PlannerView } from "./planner/types";
+
+export type { Mutate } from "./planner/types";
 function DaySection({
   day,
   active,
@@ -155,22 +132,6 @@ function DaySection({
     </section>
   );
 }
-const collision: CollisionDetection = (args) => {
-  const eligible = {
-    ...args,
-    droppableContainers: args.droppableContainers.filter(
-      (container) =>
-        args.active.data.current?.kind === "pool" ||
-        container.data.current?.kind !== "pool",
-    ),
-  };
-  if (!args.pointerCoordinates) return closestCenter(eligible);
-  const hits = pointerWithin(eligible).filter(
-    (hit) => hit.id !== args.active.id,
-  );
-  const items = hits.filter((hit) => !String(hit.id).startsWith("day:"));
-  return items.length ? items : hits;
-};
 export function Planner({
   snapshot,
   mutate,
@@ -198,232 +159,87 @@ export function Planner({
     } | null>(null),
     [point, setPoint] = useState<{ lat: number; lng: number } | null>(null),
     [picking, setPicking] = useState(false),
-    [view, setView] = useState<"pool" | "timeline" | "map">("timeline"),
+    [view, setView] = useState<PlannerView>("timeline"),
     [error, setError] = useState(""),
-    [routing, setRouting] = useState(false),
     [dayEditor, setDayEditor] = useState<DayPlan | null>(null),
     [compactItems, setCompactItems] = useState(false),
-    [focus, setFocus] = useState<MapFocus | null>(null),
-    [dragTitle, setDragTitle] = useState<string | null>(null),
-    [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+    [focus, setFocus] = useState<MapFocus | null>(null);
   const [poolCollapsed, setPoolCollapsed] = useState(false),
-    [timelineCollapsed, setTimelineCollapsed] = useState(false),
-    [mapInsets, setMapInsets] = useState<MapInsets>([48, 42, 48, 48]);
+    [timelineCollapsed, setTimelineCollapsed] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
-  const timelineRef = useRef<HTMLDivElement>(null),
-    focusSequence = useRef(0),
-    interactionSequence = useRef(0),
-    navigationLock = useRef(false),
-    navigationTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-      undefined,
-    ),
-    scrollFrame = useRef<number | null>(null);
   const day =
-    snapshot.days.find((d) => d.id === selectedDay) ?? snapshot.days[0];
+    snapshot.days.find((candidate) => candidate.id === selectedDay) ??
+    snapshot.days[0];
   const editable = snapshot.role !== "viewer";
   const categories = [
     ...new Set([
       ...placeCategories,
-      ...snapshot.poolPlaces.map((p) => p.placeCategory),
-      ...snapshot.days.flatMap((d) => d.items.map((i) => i.placeCategory)),
+      ...snapshot.poolPlaces.map((place) => place.placeCategory),
+      ...snapshot.days.flatMap((candidate) =>
+        candidate.items.map((item) => item.placeCategory),
+      ),
     ]),
   ];
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 7 } }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 250, tolerance: 8 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
-  const current = useRef({ refresh, days: snapshot.days });
-  const routedVersions = useRef(new globalThis.Map<string, number>()),
-    routeJobs = useRef(0);
-  useEffect(() => {
-    const workspace = workspaceRef.current;
-    if (!workspace) return;
-    let frame = 0;
-    const measure = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const bounds = workspace.getBoundingClientRect();
-        const narrow = bounds.width <= 1000;
-        const next: MapInsets = [
-          narrow ? (view === "map" ? 110 : 70) : 90,
-          40,
-          40,
-          40,
-        ];
-        for (const panel of workspace.querySelectorAll<HTMLElement>(
-          ".floating-panel",
-        )) {
-          const rect = panel.getBoundingClientRect();
-          if (!rect.width || !rect.height || panel.dataset.collapsed === "true")
-            continue;
-          if (narrow) {
-            if (panel.classList.contains("floating-timeline"))
-              next[1] = bounds.bottom - rect.top + 20;
-            else next[0] = rect.bottom - bounds.top + 20;
-          } else if (panel.classList.contains("floating-timeline"))
-            next[2] = rect.right - bounds.left + 30;
-          else next[3] = bounds.right - rect.left + 30;
-        }
-        // Both mobile lists may be open for dragging; retain a usable camera extent.
-        const vertical = Math.max(1, bounds.height - 140);
-        if (next[0] + next[1] > vertical) {
-          const ratio = vertical / (next[0] + next[1]);
-          next[0] *= ratio;
-          next[1] *= ratio;
-        }
-        const rounded = next.map(Math.round) as MapInsets;
-        setMapInsets((previous) =>
-          previous.every((v, i) => v === rounded[i]) ? previous : rounded,
-        );
-      });
-    };
-    const observer = new ResizeObserver(measure);
-    observer.observe(workspace);
-    for (const panel of workspace.querySelectorAll(".floating-panel"))
-      observer.observe(panel);
-    measure();
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
-  }, [poolCollapsed, timelineCollapsed, view]);
-  useEffect(() => {
-    current.current = { refresh, days: snapshot.days };
-  }, [refresh, snapshot.days]);
-  const routeRevision = snapshot.days
-    .filter((d) => d.legs.some((l) => l.mode !== "manual"))
-    .map((d) => `${d.id}:${d.version}`)
-    .join("|");
-  useEffect(() => {
-    if (!editable) return;
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      const targets = current.current.days.filter(
-        (d) =>
-          d.legs.some((l) => l.mode !== "manual") &&
-          routedVersions.current.get(d.id) !== d.version,
-      );
-      if (!targets.length) return;
-      routeJobs.current++;
-      setRouting(true);
-      try {
-        for (const target of targets) {
-          if (cancelled) break;
-          routedVersions.current.set(target.id, target.version);
-          try {
-            await api(`/days/${target.id}/routes/recalculate`, "POST", {});
-          } catch (e) {
-            routedVersions.current.delete(target.id);
-            throw e;
-          }
-        }
-        await current.current.refresh();
-      } catch (e) {
-        if (e instanceof ApiFailure && e.status === 409)
-          await current.current.refresh();
-        else if (!cancelled) setError((e as Error).message);
-      } finally {
-        routeJobs.current--;
-        setRouting(routeJobs.current > 0);
-      }
-    }, 500);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [routeRevision, editable]);
-  useEffect(() => {
-    const timer = setTimeout(
-      () => window.dispatchEvent(new Event("resize")),
-      30,
-    );
-    return () => clearTimeout(timer);
-  }, [view]);
-  useEffect(
-    () => () => {
-      clearTimeout(navigationTimer.current);
-      if (scrollFrame.current !== null)
-        cancelAnimationFrame(scrollFrame.current);
-    },
-    [],
-  );
-  function followScroll() {
-    if (scrollFrame.current !== null) return;
-    scrollFrame.current = requestAnimationFrame(() => {
-      scrollFrame.current = null;
-      if (navigationLock.current) return;
-      const pane = timelineRef.current;
-      if (!pane) return;
-      const top = pane.getBoundingClientRect().top,
-        sections = [...pane.querySelectorAll<HTMLElement>(".planner-day")];
-      let current: HTMLElement | undefined = sections[0];
-      for (const section of sections) {
-        if (section.getBoundingClientRect().top <= top + 75) current = section;
-        else break;
-      }
-      if (
-        pane.scrollHeight > pane.clientHeight + 2 &&
-        pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 2
-      )
-        current = sections.at(-1);
-      const id = current?.dataset.dayId;
-      if (id && id !== day?.id) {
-        setSelectedDay(id);
-        setFocus(null);
-      }
-    });
-  }
-  function jumpToDay(id: string) {
-    interactionSequence.current++;
-    navigationLock.current = true;
-    clearTimeout(navigationTimer.current);
-    navigationTimer.current = setTimeout(() => {
-      navigationLock.current = false;
-    }, 1000);
-    setSelectedDay(id);
-    setFocus(null);
-    setView("timeline");
-    setTimelineCollapsed(false);
-    requestAnimationFrame(() => {
-      const pane = timelineRef.current,
-        section = document.getElementById(`day-${id}`);
-      if (!pane || !section) return;
-      const top = Math.max(
-        0,
-        Math.min(
-          pane.scrollHeight - pane.clientHeight,
-          pane.scrollTop +
-            section.getBoundingClientRect().top -
-            pane.getBoundingClientRect().top,
-        ),
-      );
-      if (Math.abs(pane.scrollTop - top) > 1)
-        pane.scrollTo({ top, behavior: "smooth" });
-    });
-  }
-  const select = useCallback((item: Item) => {
-    interactionSequence.current++;
-    navigationLock.current = true;
-    clearTimeout(navigationTimer.current);
-    navigationTimer.current = setTimeout(() => {
-      navigationLock.current = false;
-    }, 1000);
-    setSelectedPool(null);
-    setSelected(item.id);
-    setSelectedDay(item.dayId);
-    setTimelineCollapsed(false);
-    setView("timeline");
-    requestAnimationFrame(() =>
-      document
-        .getElementById(`item-${item.id}`)
-        ?.scrollIntoView({ behavior: "smooth", block: "nearest" }),
-    );
-  }, []);
+  const {
+    timelineRef,
+    followScroll,
+    jumpToDay,
+    selectItem,
+    lockNavigation,
+    markInteraction,
+    isLatestInteraction,
+    releaseNavigationLock,
+  } = useDayNavigation({
+    activeDayId: day?.id,
+    setSelectedDay,
+    setSelected,
+    setSelectedPool,
+    setFocus,
+    setView,
+    setTimelineCollapsed,
+  });
+  const { mapInsets, focusLeg, locate, focusItem, focusDay } = useMapFocus({
+    workspaceRef,
+    poolCollapsed,
+    timelineCollapsed,
+    view,
+    setFocus,
+    setSelected,
+    setSelectedDay,
+    setSelectedPool,
+    setView,
+    setError,
+    lockNavigation,
+    markInteraction,
+  });
+  const routing = useRouteRecalculation({
+    days: snapshot.days,
+    editable,
+    refresh,
+    setError,
+  });
+  const {
+    sensors,
+    collision,
+    dragTitle,
+    dropTarget,
+    schedule,
+    transfer,
+    reorderPool,
+    move,
+    dragStart,
+    dragOver,
+    dragCancel,
+    dragEnd,
+  } = usePlannerDnD({
+    snapshot,
+    mutate,
+    act,
+    setSelected,
+    setSelectedDay,
+    markInteraction,
+    isLatestInteraction,
+  });
   async function act(fn: () => Promise<unknown>) {
     setError("");
     try {
@@ -432,170 +248,6 @@ export function Planner({
       setError((e as Error).message);
       if (e instanceof ApiFailure && e.status === 409) await refresh();
     }
-  }
-  function focusLeg(targetDay: DayPlan, legId: string) {
-    interactionSequence.current++;
-    navigationLock.current = true;
-    clearTimeout(navigationTimer.current);
-    navigationTimer.current = setTimeout(() => {
-      navigationLock.current = false;
-    }, 1000);
-    setSelectedPool(null);
-    setSelectedDay(targetDay.id);
-    if (window.innerWidth <= 1000) setView("timeline");
-    setFocus({ kind: "leg", id: legId, request: ++focusSequence.current });
-  }
-  function locate(place: PoolPlace) {
-    interactionSequence.current++;
-    if (place.lat === null || place.lng === null) {
-      setError("该地点没有坐标，可在地点池中编辑补充");
-      return;
-    }
-    setSelected(null);
-    setSelectedPool(place.id);
-    setFocus({
-      kind: "point",
-      title: place.title,
-      poolPlaceId: place.id,
-      category: place.placeCategory,
-      lat: place.lat,
-      lng: place.lng,
-      request: ++focusSequence.current,
-    });
-    setView("map");
-  }
-  async function schedule(
-    place: PoolPlace,
-    targetDay: DayPlan,
-    beforeItemId: string | null = null,
-  ) {
-    const interaction = ++interactionSequence.current;
-    setSelectedDay(targetDay.id);
-    const created = await mutate(
-      `/trips/${snapshot.trip.id}/places/${place.id}/schedule`,
-      "POST",
-      {
-        dayId: targetDay.id,
-        beforeItemId,
-        expectedVersion: place.version,
-        expectedDayVersion: targetDay.version,
-      },
-    );
-    if (interactionSequence.current === interaction) setSelected(created.id);
-    return created;
-  }
-  async function transfer(
-    item: Item,
-    target: DayPlan,
-    beforeItemId: string | null,
-  ) {
-    const source = snapshot.days.find((d) => d.id === item.dayId)!;
-    return mutate(`/items/${item.id}/move`, "POST", {
-      dayId: target.id,
-      beforeItemId,
-      expectedVersion: item.version,
-      expectedSourceDayVersion: source.version,
-      expectedTargetDayVersion: target.version,
-    });
-  }
-  async function reorder(targetDay: DayPlan, ids: string[]) {
-    await mutate(`/days/${targetDay.id}/reorder`, "POST", {
-      expectedVersion: targetDay.version,
-      itemIds: ids,
-    });
-  }
-  async function reorderPool(place: PoolPlace, target: PoolPlace) {
-    if (place.id === target.id) return;
-    const ordered = [...snapshot.poolPlaces];
-    const from = ordered.findIndex((p) => p.id === place.id),
-      to = ordered.findIndex((p) => p.id === target.id);
-    ordered.splice(from, 1);
-    ordered.splice(to, 0, place);
-    await mutate(`/trips/${snapshot.trip.id}/places/reorder`, "POST", {
-      places: ordered.map((p) => ({ id: p.id, expectedVersion: p.version })),
-    });
-  }
-  function move(item: Item, direction: "first" | "last" | "up" | "down") {
-    const targetDay = snapshot.days.find((d) => d.id === item.dayId)!;
-    const ids = targetDay.items.map((i) => i.id),
-      from = ids.indexOf(item.id),
-      to =
-        direction === "first"
-          ? 0
-          : direction === "last"
-            ? ids.length - 1
-            : direction === "up"
-              ? Math.max(0, from - 1)
-              : Math.min(ids.length - 1, from + 1);
-    ids.splice(from, 1);
-    ids.splice(to, 0, item.id);
-    void act(() => reorder(targetDay, ids));
-  }
-  function targetFor(event: DragOverEvent | DragEndEvent): DropTarget | null {
-    if (!event.over) return null;
-    const dayId = event.over.data.current?.dayId as string | undefined;
-    const targetDay = snapshot.days.find((d) => d.id === dayId);
-    if (!targetDay) return null;
-    if (event.over.data.current?.kind === "item")
-      return { dayId: targetDay.id, beforeItemId: String(event.over.id) };
-    const activator = event.activatorEvent;
-    const y =
-      activator instanceof MouseEvent
-        ? activator.clientY + event.delta.y
-        : event.active.rect.current.translated
-          ? event.active.rect.current.translated.top +
-            event.active.rect.current.translated.height / 2
-          : Infinity;
-    const before = targetDay.items.find((item) => {
-      if (item.id === event.active.id) return false;
-      const node = document.getElementById(`item-${item.id}`);
-      return node && node.getBoundingClientRect().bottom > y;
-    });
-    return { dayId: targetDay.id, beforeItemId: before?.id ?? null };
-  }
-  function dragEnd(event: DragEndEvent) {
-    setDragTitle(null);
-    setDropTarget(null);
-    if (
-      event.active.data.current?.kind === "pool" &&
-      event.over?.data.current?.kind === "pool"
-    ) {
-      const place = snapshot.poolPlaces.find(
-          (p) => p.id === event.active.data.current?.placeId,
-        ),
-        target = snapshot.poolPlaces.find(
-          (p) => p.id === event.over?.data.current?.placeId,
-        );
-      if (place && target) void act(() => reorderPool(place, target));
-      return;
-    }
-    const target = targetFor(event);
-    if (!target) return;
-    const targetDay = snapshot.days.find((d) => d.id === target.dayId)!;
-    if (event.active.data.current?.kind === "pool") {
-      const place = snapshot.poolPlaces.find(
-        (p) => p.id === event.active.data.current?.placeId,
-      );
-      if (place)
-        void act(() => schedule(place, targetDay, target.beforeItemId));
-      return;
-    }
-    const item = snapshot.days
-      .flatMap((d) => d.items)
-      .find((i) => i.id === event.active.id);
-    if (!item) return;
-    if (
-      item.dayId === target.dayId &&
-      event.over?.data.current?.kind === "item"
-    ) {
-      const ids = targetDay.items.map((i) => i.id),
-        from = ids.indexOf(item.id),
-        to = ids.indexOf(String(event.over.id));
-      if (from === to) return;
-      ids.splice(from, 1);
-      ids.splice(to, 0, item.id);
-      void act(() => reorder(targetDay, ids));
-    } else void act(() => transfer(item, targetDay, target.beforeItemId));
   }
   return (
     <>
@@ -611,14 +263,9 @@ export function Planner({
       <DndContext
         sensors={sensors}
         collisionDetection={collision}
-        onDragStart={(event) =>
-          setDragTitle(String(event.active.data.current?.title ?? "地点"))
-        }
-        onDragOver={(event) => setDropTarget(targetFor(event))}
-        onDragCancel={() => {
-          setDragTitle(null);
-          setDropTarget(null);
-        }}
+        onDragStart={dragStart}
+        onDragOver={dragOver}
+        onDragCancel={dragCancel}
         onDragEnd={dragEnd}
       >
         <div
@@ -656,11 +303,7 @@ export function Planner({
               className="map-overview"
               aria-label="查看当天全图"
               title="查看当天全图"
-              onClick={() => {
-                setSelected(null);
-                setFocus({ kind: "day", request: ++focusSequence.current });
-                setView("map");
-              }}
+              onClick={focusDay}
             >
               <LocateFixed size={17} />
             </button>
@@ -765,13 +408,13 @@ export function Planner({
                   select={jumpToDay}
                   reorder={(dayIds) =>
                     act(async () => {
-                      const interaction = ++interactionSequence.current;
+                      const interaction = markInteraction();
                       await mutate(
                         `/trips/${snapshot.trip.id}/days/reorder`,
                         "POST",
                         { expectedVersion: snapshot.trip.version, dayIds },
                       );
-                      if (day && interactionSequence.current === interaction)
+                      if (day && isLatestInteraction(interaction))
                         jumpToDay(day.id);
                     })
                   }
@@ -791,15 +434,9 @@ export function Planner({
                 className="timeline-pane continuous-timeline"
                 data-compact={compactItems}
                 onScroll={followScroll}
-                onWheel={() => {
-                  navigationLock.current = false;
-                }}
-                onTouchStart={() => {
-                  navigationLock.current = false;
-                }}
-                onPointerDown={() => {
-                  navigationLock.current = false;
-                }}
+                onWheel={releaseNavigationLock}
+                onTouchStart={releaseNavigationLock}
+                onPointerDown={releaseNavigationLock}
                 aria-label="连续行程时间线"
               >
                 {snapshot.days.map((targetDay, dayIndex) => {
@@ -877,12 +514,8 @@ export function Planner({
                                 selected={selected === item.id}
                                 editable={editable}
                                 select={() => {
-                                  select(item);
-                                  setFocus({
-                                    kind: "item",
-                                    id: item.id,
-                                    request: ++focusSequence.current,
-                                  });
+                                  selectItem(item);
+                                  focusItem(item);
                                 }}
                                 edit={() =>
                                   setEditing({ dayId: targetDay.id, item })
@@ -970,7 +603,7 @@ export function Planner({
               pool={snapshot.poolPlaces}
               selectedPool={selectedPool}
               selectPool={(place) => {
-                interactionSequence.current++;
+                markInteraction();
                 setSelected(null);
                 setSelectedPool(place.id);
                 setPoolReveal((n) => n + 1);
@@ -981,7 +614,7 @@ export function Planner({
               focus={focus}
               view={view}
               insets={mapInsets}
-              select={select}
+              select={selectItem}
               picking={picking}
               pick={(p) => {
                 setPoint(p);

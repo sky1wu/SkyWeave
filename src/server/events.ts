@@ -1,5 +1,5 @@
-import type { Actor } from "./service";
-import { access } from "./service";
+import type { Actor } from "./service-core";
+import { access } from "./service-core";
 import { many, one } from "./db";
 export function events(
   tripId: string,

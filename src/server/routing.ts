@@ -12,7 +12,7 @@ import {
   uid,
   type Actor,
   touchDay,
-} from "./service";
+} from "./service-core";
 import { one, insert, run, update } from "./db";
 import { AppError, conflict, requireValue } from "./errors";
 

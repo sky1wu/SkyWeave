@@ -1,6 +1,6 @@
 import { auth } from "./auth";
 import { AppError } from "./errors";
-import type { Actor } from "./service";
+import type { Actor } from "./service-core";
 export async function actor(request: Request): Promise<Actor> {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session) throw new AppError(401, "UNAUTHORIZED", "请先登录");
