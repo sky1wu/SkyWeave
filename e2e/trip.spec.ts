@@ -1200,6 +1200,92 @@ test("SkyWeave：精简排序、日历拖动、自动路线、分类和城市选
   });
 });
 
+test("事项时间：结束时间与停留时长双向同步、跨日和保存", async ({ page }) => {
+  await register(page, "ItemTiming");
+  const id = await createTrip(page, "事项时间联动");
+  const snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  const item = await call<{ id: string }>(
+    page,
+    `/days/${snapshot.days[0].id}/items`,
+    "POST",
+    {
+      title: "晚间活动",
+      type: "event",
+      fixedTime: true,
+      startMinutes: 1140,
+      endMinutes: 1260,
+      stayMinutes: 0,
+    },
+  );
+  const card = page.getByTestId(`item-${item.id}`);
+  await card.getByRole("button", { name: "编辑", exact: true }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "编辑行程事项",
+    exact: true,
+  });
+  const start = dialog.getByLabel("开始时间", { exact: true });
+  const end = dialog.getByLabel("结束时间", { exact: true });
+  const endDay = dialog.getByLabel("结束时间日期", { exact: true });
+  const stay = dialog.getByLabel("停留时间（分钟）", { exact: true });
+  const save = dialog.getByRole("button", { name: "保存事项", exact: true });
+
+  await expect(stay).toHaveValue("120");
+  await end.fill("21:30");
+  await expect(stay).toHaveValue("150");
+  await stay.fill("90");
+  await expect(end).toHaveValue("20:30");
+  await stay.fill("0");
+  await expect(end).toHaveValue("19:00");
+  await end.fill("18:00");
+  await expect(dialog).toContainText("结束时间不能早于开始时间");
+  await expect(save).toBeDisabled();
+
+  await stay.fill("360");
+  await expect(end).toHaveValue("01:00");
+  await expect(endDay).toHaveValue("1");
+  await endDay.selectOption("2");
+  await expect(stay).toHaveValue("1800");
+  await endDay.selectOption("1");
+  await end.fill("02:00");
+  await expect(stay).toHaveValue("420");
+  await start.fill("20:00");
+  await expect(stay).toHaveValue("360");
+  await save.click();
+  await expect(dialog).not.toBeVisible();
+  expect(
+    (await call<TripSnapshot>(page, `/trips/${id}`)).days[0].items[0],
+  ).toMatchObject({ startMinutes: 1200, endMinutes: 1560, stayMinutes: 360 });
+  await expect(card).toContainText("停留 360 分钟");
+
+  await page.reload();
+  await card.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(end).toHaveValue("02:00");
+  await expect(endDay).toHaveValue("1");
+  await expect(stay).toHaveValue("360");
+  await end.fill("");
+  await expect(stay).toHaveValue("360");
+  await end.fill("01:00");
+  await expect(stay).toHaveValue("300");
+  await start.fill("");
+  await expect(end).toHaveValue("");
+  await stay.fill("90");
+  await expect(end).toHaveValue("");
+  await dialog.getByLabel("开始时间日期", { exact: true }).selectOption("1");
+  await start.fill("23:00");
+  await expect(end).toHaveValue("00:30");
+  await expect(endDay).toHaveValue("2");
+  await stay.fill("");
+  await expect(end).toHaveValue("");
+  await stay.fill("120");
+  await expect(end).toHaveValue("01:00");
+  await expect(endDay).toHaveValue("2");
+  await save.click();
+  await expect(dialog).not.toBeVisible();
+  expect(
+    (await call<TripSnapshot>(page, `/trips/${id}`)).days[0].items[0],
+  ).toMatchObject({ startMinutes: 2820, endMinutes: 2940, stayMinutes: 120 });
+});
+
 test("组件库交互：嵌套下拉、焦点返回、删除确认和手机抽屉", async ({ page }) => {
   await register(page, "Components");
   const id = await createTrip(page, "组件交互");
@@ -1292,12 +1378,20 @@ test("组件库交互：嵌套下拉、焦点返回、删除确认和手机抽�
     .check();
   await sheet.getByLabel("开始时间", { exact: true }).fill("09:00");
   await sheet.getByLabel("结束时间", { exact: true }).fill("10:00");
+  await expect(
+    sheet.getByLabel("停留时间（分钟）", { exact: true }),
+  ).toHaveValue("60");
   await sheet.getByRole("button", { name: "保存事项", exact: true }).click();
   await expect(sheet).not.toBeVisible();
   await expect(page.locator(".item-title")).toHaveText("手机事项");
   expect(
     (await call<TripSnapshot>(page, `/trips/${id}`)).days[0].items[0],
-  ).toMatchObject({ fixedTime: true, startMinutes: 540, endMinutes: 600 });
+  ).toMatchObject({
+    fixedTime: true,
+    startMinutes: 540,
+    endMinutes: 600,
+    stayMinutes: 60,
+  });
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
