@@ -74,6 +74,53 @@ describe("coordinate boundaries", () => {
     expect(p.phone).toBeUndefined();
   });
 });
+describe.each([
+  ["search", "/v5/place/text", "region", "city_limit"],
+  ["autocomplete", "/v3/assistant/inputtips", "city", "citylimit"],
+] as const)(
+  "place %s city scope",
+  (method, path, cityParameter, limitParameter) => {
+    it.each([
+      ["香港", "810000"],
+      [" 香港特别行政区 ", "810000"],
+      ["澳门", "820000"],
+      ["澳门特别行政区", "820000"],
+      ["台北", "2958"],
+      ["台北市", "2958"],
+      ["台中", "2945"],
+      ["高雄", "2951"],
+      ["台南", "2950"],
+      ["深圳", "深圳"],
+      ["440300", "440300"],
+      ["", null],
+      ["  ", null],
+    ])(
+      "restricts results only when a city is selected (%j)",
+      async (city, expectedCity) => {
+        vi.stubEnv("AMAP_TEST_MODE", "0");
+        const fetcher = vi.fn<(url: URL) => Promise<Response>>(async () =>
+          Response.json({
+            status: "1",
+            infocode: "10000",
+            pois: [],
+            tips: [],
+          }),
+        );
+        const service = new AmapService(new AmapClient(config, fetcher));
+
+        await expect(service[method]("MUJI", city)).resolves.toEqual([]);
+
+        const url = fetcher.mock.calls[0][0];
+        expect(url.pathname).toBe(path);
+        expect(url.searchParams.get("keywords")).toBe("MUJI");
+        expect(url.searchParams.get(cityParameter)).toBe(expectedCity);
+        expect(url.searchParams.get(limitParameter)).toBe(
+          expectedCity ? "true" : null,
+        );
+      },
+    );
+  },
+);
 describe("place autocomplete", () => {
   it("includes transit stations alongside POIs and skips suggestions without usable locations", async () => {
     vi.stubEnv("AMAP_TEST_MODE", "0");
@@ -109,7 +156,7 @@ describe("place autocomplete", () => {
     const url = fetcher.mock.calls[0][0];
     expect(url.pathname).toBe("/v3/assistant/inputtips");
     expect(url.searchParams.get("keywords")).toBe("九龙塘(地铁站)");
-    expect(url.searchParams.get("city")).toBe("香港");
+    expect(url.searchParams.get("city")).toBe("810000");
     expect(url.searchParams.get("datatype")?.split("|")).toEqual([
       "poi",
       "bus",

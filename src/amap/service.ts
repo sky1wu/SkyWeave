@@ -16,6 +16,21 @@ import { ApiError } from "./errors";
 import type { Place, RouteRequest } from "./requests";
 import { mockPlaces, mockRoutes } from "./test-provider";
 
+// AMap silently ignores these city names in place search/inputtips, even with
+// city limits enabled. Use the codes confirmed by its search/regeocoding APIs.
+const searchCityCodes = new Map([
+  ["香港", "810000"],
+  ["澳门", "820000"],
+  ["台北", "2958"],
+  ["台中", "2945"],
+  ["高雄", "2951"],
+  ["台南", "2950"],
+]);
+function normalizeSearchCity(city: string) {
+  const value = city.trim();
+  return searchCityCodes.get(value.replace(/(?:特别行政区|市)$/, "")) ?? value;
+}
+
 export class AmapService {
   private cache = new TtlCache<unknown>(300);
   private pending = new Map<string, Promise<unknown>>();
@@ -65,11 +80,12 @@ export class AmapService {
   search(q: string, city = ""): Promise<Place[]> {
     if (process.env.AMAP_TEST_MODE === "1")
       return Promise.resolve(mockPlaces(q));
+    city = normalizeSearchCity(city);
     return this.cached(`search:${q}:${city}`, 120000, async () =>
       (
         await this.client.search({
           keywords: q,
-          ...(city ? { region: city } : {}),
+          ...(city ? { region: city, city_limit: "true" } : {}),
           show_fields: "business",
           page_size: "20",
         })
@@ -98,10 +114,11 @@ export class AmapService {
   autocomplete(q: string, city = ""): Promise<Place[]> {
     if (process.env.AMAP_TEST_MODE === "1")
       return Promise.resolve(mockPlaces(q));
+    city = normalizeSearchCity(city);
     return this.cached(`tips:${q}:${city}`, 30000, async () => {
       const result = await this.client.autocomplete({
         keywords: q,
-        ...(city ? { city } : {}),
+        ...(city ? { city, citylimit: "true" } : {}),
         // Metro and bus stations are excluded by AMap's POI-only suggestions.
         datatype: "poi|bus",
       });
