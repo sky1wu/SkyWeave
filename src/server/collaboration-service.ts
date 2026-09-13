@@ -79,6 +79,58 @@ export function editParticipant(
     return { id: participantId };
   });
 }
+export function deleteParticipant(
+  tripId: string,
+  participantId: string,
+  actor: Actor,
+  expected: number,
+) {
+  return tx(() => {
+    access(tripId, actor, "owner");
+    const p = requireValue(
+      one<Participant>(
+        "SELECT * FROM trip_participants WHERE id=? AND tripId=?",
+        participantId,
+        tripId,
+      ),
+    );
+    checkVersion(p, expected);
+    if (p.userId)
+      throw new AppError(
+        400,
+        "VALIDATION",
+        "已注册同行者请通过成员管理移出行程",
+      );
+    if (
+      one("SELECT id FROM expenses WHERE payerParticipantId=? LIMIT 1", p.id) ||
+      one(
+        "SELECT id FROM expense_splits WHERE participantId=? LIMIT 1",
+        p.id,
+      ) ||
+      one(
+        "SELECT id FROM settlements WHERE fromParticipantId=? OR toParticipantId=? LIMIT 1",
+        p.id,
+        p.id,
+      )
+    )
+      throw new AppError(
+        400,
+        "PARTICIPANT_HAS_RECORDS",
+        "此同行者已有费用或结算记录，无法删除，请改用停用以保留历史账目",
+      );
+    run("DELETE FROM trip_invites WHERE participantId=?", p.id);
+    run("DELETE FROM trip_participants WHERE id=?", p.id);
+    log(
+      tripId,
+      actor,
+      "member.updated",
+      "participant",
+      p.id,
+      `删除了同行者「${p.name}」`,
+    );
+    return { deleted: true };
+  });
+}
 export function editMember(
   tripId: string,
   userId: string,

@@ -83,12 +83,15 @@ Day 使用 `position` 排序，`startMinutes` 默认 480。DayItem 使用 `posit
 | PATCH    | `/api/trips/:id/members/:userId`             | owner 修改 role/status，不能移除或降级 owner           |
 | GET/POST | `/api/trips/:id/participants`                | 同行者列表 / 添加未注册同行者                          |
 | PATCH    | `/api/trips/:id/participants/:participantId` | owner 改姓名或停用未注册同行者                         |
+| DELETE   | `/api/trips/:id/participants/:participantId` | owner 删除没有费用或结算记录的未注册同行者及其专属邀请 |
 | GET/POST | `/api/trips/:id/invites`                     | owner 查看邀请 / 创建邀请                              |
 | DELETE   | `/api/trips/:id/invites/:inviteId`           | owner 撤销邀请                                         |
 | POST     | `/api/invites/:token/join`                   | 登录后原子接受邀请                                     |
 | GET      | `/api/trips/:id/events`                      | SSE：`sync`、`change`、`revoked`；重连后客户端取新快照 |
 | GET      | `/api/trips/:id/activity`                    | 最近 200 条活动                                        |
 | GET/POST | `/api/trips/:id/comments`                    | 查看 / 发表纯文本评论                                  |
+
+删除同行者请求为 `{ expectedVersion }`，适用于启用或停用的未注册同行者。已有付款、分摊或结算记录时返回 400 `PARTICIPANT_HAS_RECORDS`，应改用停用以保留历史账目；已绑定账号的同行者通过成员管理移出行程。删除成功后，其专属邀请同步删除并失效。
 
 邀请输入包含 `role: editor | viewer`、可选 `participantId`、`expiresAt`、`maxUses`。默认七天、最多十次；专属邀请固定单次使用。响应中的原始 token 仅在创建时返回，列表不会包含 tokenHash。
 

@@ -12,6 +12,118 @@ beforeAll(() => {
     insert("users", { ...u, createdAt: Date.now(), updatedAt: Date.now() });
 });
 describe("collaborative trip transactions", () => {
+  it.each(["active", "inactive"] as const)(
+    "deletes an %s guest and their dedicated invites without affecting other people",
+    (status) => {
+      const trip = s.createTrip(a, { title: "删除同行者" });
+      const guest = s.createParticipant(trip.id, a, { name: "误添加的同行者" });
+      const other = s.createParticipant(trip.id, a, { name: "保留的同行者" });
+      const invite = s.createInvite(trip.id, a, { participantId: guest.id });
+      const revoked = s.createInvite(trip.id, a, { participantId: guest.id });
+      s.revokeInvite(trip.id, revoked.id, a, 1);
+      const general = s.createInvite(trip.id, a, {});
+      const otherInvite = s.createInvite(trip.id, a, {
+        participantId: other.id,
+      });
+      if (status === "inactive")
+        s.editParticipant(trip.id, guest.id, a, {
+          expectedVersion: 1,
+          status,
+        });
+
+      expect(
+        s.deleteParticipant(trip.id, guest.id, a, status === "active" ? 1 : 2),
+      ).toEqual({ deleted: true });
+      const after = s.snapshot(trip.id, a);
+      expect(after.participants.map((p) => p.id)).not.toContain(guest.id);
+      expect(after.participants).toHaveLength(2);
+      expect(after.participants.map((p) => p.id)).toContain(other.id);
+      expect(after.invites.map((i) => i.id).sort()).toEqual(
+        [general.id, otherInvite.id].sort(),
+      );
+      expect(() => s.joinInvite(invite.token, b)).toThrow("邀请无效");
+      expect(() => s.joinInvite(revoked.token, b)).toThrow("邀请无效");
+      expect(after.activity).toContainEqual(
+        expect.objectContaining({
+          entityType: "participant",
+          entityId: guest.id,
+          summary: "删除了同行者「误添加的同行者」",
+        }),
+      );
+    },
+  );
+  it("restricts guest deletion to the owner, current version, and matching trip", () => {
+    const trip = s.createTrip(a, { title: "删除权限" });
+    s.joinInvite(s.createInvite(trip.id, a, { role: "editor" }).token, b);
+    s.joinInvite(s.createInvite(trip.id, a, { role: "viewer" }).token, c);
+    const guest = s.createParticipant(trip.id, b, { name: "同行者" });
+    const invite = s.createInvite(trip.id, a, { participantId: guest.id });
+    for (const actor of [b, c])
+      expect(() => s.deleteParticipant(trip.id, guest.id, actor, 1)).toThrow(
+        "权限",
+      );
+    const otherTrip = s.createTrip(a, { title: "其他行程" });
+    expect(() => s.deleteParticipant(otherTrip.id, guest.id, a, 1)).toThrow();
+    s.editParticipant(trip.id, guest.id, a, {
+      expectedVersion: 1,
+      name: "已修改",
+    });
+    expect(() => s.deleteParticipant(trip.id, guest.id, a, 1)).toThrow();
+    const before = s.snapshot(trip.id, a);
+    for (const participant of before.participants.filter((p) => p.userId))
+      expect(() =>
+        s.deleteParticipant(trip.id, participant.id, a, participant.version),
+      ).toThrow("成员管理");
+    expect(s.snapshot(trip.id, a)).toEqual(before);
+    expect(before.invites.map((i) => i.id)).toContain(invite.id);
+    s.deleteParticipant(trip.id, guest.id, a, 2);
+  });
+  it.each(["payer", "split", "sender", "recipient"] as const)(
+    "preserves a guest referenced as a ledger %s, including invites and balances",
+    (role) => {
+      const trip = s.createTrip(a, { title: "保留历史账目" });
+      const owner = s.snapshot(trip.id, a).participants[0];
+      const guest = s.createParticipant(trip.id, a, { name: "有账目的同行者" });
+      s.createInvite(trip.id, a, { participantId: guest.id });
+      const expense = role === "payer" || role === "split";
+      const record = expense
+        ? s.saveExpense(trip.id, a, {
+            title: "晚餐",
+            category: "food",
+            amountMinor: 100,
+            currency: "CNY",
+            exchangeRateToBase: "1",
+            payerParticipantId: role === "payer" ? guest.id : owner.id,
+            splitMethod: "equal",
+            splitMeta: [
+              {
+                participantId: role === "split" ? guest.id : owner.id,
+                value: "1",
+              },
+            ],
+            incurredAt: Date.now(),
+          })
+        : s.createSettlement(trip.id, a, {
+            fromParticipantId: role === "sender" ? guest.id : owner.id,
+            toParticipantId: role === "recipient" ? guest.id : owner.id,
+            amountMinor: 100,
+            currency: "CNY",
+            exchangeRateToBase: "1",
+            settledAt: Date.now(),
+          });
+      const before = s.snapshot(trip.id, a);
+      const balances = s.balances(trip.id, a);
+      expect(() => s.deleteParticipant(trip.id, guest.id, a, 1)).toThrow(
+        "请改用停用",
+      );
+      expect(s.snapshot(trip.id, a)).toEqual(before);
+      expect(s.balances(trip.id, a)).toEqual(balances);
+      if (expense) s.deleteExpense(record.id, a, 1);
+      else s.deleteSettlement(record.id, a, 1);
+      s.deleteParticipant(trip.id, guest.id, a, 1);
+      expect(s.snapshot(trip.id, a).participants).toHaveLength(1);
+    },
+  );
   it("rejects expired and revoked invites without consuming a use", () => {
     const trip = s.createTrip(a, { title: "邀请有效期" });
     const now = Date.now();

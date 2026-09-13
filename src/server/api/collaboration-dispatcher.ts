@@ -3,6 +3,7 @@ import {
   addComment,
   createInvite,
   createParticipant,
+  deleteParticipant,
   editMember,
   editParticipant,
   joinInvite,
@@ -29,6 +30,8 @@ export const dispatchCollaboration: ApiDispatcher = ({
     if (method === "POST" && !subId) return createParticipant(id, user, data);
     if (method === "PATCH" && subId)
       return editParticipant(id, subId, user, data);
+    if (method === "DELETE" && subId)
+      return deleteParticipant(id, subId, user, expectedVersion(data));
   } else if (root === "trips" && action === "members") {
     if (method === "GET") return snapshot(id, user).members;
     if (method === "PATCH" && subId) return editMember(id, subId, user, data);

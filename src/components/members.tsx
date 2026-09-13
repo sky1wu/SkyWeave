@@ -4,10 +4,11 @@ import { Label } from "./ui/label";
 import { NativeSelect } from "./ui/native-select";
 import { Button } from "./ui/button";
 import { useState, useEffect } from "react";
-import { UserPlus, Link2, Copy, Users, Mail, Ban } from "lucide-react";
+import { UserPlus, Link2, Copy, Users, Mail, Ban, Trash2 } from "lucide-react";
 import type { TripSnapshot, Participant } from "@/domain/types";
 import type { Mutate } from "./planner";
 import { ErrorText, Modal } from "./ui";
+import { useConfirmation } from "./confirmation";
 export function Members({
   snapshot,
   mutate,
@@ -15,6 +16,8 @@ export function Members({
   snapshot: TripSnapshot;
   mutate: Mutate;
 }) {
+  const { confirm, confirmation } = useConfirmation();
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState(""),
     [newPerson, setNewPerson] = useState(false),
     [invite, setInvite] = useState<Participant | "general" | null>(null),
@@ -36,8 +39,27 @@ export function Members({
       setError((e as Error).message);
     }
   }
+  async function remove(p: Participant) {
+    if (
+      !(await confirm(
+        `删除同行者「${p.name}」？其专属邀请链接将一并失效，此操作无法撤销。`,
+      ))
+    )
+      return;
+    setDeleting(p.id);
+    try {
+      await act(() =>
+        mutate(`/trips/${snapshot.trip.id}/participants/${p.id}`, "DELETE", {
+          expectedVersion: p.version,
+        }),
+      );
+    } finally {
+      setDeleting(null);
+    }
+  }
   return (
     <main className="content-page">
+      {confirmation}
       <div className="page-heading">
         <div>
           <h2 className="section-title">同行成员</h2>
@@ -193,6 +215,18 @@ export function Members({
                       }
                     >
                       {p.status === "active" ? "停用" : "恢复"}
+                    </Button>
+                  )}
+                  {!p.userId && (
+                    <Button
+                      variant="destructive"
+                      type="button"
+                      className="btn danger"
+                      disabled={deleting !== null}
+                      onClick={() => void remove(p)}
+                    >
+                      <Trash2 size={13} />
+                      {deleting === p.id ? "删除中…" : "删除同行者"}
                     </Button>
                   )}
                 </div>

@@ -278,6 +278,99 @@ test("深圳—香港：手动过关、固定活动迟到、同址活动与跨�
   });
 });
 
+test("同行者：添加后可取消或确认删除，保留已有账目", async ({ page }) => {
+  await register(page, "GuestOwner");
+  const id = await createTrip(page, "同行者删除验收");
+  await page.getByRole("link", { name: "成员", exact: true }).click();
+  await page.getByRole("button", { name: "添加同行者", exact: true }).click();
+  await page.getByLabel("同行者姓名").fill("误添加的同行者");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "添加同行者", exact: true })
+    .click();
+  const card = page
+    .locator(".member-card")
+    .filter({ hasText: "误添加的同行者" });
+  await expect(card).toBeVisible();
+  const snapshot = await call<TripSnapshot>(page, `/trips/${id}`);
+  const guest = snapshot.participants.find((p) => !p.userId)!;
+  const invite = await call<{ token: string }>(
+    page,
+    `/trips/${id}/invites`,
+    "POST",
+    {
+      participantId: guest.id,
+    },
+  );
+  await card.getByRole("button", { name: "删除同行者", exact: true }).click();
+  const confirmation = page.getByRole("alertdialog", { name: "确认删除" });
+  await expect(confirmation).toContainText("误添加的同行者");
+  await expect(confirmation).toContainText("专属邀请链接将一并失效");
+  await confirmation.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(card).toBeVisible();
+  expect(
+    (await call<TripSnapshot>(page, `/trips/${id}`)).participants,
+  ).toHaveLength(2);
+  await card.getByRole("button", { name: "删除同行者", exact: true }).click();
+  await confirmation.getByRole("button", { name: "删除", exact: true }).click();
+  await expect(card).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator(".member-card")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "删除同行者" })).toHaveCount(0);
+  const after = await call<TripSnapshot>(page, `/trips/${id}`);
+  expect(after.participants).toHaveLength(1);
+  expect(after.invites).toHaveLength(0);
+  const rejectedInvite = await page.request.post(
+    `${origin}/api/invites/${invite.token}/join`,
+    {
+      headers: { Origin: origin },
+      data: {},
+    },
+  );
+  expect(rejectedInvite.status()).toBe(404);
+
+  const payer = await call<{ id: string }>(
+    page,
+    `/trips/${id}/participants`,
+    "POST",
+    {
+      name: "有账目的同行者",
+    },
+  );
+  await call(page, `/trips/${id}/expenses`, "POST", {
+    title: "晚餐",
+    category: "food",
+    amountMinor: 100,
+    currency: "CNY",
+    exchangeRateToBase: "1",
+    payerParticipantId: payer.id,
+    splitMethod: "equal",
+    splitMeta: [{ participantId: payer.id, value: "1" }],
+    incurredAt: Date.now(),
+  });
+  await page.reload();
+  const payerCard = page
+    .locator(".member-card")
+    .filter({ hasText: "有账目的同行者" });
+  await payerCard
+    .getByRole("button", { name: "删除同行者", exact: true })
+    .click();
+  await confirmation.getByRole("button", { name: "删除", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "请改用停用",
+  );
+  await expect(payerCard).toBeVisible();
+  await expect(
+    payerCard.getByRole("button", { name: "删除同行者" }),
+  ).toBeEnabled();
+  await payerCard.getByRole("button", { name: "停用", exact: true }).click();
+  await expect(payerCard).toContainText("已停用 · 历史账目保留");
+  const retained = await call<TripSnapshot>(page, `/trips/${id}`);
+  expect(retained.expenses).toHaveLength(1);
+  expect(retained.expenses[0].payerParticipantId).toBe(payer.id);
+  expect(retained.expenses[0].splits[0].participantId).toBe(payer.id);
+});
+
 test("多人：邀请、SSE 双向修改、费用分摊、editor 结算、评论与持久化", async ({
   page,
   browser,
