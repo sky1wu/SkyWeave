@@ -179,8 +179,9 @@ export function createMcpServer(principal: McpPrincipal) {
     {},
     false,
     () => ({
-      trips: listTrips(user)
-        .filter((entry) => !principal.tripId || entry.id === principal.tripId),
+      trips: listTrips(user).filter(
+        (entry) => !principal.tripId || entry.id === principal.tripId,
+      ),
       permission: principal.permission,
     }),
   );
