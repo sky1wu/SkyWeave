@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile, writeFile } from "node:fs/promises";
 import type { TripSnapshot } from "../src/domain/types";
+import { registerViaApi } from "./registration";
 
 const origin = "http://127.0.0.1:3100";
 async function call<T>(
@@ -21,7 +22,7 @@ async function call<T>(
   return response.json() as Promise<T>;
 }
 async function register(page: Page) {
-  await call(page, "/auth/sign-up/email", "POST", {
+  await registerViaApi(page, {
     name: "行程查看测试",
     email: `itinerary-${crypto.randomUUID()}@example.test`,
     password: "Trip-test-password-2026",

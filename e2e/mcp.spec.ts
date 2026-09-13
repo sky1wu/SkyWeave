@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { DayPlan, Participant } from "../src/domain/types";
+import { submitRegistrationForm } from "./registration";
 
 test("create a token in settings, edit itinerary and expenses over MCP, and revoke access", async ({
   page,
@@ -11,8 +12,7 @@ test("create a token in settings, edit itinerary and expenses over MCP, and revo
   await page.getByLabel("昵称").fill("MCP 用户");
   await page.getByLabel("邮箱").fill(`mcp-${crypto.randomUUID()}@example.test`);
   await page.getByLabel("密码").fill("Mcp-test-password-2026");
-  await page.getByRole("button", { name: "创建账号", exact: true }).click();
-  await expect(page).toHaveURL(`${origin}/`);
+  await submitRegistrationForm(page);
   const created = await page.request.post("/api/trips", {
     headers: { Origin: origin },
     data: {

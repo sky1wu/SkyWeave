@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { TripSnapshot } from "../src/domain/types";
+import { submitRegistrationForm } from "./registration";
 const origin = "http://127.0.0.1:3100";
 async function register(page: Page, name: string) {
   await page.goto(`${origin}/register`);
@@ -8,27 +9,7 @@ async function register(page: Page, name: string) {
     .getByLabel("邮箱")
     .fill(`${name.toLowerCase()}-${crypto.randomUUID()}@example.test`);
   await page.getByLabel("密码").fill("Trip-test-password-2026");
-  const submit = async () => {
-    const [response] = await Promise.all([
-      page.waitForResponse(
-        (r) =>
-          r.url().endsWith("/api/auth/sign-up/email") &&
-          r.request().method() === "POST",
-      ),
-      page.getByRole("button", { name: "创建账号", exact: true }).click(),
-    ]);
-    return response;
-  };
-  let response = await submit();
-  // The suite uses one local IP; respect the production sign-up rate limit.
-  if (response.status() === 429) {
-    await page.waitForTimeout(
-      Number(response.headers()["retry-after"] ?? 60) * 1000 + 100,
-    );
-    response = await submit();
-  }
-  expect(response.ok()).toBe(true);
-  await expect(page).toHaveURL(`${origin}/`);
+  await submitRegistrationForm(page);
 }
 async function call<T>(
   page: Page,

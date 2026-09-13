@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { TripSnapshot } from "../src/domain/types";
+import { registerViaApi } from "./registration";
 
 const origin = "http://127.0.0.1:3100";
 const password = "Settings-test-password-2026";
@@ -7,11 +8,11 @@ const newPassword = "Settings-new-password-2026";
 
 async function register(page: Page) {
   const email = `settings-${crypto.randomUUID()}@example.test`;
-  const response = await page.request.post("/api/auth/sign-up/email", {
-    headers: { Origin: origin },
-    data: { email, password, name: "旅行者" },
+  await registerViaApi(page, {
+    email,
+    password,
+    name: "旅行者",
   });
-  expect(response.ok()).toBe(true);
   return email;
 }
 
