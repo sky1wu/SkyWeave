@@ -74,6 +74,60 @@ describe("coordinate boundaries", () => {
     expect(p.phone).toBeUndefined();
   });
 });
+describe("place autocomplete", () => {
+  it("includes transit stations alongside POIs and skips suggestions without usable locations", async () => {
+    vi.stubEnv("AMAP_TEST_MODE", "0");
+    const fetcher = vi.fn<(url: URL) => Promise<Response>>(async () =>
+      Response.json({
+        status: "1",
+        infocode: "10000",
+        tips: [
+          { id: [], name: "九龙塘地铁站", location: [] },
+          {
+            id: "BV10321739",
+            name: "九龙塘(地铁站)",
+            district: "香港特别行政区深水埗区",
+            address: "东铁线;观塘线",
+            location: "114.180820,22.334207",
+          },
+          {
+            id: "BX09908969",
+            name: "九龙塘地铁站D出入口",
+            location: "114.181448,22.333742",
+          },
+          {
+            id: "B0KRU14BDW",
+            name: "Kowloon Tong Station",
+            location: "114.183829,22.333201",
+          },
+          { id: "BV00000000", name: "无坐标站点", location: [] },
+        ],
+      }),
+    );
+    const service = new AmapService(new AmapClient(config, fetcher));
+    const places = await service.autocomplete("九龙塘(地铁站)", "香港");
+    const url = fetcher.mock.calls[0][0];
+    expect(url.pathname).toBe("/v3/assistant/inputtips");
+    expect(url.searchParams.get("keywords")).toBe("九龙塘(地铁站)");
+    expect(url.searchParams.get("city")).toBe("香港");
+    expect(url.searchParams.get("datatype")?.split("|")).toEqual([
+      "poi",
+      "bus",
+    ]);
+    expect(places.map((p) => p.name)).toEqual([
+      "九龙塘(地铁站)",
+      "九龙塘地铁站D出入口",
+      "Kowloon Tong Station",
+    ]);
+    const wgs = gcj02ToWgs84({ longitude: 114.18082, latitude: 22.334207 });
+    expect(places[0]).toMatchObject({
+      amapPoiId: "BV10321739",
+      address: "香港特别行政区深水埗区东铁线;观塘线",
+      lat: wgs.latitude,
+      lng: wgs.longitude,
+    });
+  });
+});
 describe("route mapping and upstream behavior", () => {
   it("retries transient QPS errors once but does not retry exhausted daily quota", async () => {
     let count = 0;

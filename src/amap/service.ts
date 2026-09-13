@@ -102,7 +102,8 @@ export class AmapService {
       const result = await this.client.autocomplete({
         keywords: q,
         ...(city ? { city } : {}),
-        datatype: "poi",
+        // Metro and bus stations are excluded by AMap's POI-only suggestions.
+        datatype: "poi|bus",
       });
       return result.tips.flatMap((raw): Place[] => {
         const parsed = tipSchema.safeParse(raw);
