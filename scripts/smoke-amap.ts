@@ -36,6 +36,7 @@ const report: {
   searches: [],
   routes: [],
 };
+let failedChecks = 0;
 for (const [q, city] of queries) {
   try {
     const places = await service.search(q, city);
@@ -47,10 +48,12 @@ for (const [q, city] of queries) {
       count: places.length,
       first: first ?? null,
     });
+    if (!first) failedChecks += 1;
     console.log(
       `${q}: ${places.length ? `找到 ${places.length} 个结果，首个为 ${first.name}` : "未找到"}`,
     );
   } catch (error) {
+    failedChecks += 1;
     report.searches.push({ q, error: (error as Error).message });
     console.log(`${q}: ${(error as Error).message}`);
   }
@@ -64,6 +67,7 @@ for (const [from, to, mode] of [
   ["中环站", "亚洲国际博览馆", "transit"],
 ] as const) {
   if (!found[from] || !found[to]) {
+    failedChecks += 1;
     report.routes.push({ from, to, mode, skipped: "未找到端点" });
     continue;
   }
@@ -95,8 +99,10 @@ for (const [from, to, mode] of [
         pointCount: r.polyline.length,
       })),
     });
+    if (!results.length) failedChecks += 1;
     console.log(`${from} → ${to} (${mode}): ${results.length} 个候选`);
   } catch (error) {
+    failedChecks += 1;
     report.routes.push({ from, to, mode, error: (error as Error).message });
     console.log(`${from} → ${to}: ${(error as Error).message}`);
   }
@@ -104,3 +110,7 @@ for (const [from, to, mode] of [
 mkdirSync(".tmp", { recursive: true });
 writeFileSync(".tmp/live-amap-results.json", JSON.stringify(report, null, 2));
 console.log("真实联调报告已保存至 .tmp/live-amap-results.json（不含密钥）。");
+if (failedChecks) {
+  console.error(`真实高德联调有 ${failedChecks} 项检查失败。`);
+  process.exitCode = 1;
+}

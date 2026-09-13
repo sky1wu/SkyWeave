@@ -81,6 +81,10 @@ npm run smoke:amap
 
 E2E 使用独立的临时 SQLite 和显式测试 provider，自动启动生产服务，不会写入你的数据库。真实高德联调脚本使用本地 Key，报告保存于 `.tmp/live-amap-results.json`，不包含密钥。
 
+GitHub Actions 会为每个 Pull Request 并行运行两组检查：[常规检查](.github/workflows/ci.yml)按顺序执行 `npm ci`、typecheck、lint、格式检查、单元测试和生产构建；Playwright job 单独安装 Chromium、构建应用并运行 E2E，失败时保留 HTML 报告、trace 和截图。
+
+[真实高德 smoke](.github/workflows/amap-smoke.yml)在每周一北京时间 06:00 定时运行，也可从 Actions 页面手动触发。先在仓库的 `Settings → Secrets and variables → Actions` 中添加 repository secret `AMAP_WEB_SERVICE_KEY`。该 workflow 不由 Pull Request 触发，运行后会保留 14 天的不含密钥联调报告。
+
 - [架构、数据流及目录](docs/architecture.md)
 - [数据库字段与索引](src/server/schema.ts)，[初始迁移](drizzle/0000_bouncy_stryfe.sql)
 - [API 与数据约定](docs/api.md)

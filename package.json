@@ -13,7 +13,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
     "check": "npm run typecheck && npm run lint && npm test && npm run build",
-    "format:check": "prettier --check src tests e2e scripts",
+    "format:check": "prettier --check src tests e2e scripts .github",
     "smoke:amap": "tsx scripts/smoke-amap.ts"
   },
   "engines": {
