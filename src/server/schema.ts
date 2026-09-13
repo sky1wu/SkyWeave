@@ -72,6 +72,18 @@ export const trips = sqliteTable("trips", {
   baseCurrencyLockedAt: integer(),
   ...revision(),
 });
+export const itineraryShares = sqliteTable("itinerary_shares", {
+  id: text().primaryKey(),
+  tripId: text()
+    .notNull()
+    .unique()
+    .references(() => trips.id, { onDelete: "cascade" }),
+  token: text().notNull().unique(),
+  createdByUserId: text()
+    .notNull()
+    .references(() => users.id),
+  createdAt: integer().notNull(),
+});
 export const mcpTokens = sqliteTable(
   "mcp_tokens",
   {

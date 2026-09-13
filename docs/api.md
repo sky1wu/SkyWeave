@@ -1,8 +1,20 @@
 # API 与数据约定
 
-除健康检查、认证入口和 MCP 外，接口需要会话 Cookie。REST 写入使用 JSON 和同源 Origin；更新、删除携带 `expectedVersion`。版本冲突返回 `409 CONFLICT`，不自动合并。错误格式：`{ error: { code, message }, requestId }`。
+除健康检查、认证入口、公开行程读取和 MCP 外，接口需要会话 Cookie。REST 写入使用 JSON 和同源 Origin；版本化实体的更新、删除携带 `expectedVersion`。版本冲突返回 `409 CONFLICT`，不自动合并。错误格式：`{ error: { code, message }, requestId }`（公开读取不含 `requestId`）。
 
 `/api/mcp` 使用独立的 Bearer Token 和 Streamable HTTP，支持日程、费用与结算读写。令牌管理入口为 `GET/POST /api/mcp-tokens`、`DELETE /api/mcp-tokens/:id`，仍需网页登录会话与同源写入。详见 [MCP 接口](mcp.md)。
+
+## 公开分享行程
+
+所有者在“查看 → 分享行程”创建、复制或取消公开链接。每个行程同时只有一个链接，重复创建返回现有链接；取消后重新创建会生成新的随机链接，旧链接永久失效。公开页面 `/share/:token` 无需登录，只展示最新行程手册（每日安排、交通、描述与备注），不包含成员、费用、地点池、评论或动态，也不会授予编辑权限或加入行程。
+
+| 方法       | 路径                            | 说明                                                                                      |
+| ---------- | ------------------------------- | ----------------------------------------------------------------------------------------- |
+| GET / POST | `/api/trips/:id/share`          | 仅所有者读取 / 创建链接；返回 `{ share: { id, token, createdAt } \| null }`               |
+| DELETE     | `/api/trips/:id/share/:shareId` | 仅所有者取消指定链接，JSON body 为 `{}`；幂等，旧 ID 不会取消新链接                       |
+| GET        | `/api/share/:token`             | 无需会话；仅返回 `{ title, dates, timezone, days }`；失效链接返回 `404 SHARE_UNAVAILABLE` |
+
+分享令牌由 32 字节安全随机数生成。公开数据响应禁用缓存，公开页面禁止搜索索引和发送 Referer；每次读取均重新检查分享是否有效。访客页面每 15 秒及恢复焦点时重新读取，取消分享后清除已打开页面中的行程。已被访客复制或下载的内容无法收回。
 
 ## 入口
 

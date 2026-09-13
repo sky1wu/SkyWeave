@@ -9,6 +9,11 @@ import {
   snapshot,
 } from "../trip-service";
 import { expectedVersion, UNHANDLED, type ApiDispatcher } from "./dispatcher";
+import {
+  createItineraryShare,
+  getItineraryShare,
+  revokeItineraryShare,
+} from "../itinerary-share-service";
 
 export const dispatchTrip: ApiDispatcher = ({
   root,
@@ -18,7 +23,17 @@ export const dispatchTrip: ApiDispatcher = ({
   method,
   user,
   data,
+  path,
 }) => {
+  if (root === "trips" && id && action === "share") {
+    if (path.length === 3 && method === "GET")
+      return getItineraryShare(id, user);
+    if (path.length === 3 && method === "POST")
+      return createItineraryShare(id, user);
+    if (path.length === 4 && method === "DELETE")
+      return revokeItineraryShare(id, subId, user);
+    return UNHANDLED;
+  }
   if (root === "trips" && !id) {
     if (method === "GET") return listTrips(user);
     if (method === "POST") return createTrip(user, data);

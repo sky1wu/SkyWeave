@@ -24,6 +24,17 @@ export interface ItineraryDay {
   date: string;
   stops: ItineraryStop[];
 }
+export interface ItineraryDocument {
+  title: string;
+  dates: string;
+  timezone: string;
+  days: ItineraryDay[];
+}
+export interface ItineraryShare {
+  id: string;
+  token: string;
+  createdAt: number;
+}
 
 export function itineraryDate(date: string | null) {
   if (!date) return "日期待定";

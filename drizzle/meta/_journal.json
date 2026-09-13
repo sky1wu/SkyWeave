@@ -43,6 +43,13 @@
       "when": 1789227562273,
       "tag": "0005_mcp_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789284031878,
+      "tag": "0006_itinerary_sharing",
+      "breakpoints": true
     }
   ]
 }

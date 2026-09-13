@@ -12,6 +12,10 @@
 }
 .itinerary-toolbar {
   margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.itinerary-toolbar > div {
+  flex-wrap: wrap;
 }
 .itinerary-toolbar h2 {
   font-size: 20px;
@@ -21,6 +25,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
 }
 .itinerary-cover {
   position: relative;
@@ -380,6 +385,37 @@
   display: grid;
   gap: 16px;
 }
+.itinerary-share {
+  display: grid;
+  gap: 14px;
+}
+.itinerary-share-help,
+.itinerary-public-label {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.itinerary-share-state,
+.itinerary-share-link,
+.itinerary-share-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.itinerary-share-state {
+  font-size: 14px;
+  font-weight: 600;
+}
+.itinerary-share-link {
+  flex-wrap: wrap;
+}
+.itinerary-share-link input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.itinerary-share-actions {
+  justify-content: flex-end;
+}
 .itinerary-export-options {
   display: flex;
   flex-wrap: wrap;
@@ -481,7 +517,7 @@
     width: 100%;
   }
   .itinerary-toolbar > div > * {
-    flex: 1;
+    flex: 1 0 auto;
     justify-content: center;
   }
   .itinerary-cover {

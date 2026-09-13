@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -11,29 +11,64 @@ import {
   Route,
 } from "lucide-react";
 import type { TripSnapshot } from "@/domain/types";
-import { itineraryDateRange, itineraryDays } from "@/domain/itinerary";
+import {
+  itineraryDateRange,
+  itineraryDays,
+  type ItineraryDocument,
+} from "@/domain/itinerary";
 import { Button } from "./ui/button";
 import { ItineraryExport } from "./itinerary-export";
+import { ItineraryShareButton } from "./itinerary-share";
 
 export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
-  const [exporting, setExporting] = useState(false);
   const days = useMemo(() => itineraryDays(snapshot.days), [snapshot.days]);
-  const count = days.reduce((sum, day) => sum + day.stops.length, 0);
   const dates = itineraryDateRange(
     snapshot.trip.startDate,
     snapshot.trip.endDate,
   );
   return (
-    <main className="itinerary-view">
-      <div className="itinerary-toolbar">
-        <h2>行程手册</h2>
-        <div>
+    <ItineraryContent
+      itinerary={{
+        title: snapshot.trip.title,
+        dates,
+        timezone: snapshot.trip.timezone,
+        days,
+      }}
+      canEdit={snapshot.role !== "viewer"}
+      actions={
+        <>
           {snapshot.role !== "viewer" && (
             <Link className="btn" href={`/trips/${snapshot.trip.id}/plan`}>
               <Pencil size={15} />
               编辑行程
             </Link>
           )}
+          {snapshot.role === "owner" && (
+            <ItineraryShareButton tripId={snapshot.trip.id} />
+          )}
+        </>
+      }
+    />
+  );
+}
+
+export function ItineraryContent({
+  itinerary: { title, dates, timezone, days },
+  actions,
+  canEdit = false,
+}: {
+  itinerary: ItineraryDocument;
+  actions?: ReactNode;
+  canEdit?: boolean;
+}) {
+  const [exporting, setExporting] = useState(false);
+  const count = days.reduce((sum, day) => sum + day.stops.length, 0);
+  return (
+    <main className="itinerary-view">
+      <div className="itinerary-toolbar">
+        <h2>行程手册</h2>
+        <div>
+          {actions}
           <Button onClick={() => setExporting(true)}>
             <ArrowDownToLine size={16} />
             导出行程图
@@ -42,7 +77,7 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
       </div>
       <div className="itinerary-cover">
         <div className="itinerary-cover-title">
-          <h3>{snapshot.trip.title}</h3>
+          <h3>{title}</h3>
           <p>
             <CalendarDays size={17} />
             {dates}
@@ -62,7 +97,7 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
         </div>
       </div>
       <p className="itinerary-timezone">
-        时间按 {snapshot.trip.timezone} 显示；预计时间随交通与停留安排推算。
+        时间按 {timezone} 显示；预计时间随交通与停留安排推算。
       </p>
       <div className="itinerary-layout">
         {days.length > 0 && (
@@ -81,9 +116,9 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
               <CalendarDays size={28} />
               <h3>日期待定，旅程待启</h3>
               <p>
-                {snapshot.role === "viewer"
-                  ? "等待同行的人设置日期和安排。"
-                  : "进入编辑行程，在行程设置中选择日期范围。"}
+                {canEdit
+                  ? "进入编辑行程，在行程设置中选择日期范围。"
+                  : "等待同行的人设置日期和安排。"}
               </p>
             </div>
           )}
@@ -191,9 +226,9 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
       </div>
       {exporting && (
         <ItineraryExport
-          title={snapshot.trip.title}
+          title={title}
           dates={dates}
-          timezone={snapshot.trip.timezone}
+          timezone={timezone}
           days={days}
           close={() => setExporting(false)}
         />
