@@ -6,12 +6,34 @@ export async function actor(request: Request): Promise<Actor> {
   if (!session) throw new AppError(401, "UNAUTHORIZED", "请先登录");
   return { ...session.user, sessionId: session.session.id };
 }
-export async function body(request: Request): Promise<unknown> {
+export async function body(
+  request: Request,
+  maxBytes = 524288,
+  sizeMessage = "请求内容过大",
+): Promise<unknown> {
   if (!request.headers.get("content-type")?.includes("application/json"))
     throw new AppError(415, "CONTENT_TYPE", "请求必须使用 JSON");
-  const text = await request.text();
-  if (text.length > 524288)
-    throw new AppError(413, "BODY_TOO_LARGE", "请求内容过大");
+  const reader = request.body?.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  let size = 0;
+  if (reader) {
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > maxBytes) {
+          await reader.cancel();
+          throw new AppError(413, "BODY_TOO_LARGE", sizeMessage);
+        }
+        text += decoder.decode(value, { stream: true });
+      }
+      text += decoder.decode();
+    } finally {
+      reader.releaseLock();
+    }
+  }
   try {
     return JSON.parse(text);
   } catch {

@@ -25,6 +25,7 @@ import { currencies } from "@/domain/money";
 import { Brand, ErrorText, Modal } from "./ui";
 import { TripDateFields } from "./trip-date-fields";
 import { SettingsLink } from "./settings-link";
+import { TripFileExportButton } from "./trip-file";
 import type { Mutate } from "./planner/types";
 import type { CommentTarget } from "./activity";
 const Planner = dynamic(() => import("./planner").then((m) => m.Planner));
@@ -140,6 +141,7 @@ export function TripShell({
           <ChevronLeft size={14} />
           <span>所有行程</span>
         </Link>
+        {section !== "view" && <TripFileExportButton tripId={tripId} compact />}
         <SettingsLink />
       </header>
       <div className="workspace-sidebar">

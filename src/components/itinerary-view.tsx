@@ -19,6 +19,7 @@ import {
 import { Button } from "./ui/button";
 import { ItineraryExport } from "./itinerary-export";
 import { ItineraryShareButton } from "./itinerary-share";
+import { TripFileExportButton } from "./trip-file";
 
 export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
   const days = useMemo(() => itineraryDays(snapshot.days), [snapshot.days]);
@@ -46,6 +47,7 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
           {snapshot.role === "owner" && (
             <ItineraryShareButton tripId={snapshot.trip.id} />
           )}
+          <TripFileExportButton tripId={snapshot.trip.id} />
         </>
       }
     />

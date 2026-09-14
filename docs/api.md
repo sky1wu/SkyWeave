@@ -31,6 +31,18 @@
 
 ## 行程与路线
 
+### 行程文件
+
+`GET /api/trips/:id/export`：活跃成员（含 viewer）可下载 JSON 附件，响应带 `Content-Disposition` 和 `Cache-Control: no-store`。始终读取完整一致快照，与当前页面加载的 section 无关。
+
+`POST /api/trips/import`：登录用户发送行程文件的 JSON 内容（需要同源 Origin），成功返回 `{ id }`，创建由当前用户拥有的新行程。每次导入生成独立副本，不覆盖已有行程。
+
+文件结构为 `{ format: "skyweave-trip", version: 1, exportedAt, trip, days, poolPlaces, participants, expenses, settlements }`。每日内容嵌套 `items`、`legs`，路线包含候选与折线；数组顺序保存日期、事项、地点池及候选顺序。费用包含分摊明细，保留原始币种金额、换算金额及分摊尾差。导入重新生成全部实体 ID 并映射所有引用。
+
+文件字段采用白名单，不包含账号关联、成员权限、邀请令牌、公开分享链接、评论或活动日志。所有记账参与人以未关联账号的同行者导入。服务器验证版本、日期、坐标、标识唯一性、引用归属及账目一致性后，在单个事务中写入，失败时整体回滚。无效文件返回 `400 INVALID_TRIP_FILE`；文件大小以 UTF-8 字节计，上限 20 MiB，超限返回 `413 BODY_TOO_LARGE`。常规写入接口仍限制为 512 KiB。
+
+### 日程接口
+
 | 方法         | 路径                                | 行为                                                                                          |
 | ------------ | ----------------------------------- | --------------------------------------------------------------------------------------------- |
 | POST         | `/api/trips/:id/days/reorder`       | `{ expectedVersion, dayIds }`，整天排序并自动分配日期                                         |

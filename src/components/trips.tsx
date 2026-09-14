@@ -22,6 +22,7 @@ import { Brand, ErrorText, Modal } from "./ui";
 import { JourneyArt } from "./journey-art";
 import { TripDateFields } from "./trip-date-fields";
 import { SettingsLink } from "./settings-link";
+import { TripFileImportButton } from "./trip-file";
 export function Trips() {
   const router = useRouter();
   const [trips, setTrips] = useState<
@@ -87,14 +88,17 @@ export function Trips() {
             <p className="page-description">
               收藏想去的地方，安排每一天，和朋友一起出发。
             </p>
-            <Button
-              variant="default"
-              type="button"
-              className="btn primary"
-              onClick={() => setOpen(true)}
-            >
-              <Plus size={18} /> 创建行程
-            </Button>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="default"
+                type="button"
+                className="btn primary"
+                onClick={() => setOpen(true)}
+              >
+                <Plus size={18} /> 创建行程
+              </Button>
+              <TripFileImportButton />
+            </div>
           </div>
           <JourneyArt />
         </section>

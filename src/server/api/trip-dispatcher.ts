@@ -13,6 +13,7 @@ import {
   snapshot,
 } from "../trip-service";
 import { expectedVersion, UNHANDLED, type ApiDispatcher } from "./dispatcher";
+import { importTripFile, tripFileResponse } from "../trip-file-service";
 import {
   createItineraryShare,
   getItineraryShare,
@@ -30,6 +31,10 @@ export const dispatchTrip: ApiDispatcher = ({
   path,
   url,
 }) => {
+  if (root === "trips" && id === "import" && path.length === 2)
+    return method === "POST" ? importTripFile(user, data) : UNHANDLED;
+  if (root === "trips" && id && action === "export" && path.length === 3)
+    return method === "GET" ? tripFileResponse(id, user) : UNHANDLED;
   if (
     root === "trips" &&
     id &&

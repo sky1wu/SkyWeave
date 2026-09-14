@@ -11,6 +11,10 @@ import { dispatchFinance } from "@/server/api/finance-dispatcher";
 import { dispatchPlanning } from "@/server/api/planning-dispatcher";
 import { dispatchPlatform } from "@/server/api/platform-dispatcher";
 import { dispatchTrip } from "@/server/api/trip-dispatcher";
+import {
+  MAX_TRIP_FILE_BYTES,
+  TRIP_FILE_SIZE_MESSAGE,
+} from "@/domain/trip-file";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,7 +52,19 @@ async function handler(request: Request, context: Context): Promise<Response> {
 
     const user = await actor(request);
     if (method !== "GET") sameOrigin(request);
-    const data = method === "GET" ? undefined : await body(request);
+    const importing =
+      method === "POST" &&
+      root === "trips" &&
+      id === "import" &&
+      path.length === 2;
+    const data =
+      method === "GET"
+        ? undefined
+        : await body(
+            request,
+            importing ? MAX_TRIP_FILE_BYTES : undefined,
+            importing ? TRIP_FILE_SIZE_MESSAGE : undefined,
+          );
     const result = await dispatch({
       request,
       path,
