@@ -966,7 +966,19 @@
   padding-top: 28px;
 }
 .activity-feed {
+  min-width: 0;
+  align-self: start;
   padding: 0;
+}
+.activity-list {
+  max-height: min(480px, 60dvh);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+.activity-list:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
 }
 .activity-row {
   display: flex;

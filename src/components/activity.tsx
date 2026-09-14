@@ -128,22 +128,31 @@ export function ActivityPage({
       </div>
       <div className="activity-grid">
         <section className="panel activity-feed">
-          <h3 className="font-semibold mb-5">最近动态</h3>
-          {snapshot.activity.map((a) => (
-            <div className="activity-row" key={a.id}>
-              <div className="activity-dot" />
-              <div className="flex-1">
-                <p className="text-sm">
-                  <b>{a.actorName}</b> {a.summary}
-                </p>
-                <p className="text-xs muted mt-2">
-                  {DateTime.fromMillis(a.createdAt)
-                    .setZone(snapshot.trip.timezone)
-                    .toFormat("MM-dd HH:mm")}
-                </p>
+          <h3 id="recent-activity-heading" className="font-semibold mb-5">
+            最近动态
+          </h3>
+          <div
+            className="activity-list"
+            role="region"
+            aria-labelledby="recent-activity-heading"
+            tabIndex={0}
+          >
+            {snapshot.activity.map((a) => (
+              <div className="activity-row" key={a.id}>
+                <div className="activity-dot" />
+                <div className="flex-1 min-w-0 break-words">
+                  <p className="text-sm">
+                    <b>{a.actorName}</b> {a.summary}
+                  </p>
+                  <p className="text-xs muted mt-2">
+                    {DateTime.fromMillis(a.createdAt)
+                      .setZone(snapshot.trip.timezone)
+                      .toFormat("MM-dd HH:mm")}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </section>
         <section className="panel discussion-pane self-start">
           <h3 className="font-semibold mb-3">行程评论</h3>
