@@ -137,6 +137,37 @@ test("查看行程：无编辑控件、按天浏览、手机布局、真实 PNG 
   await expect(
     page.getByRole("link", { name: "编辑行程", exact: true }),
   ).toHaveAttribute("href", `/trips/${id}/plan`);
+  const map = page.getByRole("complementary", { name: "地图参考" });
+  await expect(map.getByRole("button", { name: /^地图地点 / })).toHaveCount(3);
+  await expect(
+    map.getByTestId(`map-leg-${planned.days[0].legs[0].id}`),
+  ).toHaveAttribute("data-alternative", "manual");
+  const fullDayView = await map.getByRole("img").getAttribute("viewBox");
+  await page.getByRole("button", { name: "在地图上查看灵隐听雨" }).click();
+  await expect(map.getByRole("img")).not.toHaveAttribute(
+    "viewBox",
+    fullDayView!,
+  );
+  await expect(
+    page.locator(".itinerary-stop[data-map-selected=true]"),
+  ).toContainText("灵隐听雨");
+  await map.getByRole("button", { name: "全日地点" }).click();
+  await expect(map.getByRole("img")).toHaveAttribute("viewBox", fullDayView!);
+  await map.getByRole("button", { name: "地图地点 湖畔午餐" }).click();
+  await expect(
+    page.locator(".itinerary-stop[data-map-selected=true]"),
+  ).toBeFocused();
+  await map.getByLabel("地图日期").selectOption(snapshot.days[1].id);
+  await expect(
+    map.getByRole("button", { name: "地图地点 杭州站" }),
+  ).toBeVisible();
+  await expect(
+    map.getByRole("button", { name: "地图地点 上海站" }),
+  ).toBeVisible();
+  await expect(
+    map.getByTestId(`map-transport-${planned.days[1].items[0].id}`),
+  ).toHaveAttribute("stroke-dasharray", "10 8");
+  await map.getByLabel("地图日期").selectOption(snapshot.days[0].id);
   await page.screenshot({
     path: testInfo.outputPath("itinerary-desktop.png"),
     fullPage: true,
@@ -150,6 +181,16 @@ test("查看行程：无编辑控件、按天浏览、手机布局、真实 PNG 
     ).toBe(true);
   }
   await page.setViewportSize({ width: 390, height: 844 });
+  await map.getByRole("button", { name: "收起地图" }).click();
+  await expect(map.getByRole("button", { name: "展开地图" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await page.getByRole("button", { name: "在地图上查看去往下一站" }).click();
+  await expect(map.getByLabel("地图日期")).toHaveValue(snapshot.days[1].id);
+  await expect(
+    map.getByRole("button", { name: "地图地点 上海站" }),
+  ).toBeInViewport();
   await page.screenshot({
     path: testInfo.outputPath("itinerary-mobile.png"),
     fullPage: true,
@@ -162,6 +203,8 @@ test("查看行程：无编辑控件、按天浏览、手机布局、真实 PNG 
   await expect(page).toHaveURL(
     new RegExp(`#itinerary-day-${snapshot.days[2].id}$`),
   );
+  await expect(map.getByLabel("地图日期")).toHaveValue(snapshot.days[2].id);
+  await expect(map.getByRole("status")).toContainText("当天暂无安排");
   await page.getByRole("button", { name: "导出行程图" }).click();
   await expect(
     page.getByRole("img", { name: /行程图，第 1 张/ }),
@@ -196,6 +239,14 @@ test("只读成员可查看和导出，长备注自动分图且 ZIP 保留所有
     title: "长行程说明",
     notes: "路上的每一站都值得慢慢看。\n".repeat(180) + "最后一行也要保留。",
   });
+  await call(page, `/days/${snapshot.days[0].id}/items`, "POST", {
+    title: "西湖",
+    lat: 30.24,
+    lng: 120.14,
+  });
+  await call(page, `/days/${snapshot.days[0].id}/items`, "POST", {
+    title: "待定的餐厅",
+  });
   const invite = await call<{ token: string }>(
     page,
     `/trips/${snapshot.trip.id}/invites`,
@@ -209,6 +260,15 @@ test("只读成员可查看和导出，长备注自动分图且 ZIP 保留所有
   await viewer.goto(`${origin}/trips/${snapshot.trip.id}/view`);
   await expect(viewer.getByRole("heading", { name: "行程手册" })).toBeVisible();
   await expect(viewer.getByRole("link", { name: "编辑行程" })).toHaveCount(0);
+  await expect(
+    viewer.getByRole("button", { name: "地图地点 西湖" }),
+  ).toBeVisible();
+  await expect(
+    viewer.getByText("1 项安排暂无坐标。", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    viewer.getByRole("button", { name: "在地图上查看待定的餐厅" }),
+  ).toHaveCount(0);
   await viewer.evaluate(() => {
     const drawnText: string[] = [];
     Object.assign(window, { drawnText });
@@ -286,6 +346,9 @@ test("无日期行程可浏览、导出失败可重试", async ({ page }) => {
   );
   await page.goto(`/trips/${snapshot.trip.id}/view`);
   await expect(page.getByText("日期待定，旅程待启")).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "地图参考" }),
+  ).toHaveCount(0);
   await page.evaluate(() => {
     const original = HTMLCanvasElement.prototype.toBlob;
     HTMLCanvasElement.prototype.toBlob = function (callback, ...args) {
@@ -303,4 +366,63 @@ test("无日期行程可浏览、导出失败可重试", async ({ page }) => {
     page.getByRole("button", { name: "下载 PNG 图片" }),
   ).toBeEnabled();
   await assertPng(page, "下载 PNG 图片");
+});
+
+test("查看地图按需加载当天路线，地图服务不可用时仍能阅读", async ({ page }) => {
+  await register(page);
+  const snapshot = await createTrip(page);
+  for (const day of snapshot.days.slice(0, 2)) {
+    for (const [index, title] of ["西湖", "灵隐寺"].entries())
+      await call(page, `/days/${day.id}/items`, "POST", {
+        title,
+        lat: 30.24,
+        lng: 120.14 - index * 0.04,
+      });
+    await call(page, `/days/${day.id}/routes/recalculate`, "POST", {});
+  }
+  const geometryRequests: string[] = [];
+  const mutations: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().endsWith("/geometry"))
+      geometryRequests.push(request.url());
+    if (request.url().includes("/api/") && request.method() !== "GET")
+      mutations.push(request.url());
+  });
+  const firstGeometry = page.waitForResponse(
+    `**/days/${snapshot.days[0].id}/geometry`,
+  );
+  await page.goto(`/trips/${snapshot.trip.id}/view`);
+  expect(
+    (await (await firstGeometry).json()).alternatives[0].polyline.length,
+  ).toBeGreaterThan(1);
+  expect(geometryRequests).toHaveLength(1);
+  const secondGeometry = page.waitForResponse(
+    `**/days/${snapshot.days[1].id}/geometry`,
+  );
+  await page.getByLabel("地图日期").selectOption(snapshot.days[1].id);
+  expect((await secondGeometry).ok()).toBe(true);
+  expect(geometryRequests).toHaveLength(2);
+  const planned = await call<TripSnapshot>(page, `/trips/${snapshot.trip.id}`);
+  await expect(
+    page.getByTestId(`map-leg-${planned.days[1].legs[0].id}`),
+  ).toHaveAttribute(
+    "data-alternative",
+    planned.days[1].legs[0].selectedAlternativeId!,
+  );
+
+  await page.route("**/api/config", (route) =>
+    route.fulfill({
+      json: { amapJsKey: "", mapAvailable: false, testMode: false },
+    }),
+  );
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "地图暂不可用" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "西湖", exact: true }).first(),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "查看第 2 天地图" }).click();
+  await expect(page.getByLabel("地图日期")).toHaveValue(snapshot.days[1].id);
+  expect(mutations).toEqual([]);
 });

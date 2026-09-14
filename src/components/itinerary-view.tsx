@@ -1,16 +1,20 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import {
   AlertTriangle,
   ArrowDownToLine,
   CalendarDays,
+  LocateFixed,
   MapPin,
   Pencil,
   Route,
 } from "lucide-react";
-import type { TripSnapshot } from "@/domain/types";
+import type { DayPlan, TripSnapshot } from "@/domain/types";
+import { mapLocations } from "@/domain/map-locations";
+import type { MapFocus } from "./map";
 import {
   itineraryDateRange,
   itineraryDays,
@@ -20,6 +24,12 @@ import { Button } from "./ui/button";
 import { ItineraryExport } from "./itinerary-export";
 import { ItineraryShareButton } from "./itinerary-share";
 import { TripFileExportButton } from "./trip-file";
+
+const ItineraryMap = dynamic(
+  () => import("./itinerary-map").then((module) => module.ItineraryMap),
+  { ssr: false, loading: () => <p role="status">正在加载地图参考…</p> },
+);
+const noMapDays: DayPlan[] = [];
 
 export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
   const days = useMemo(() => itineraryDays(snapshot.days), [snapshot.days]);
@@ -36,6 +46,7 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
         days,
       }}
       canEdit={snapshot.role !== "viewer"}
+      mapDays={snapshot.days}
       actions={
         <>
           {snapshot.role !== "viewer" && (
@@ -58,15 +69,59 @@ export function ItineraryContent({
   itinerary: { title, dates, timezone, days },
   actions,
   canEdit = false,
+  mapDays = noMapDays,
 }: {
   itinerary: ItineraryDocument;
   actions?: ReactNode;
   canEdit?: boolean;
+  mapDays?: DayPlan[];
 }) {
   const [exporting, setExporting] = useState(false);
+  const [mapVisible, setMapVisible] = useState(true);
+  const [mapSelection, setMapSelection] = useState<{
+    dayId: string;
+    itemId?: string;
+    request: number;
+  } | null>(null);
+  const mapPanel = useRef<HTMLElement>(null);
+  const mapDay =
+    mapDays.find((day) => day.id === mapSelection?.dayId) ??
+    mapDays.find((day) => day.id === days[0]?.id);
+  const locatedIds = useMemo(
+    () =>
+      new Set(
+        mapDays.flatMap((day) =>
+          mapLocations(day, [], []).map((point) => point.itemId),
+        ),
+      ),
+    [mapDays],
+  );
+  const mapFocus = useMemo<MapFocus | null>(() => {
+    if (!mapSelection || mapSelection.dayId !== mapDay?.id) return null;
+    return mapSelection.itemId
+      ? { kind: "item", id: mapSelection.itemId, request: mapSelection.request }
+      : { kind: "day", request: mapSelection.request };
+  }, [mapSelection, mapDay?.id]);
+  const selectedItem = mapFocus?.kind === "item" ? mapFocus.id : null;
+  function selectMapDay(dayId: string, itemId?: string) {
+    setMapSelection((previous) => ({
+      dayId,
+      itemId,
+      request: (previous?.request ?? 0) + 1,
+    }));
+  }
+  function locate(dayId: string, itemId?: string) {
+    selectMapDay(dayId, itemId);
+    setMapVisible(true);
+    requestAnimationFrame(() => {
+      mapPanel.current?.scrollIntoView({ block: "nearest" });
+    });
+  }
   const count = days.reduce((sum, day) => sum + day.stops.length, 0);
   return (
-    <main className="itinerary-view">
+    <main
+      className={`itinerary-view${mapDay ? " itinerary-view-with-map" : ""}`}
+    >
       <div className="itinerary-toolbar">
         <h2>行程手册</h2>
         <div>
@@ -101,16 +156,48 @@ export function ItineraryContent({
       <p className="itinerary-timezone">
         时间按 {timezone} 显示；预计时间随交通与停留安排推算。
       </p>
-      <div className="itinerary-layout">
+      <div
+        className={`itinerary-layout${mapDay ? " itinerary-layout-with-map" : ""}`}
+      >
         {days.length > 0 && (
           <nav className="itinerary-day-nav" aria-label="按天查看行程">
             {days.map((day) => (
-              <a key={day.id} href={`#itinerary-day-${day.id}`}>
+              <a
+                key={day.id}
+                href={`#itinerary-day-${day.id}`}
+                aria-current={mapDay?.id === day.id ? "date" : undefined}
+                onClick={() => selectMapDay(day.id)}
+              >
                 <strong>第 {day.number} 天</strong>
                 <span>{day.date}</span>
               </a>
             ))}
           </nav>
+        )}
+        {mapDay && (
+          <aside
+            ref={mapPanel}
+            className="itinerary-map-panel"
+            aria-labelledby="itinerary-map-heading"
+          >
+            <ItineraryMap
+              day={mapDay}
+              days={days}
+              focus={mapFocus}
+              selected={selectedItem}
+              visible={mapVisible}
+              onToggle={() => setMapVisible((visible) => !visible)}
+              onDayChange={selectMapDay}
+              onSelect={(item) => {
+                selectMapDay(mapDay.id, item.id);
+                const stop = document.getElementById(
+                  `itinerary-stop-${item.id}`,
+                );
+                stop?.scrollIntoView({ block: "center" });
+                stop?.focus({ preventScroll: true });
+              }}
+            />
+          </aside>
         )}
         <div className="itinerary-days">
           {!days.length && (
@@ -142,7 +229,20 @@ export function ItineraryContent({
                   <h3 id={`itinerary-heading-${day.id}`}>{day.title}</h3>
                   <p>{day.date}</p>
                 </div>
-                <span>{day.stops.length} 项安排</span>
+                <div className="itinerary-day-actions">
+                  <span>{day.stops.length} 项安排</span>
+                  {mapDay && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`查看第 ${day.number} 天地图`}
+                      onClick={() => locate(day.id)}
+                    >
+                      <MapPin size={15} />
+                      地图
+                    </Button>
+                  )}
+                </div>
               </header>
               {!day.stops.length ? (
                 <p className="itinerary-day-empty">
@@ -173,7 +273,12 @@ export function ItineraryContent({
                           </div>
                         </div>
                       )}
-                      <article className="itinerary-stop">
+                      <article
+                        className="itinerary-stop"
+                        id={`itinerary-stop-${stop.id}`}
+                        tabIndex={-1}
+                        data-map-selected={selectedItem === stop.id}
+                      >
                         <span
                           className="itinerary-stop-number"
                           aria-hidden="true"
@@ -188,6 +293,18 @@ export function ItineraryContent({
                           <div className="itinerary-stop-heading">
                             <h4>{stop.title}</h4>
                             <span>{stop.category}</span>
+                            {locatedIds.has(stop.id) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="itinerary-locate"
+                                aria-label={`在地图上查看${stop.title}`}
+                                onClick={() => locate(day.id, stop.id)}
+                              >
+                                <LocateFixed size={14} />
+                                定位
+                              </Button>
+                            )}
                           </div>
                           {stop.details.map((detail, index) => (
                             <p
