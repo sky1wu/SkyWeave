@@ -18,32 +18,34 @@
 
 ## 入口
 
-| 方法         | 路径                  | 行为                                                                                    |
-| ------------ | --------------------- | --------------------------------------------------------------------------------------- |
-| GET          | `/api/health`         | 健康检查                                                                                |
-| GET/POST     | `/api/auth/*`         | Better Auth：注册、登录、退出、会话                                                     |
-| GET          | `/api/config`         | JS Key、地图是否配置、是否为显式测试环境；不返回服务端密钥                              |
-| GET          | `/_AMapService/:path` | 已认证的 JS API 代理，固定高德主机并附加安全密钥                                        |
-| GET/POST     | `/api/trips`          | 列出自己的 Trip / 创建 Trip 和第一天                                                    |
-| GET          | `/api/trips/:id`      | 返回 TripSnapshot：行程、权限、Days、事项、路线候选、成员、参与者、账目、评论和最近动态 |
-| PATCH/DELETE | `/api/trips/:id`      | owner 更新设置 / 删除 Trip                                                              |
+| 方法         | 路径                      | 行为                                                                                        |
+| ------------ | ------------------------- | ------------------------------------------------------------------------------------------- |
+| GET          | `/api/health`             | 健康检查                                                                                    |
+| GET/POST     | `/api/auth/*`             | Better Auth：注册、登录、退出、会话                                                         |
+| GET          | `/api/config`             | JS Key、地图是否配置、是否为显式测试环境；不返回服务端密钥                                  |
+| GET          | `/_AMapService/:path`     | 已认证的 JS API 代理，固定高德主机并附加安全密钥                                            |
+| GET/POST     | `/api/trips`              | 列出自己的 Trip / 创建 Trip 和第一天                                                        |
+| GET          | `/api/trips/:id`          | 返回完整 TripSnapshot 和变更序号 `sequence`；可选 `?section=...` 返回页面所需数据（见下文） |
+| GET          | `/api/trips/:id/revision` | 经成员鉴权后返回 `{ sequence, members: [{ userId, name, email }] }`，用于焦点恢复等轻量检查 |
+| PATCH/DELETE | `/api/trips/:id`          | owner 更新设置 / 删除 Trip                                                                  |
 
 ## 行程与路线
 
-| 方法             | 路径                                | 行为                                                         |
-| ---------------- | ----------------------------------- | ------------------------------------------------------------ |
-| POST | `/api/trips/:id/days/reorder` | `{ expectedVersion, dayIds }`，整天排序并自动分配日期 |
-| GET/PATCH | `/api/days/:id` | 当天快照 / 修改开始时间；日期与天数由 Trip 设置维护 |
-| POST             | `/api/days/:id/items`               | 添加事项                                                     |
-| PATCH/DELETE     | `/api/items/:id`                    | 修改 / 删除事项并维护路线关系                                |
-| POST             | `/api/days/:id/reorder`             | `{ expectedVersion, itemIds }`，必须完整包含当天事项且无重复 |
-| PATCH            | `/api/legs/:id`                     | 更新交通方式、手动时长或已保存候选选择                       |
-| POST             | `/api/legs/:id/route`               | 查询并保存候选，返回更新后的 Leg 和 alternatives             |
-| POST             | `/api/days/:id/routes/recalculate`  | 向后重新计算受影响路段；`{ force: true }` 可刷新已计算的段   |
-| POST             | `/api/routes`                       | 不落库的统一路线查询，返回 `{ alternatives }`                |
-| GET              | `/api/places/search?q=&city=`       | 高德 POI 搜索，返回 `{ places }`                             |
-| GET              | `/api/places/autocomplete?q=&city=` | 高德输入提示，返回 `{ places }`                              |
-| GET              | `/api/places/:amapId`               | POI 详情                                                     |
+| 方法         | 路径                                | 行为                                                                                          |
+| ------------ | ----------------------------------- | --------------------------------------------------------------------------------------------- |
+| POST         | `/api/trips/:id/days/reorder`       | `{ expectedVersion, dayIds }`，整天排序并自动分配日期                                         |
+| GET          | `/api/days/:id/geometry`            | 经成员鉴权后返回 `{ dayId, version, alternatives: [{ id, polyline }] }`，只含当天已选路线坐标 |
+| GET/PATCH    | `/api/days/:id`                     | 当天快照 / 修改开始时间；日期与天数由 Trip 设置维护                                           |
+| POST         | `/api/days/:id/items`               | 添加事项                                                                                      |
+| PATCH/DELETE | `/api/items/:id`                    | 修改 / 删除事项并维护路线关系                                                                 |
+| POST         | `/api/days/:id/reorder`             | `{ expectedVersion, itemIds }`，必须完整包含当天事项且无重复                                  |
+| PATCH        | `/api/legs/:id`                     | 更新交通方式、手动时长或已保存候选选择                                                        |
+| POST         | `/api/legs/:id/route`               | 查询并保存候选，返回更新后的 Leg 和 alternatives                                              |
+| POST         | `/api/days/:id/routes/recalculate`  | 向后重新计算受影响路段；`{ force: true }` 可刷新已计算的段                                    |
+| POST         | `/api/routes`                       | 不落库的统一路线查询，返回 `{ alternatives }`                                                 |
+| GET          | `/api/places/search?q=&city=`       | 高德 POI 搜索，返回 `{ places }`                                                              |
+| GET          | `/api/places/autocomplete?q=&city=` | 高德输入提示，返回 `{ places }`                                                               |
+| GET          | `/api/places/:amapId`               | POI 详情                                                                                      |
 
 `POST /api/routes`：
 
@@ -77,19 +79,19 @@ Day 使用 `position` 排序，`startMinutes` 默认 480。DayItem 使用 `posit
 
 ## 成员与协作
 
-| 方法     | 路径                                         | 行为                                                   |
-| -------- | -------------------------------------------- | ------------------------------------------------------ |
-| GET      | `/api/trips/:id/members`                     | 成员列表                                               |
-| PATCH    | `/api/trips/:id/members/:userId`             | owner 修改 role/status，不能移除或降级 owner           |
-| GET/POST | `/api/trips/:id/participants`                | 同行者列表 / 添加未注册同行者                          |
-| PATCH    | `/api/trips/:id/participants/:participantId` | owner 改姓名或停用未注册同行者                         |
-| DELETE   | `/api/trips/:id/participants/:participantId` | owner 删除没有费用或结算记录的未注册同行者及其专属邀请 |
-| GET/POST | `/api/trips/:id/invites`                     | owner 查看邀请 / 创建邀请                              |
-| DELETE   | `/api/trips/:id/invites/:inviteId`           | owner 撤销邀请                                         |
-| POST     | `/api/invites/:token/join`                   | 登录后原子接受邀请                                     |
-| GET      | `/api/trips/:id/events`                      | SSE：`sync`、`change`、`revoked`；重连后客户端取新快照 |
-| GET      | `/api/trips/:id/activity`                    | 最近 200 条活动                                        |
-| GET/POST | `/api/trips/:id/comments`                    | 查看 / 发表纯文本评论                                  |
+| 方法     | 路径                                         | 行为                                                                                          |
+| -------- | -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| GET      | `/api/trips/:id/members`                     | 成员列表                                                                                      |
+| PATCH    | `/api/trips/:id/members/:userId`             | owner 修改 role/status，不能移除或降级 owner                                                  |
+| GET/POST | `/api/trips/:id/participants`                | 同行者列表 / 添加未注册同行者                                                                 |
+| PATCH    | `/api/trips/:id/participants/:participantId` | owner 改姓名或停用未注册同行者                                                                |
+| DELETE   | `/api/trips/:id/participants/:participantId` | owner 删除没有费用或结算记录的未注册同行者及其专属邀请                                        |
+| GET/POST | `/api/trips/:id/invites`                     | owner 查看邀请 / 创建邀请                                                                     |
+| DELETE   | `/api/trips/:id/invites/:inviteId`           | owner 撤销邀请                                                                                |
+| POST     | `/api/invites/:token/join`                   | 登录后原子接受邀请                                                                            |
+| GET      | `/api/trips/:id/events`                      | SSE：`sync`、`change`、`revoked`；`sync` / `change` 携带 `sequence`，客户端仅在版本落后时刷新 |
+| GET      | `/api/trips/:id/activity`                    | 最近 200 条活动                                                                               |
+| GET/POST | `/api/trips/:id/comments`                    | 查看 / 发表纯文本评论                                                                         |
 
 删除同行者请求为 `{ expectedVersion }`，适用于启用或停用的未注册同行者。已有付款、分摊或结算记录时返回 400 `PARTICIPANT_HAS_RECORDS`，应改用停用以保留历史账目；已绑定账号的同行者通过成员管理移出行程。删除成功后，其专属邀请同步删除并失效。
 
@@ -134,3 +136,21 @@ Settlement 使用 `fromParticipantId`、`toParticipantId`、`amountMinor`、`cur
 独立交通通过事项的可空 `transport` 字段维护，包含交通类型、暂定／已确认、班次、起终点和可选时长。名称即可保存起终点；地点池来源校验 Trip 归属。出发和到达时间使用事项的 `startMinutes`、`endMinutes`。详见[地图地点与独立交通](map-and-transport.md)。
 
 行程起止日期与 Day 数量保持一致，缩短范围时超出的日期若含事项或费用则返回 409。单独新增、删除 Day 返回 405。日历与新选择控件详见[SkyWeave 日历与规划操作](calendar-and-controls.md)。
+
+## 页面快照与按需地图
+
+`GET /api/trips/:id?section=...` 保留快照结构；页面不需要的集合为 `[]`，不是该集合在数据库中为空。省略 `section` 的现有 API 仍返回完整数据（包含所有候选路线坐标），供 API 和 MCP 使用。未知 `section` 返回 400。
+
+| section  | 加载的数据（所有页面均包含行程、权限、成员、日期元数据和 sequence）      |
+| -------- | ------------------------------------------------------------------------ |
+| plan     | 地点池、全部事项与路线摘要/步骤、参与者、费用与分摊、评论；不含 polyline |
+| view     | 全部事项与路线摘要/步骤；不含 polyline，保留行程查看和导出所需信息       |
+| expenses | 事项、参与者、费用与分摊、结算、评论；不查询路线候选                     |
+| members  | 参与者及 owner 可见的邀请；不查询事项、路线或账目                        |
+| activity | 评论与最近 200 条动态；不查询事项、路线或账目                            |
+
+地图通过 `GET /api/days/:id/geometry` 获取当前日期已选候选的 WGS-84 坐标。客户端按日期 ID 和 `version` 缓存，版本不匹配的坐标不会应用到当前地图。候选摘要仍保留步骤，展开路线和行程导出不会因按需地图而丢失说明。
+
+快照的 `sequence` 与数据在同一个 SQLite 只读事务中读取。首次加载、SSE 初始化/重连共享请求；下载期间出现更高变更序号时，客户端追加刷新。切换行程标签复用共享布局中的数据和 SSE；窗口重新获得焦点或重新进入缓存页面时先检查 `/revision`，并更新不产生行程动态的成员昵称/邮箱。写操作完成后使已缓存页面失效；权限撤销清空行程缓存并取消请求。
+
+普通 API 的成功 JSON 响应提供 `Server-Timing: app;dur=...`（单位毫秒，包含鉴权、业务读取和响应序列化，不含网络下载）与 `X-Request-Id`。部署和性能验收见 [性能说明](performance.md)。

@@ -126,11 +126,13 @@ export async function calculateDay(dayId: string, actor: Actor, force = false) {
   if (running) return running;
   const task = (async () => {
     const day = getDay(dayId);
+    let changed = false;
     for (const item of day.items) {
       const leg = day.legs.find((l) => l.toItemId === item.id);
-      if (leg) await calculateLeg(leg.id, actor, force);
+      if (leg)
+        changed = (await calculateLeg(leg.id, actor, force)).changed || changed;
     }
-    return { id: dayId };
+    return { id: dayId, changed };
   })().finally(() => pending.delete(dayId));
   pending.set(dayId, task);
   return task;

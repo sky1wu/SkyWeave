@@ -5,7 +5,9 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
+import dynamic from "next/dynamic";
+import { useTripData } from "./trip-data";
 import Link from "next/link";
 import {
   CalendarDays,
@@ -17,17 +19,29 @@ import {
   MessageCircle,
   BookOpen,
 } from "lucide-react";
-import { api, ApiFailure } from "@/lib/client";
-import type { Expense, Item, TripSnapshot } from "@/domain/types";
+import { api } from "@/lib/client";
+import type { Expense, Item, TripSection } from "@/domain/types";
 import { currencies } from "@/domain/money";
 import { Brand, ErrorText, Modal } from "./ui";
 import { TripDateFields } from "./trip-date-fields";
 import { SettingsLink } from "./settings-link";
-import { Planner, type Mutate } from "./planner";
-import { ItineraryView } from "./itinerary-view";
-import { ExpenseEditor, Expenses } from "./expenses";
-import { Members } from "./members";
-import { ActivityPage, CommentModal, type CommentTarget } from "./activity";
+import type { Mutate } from "./planner/types";
+import type { CommentTarget } from "./activity";
+const Planner = dynamic(() => import("./planner").then((m) => m.Planner));
+const ItineraryView = dynamic(() =>
+  import("./itinerary-view").then((m) => m.ItineraryView),
+);
+const Expenses = dynamic(() => import("./expenses").then((m) => m.Expenses));
+const ExpenseEditor = dynamic(() =>
+  import("./expenses").then((m) => m.ExpenseEditor),
+);
+const Members = dynamic(() => import("./members").then((m) => m.Members));
+const ActivityPage = dynamic(() =>
+  import("./activity").then((m) => m.ActivityPage),
+);
+const CommentModal = dynamic(() =>
+  import("./activity").then((m) => m.CommentModal),
+);
 const tabs = [
   { key: "plan", label: "行程", icon: Route },
   { key: "view", label: "查看", icon: BookOpen },
@@ -40,58 +54,17 @@ export function TripShell({
   section,
 }: {
   tripId: string;
-  section: string;
+  section: TripSection;
 }) {
   const { confirm, confirmation } = useConfirmation();
   const router = useRouter();
-  const [data, setData] = useState<TripSnapshot | null>(null),
-    [error, setError] = useState(""),
+  const { data, error: loadError, refresh } = useTripData(section);
+  const [actionError, setError] = useState(""),
     [settings, setSettings] = useState(false),
     [expense, setExpense] = useState<Expense | "new" | null>(null),
     [expenseItem, setExpenseItem] = useState<Item | undefined>(),
     [comment, setComment] = useState<CommentTarget | null>(null);
-  const fetchSequence = useRef(0);
-  const refresh = useCallback(async () => {
-    const sequence = ++fetchSequence.current;
-    const result = await api<TripSnapshot>(`/trips/${tripId}`);
-    if (sequence === fetchSequence.current) setData(result);
-  }, [tripId]);
-  useEffect(() => {
-    refresh().catch((e) => setError(e.message));
-  }, [refresh]);
-  useEffect(() => {
-    const events = new EventSource(`/api/trips/${tripId}/events`);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const sync = () => {
-      clearTimeout(timer);
-      timer = setTimeout(
-        () =>
-          refresh().catch((e) => {
-            setError(e.message);
-            if (e instanceof ApiFailure && [401, 403, 404].includes(e.status)) {
-              events.close();
-              setData(null);
-            }
-          }),
-        180,
-      );
-    };
-    events.addEventListener("sync", sync);
-    events.addEventListener("change", sync);
-    events.addEventListener("revoked", () => {
-      events.close();
-      fetchSequence.current++;
-      setData(null);
-      setError("你已没有访问此行程的权限");
-    });
-    const focus = () => sync();
-    window.addEventListener("focus", focus);
-    return () => {
-      clearTimeout(timer);
-      events.close();
-      window.removeEventListener("focus", focus);
-    };
-  }, [tripId, refresh]);
+  const error = actionError || loadError;
   const mutate: Mutate = useCallback(
     async <T,>(path: string, method: string, value: unknown): Promise<T> => {
       const result = await api<T>(path, method, value);
@@ -171,7 +144,7 @@ export function TripShell({
       </header>
       <nav className="trip-nav" aria-label="行程导航">
         {tabs.map((tab) => (
-          <a
+          <Link
             key={tab.key}
             href={`/trips/${tripId}/${tab.key}`}
             className={section === tab.key ? "active" : ""}
@@ -179,7 +152,7 @@ export function TripShell({
           >
             <tab.icon size={15} />
             {tab.label}
-          </a>
+          </Link>
         ))}
         <span className="workspace-permission">
           {section === "view"

@@ -1,0 +1,1 @@
+CREATE INDEX `alternatives_leg_position` ON `route_alternatives` (`travelLegId`,`position`);

@@ -48,7 +48,8 @@ it("discards delayed results after an item changes", async () => {
 });
 it("selects the recommended route then preserves a user choice when refreshed", async () => {
   const day = setup();
-  await calculateDay(day.id, actor);
+  expect(await calculateDay(day.id, actor)).toMatchObject({ changed: true });
+  expect(await calculateDay(day.id, actor)).toMatchObject({ changed: false });
   let leg = s.getDay(day.id).legs[0];
   expect(leg.alternatives).toHaveLength(3);
   expect(leg.selectedAlternativeId).toBe(leg.alternatives[0].id);

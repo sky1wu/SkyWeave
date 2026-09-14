@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { tripSections, type TripSection } from "@/domain/types";
 import { TripShell } from "@/components/trip-shell";
 export default async function Page({
   params,
@@ -6,7 +7,6 @@ export default async function Page({
   params: Promise<{ id: string; section: string }>;
 }) {
   const { id, section } = await params;
-  if (!["plan", "view", "expenses", "members", "activity"].includes(section))
-    notFound();
-  return <TripShell tripId={id} section={section} />;
+  if (!tripSections.includes(section as TripSection)) notFound();
+  return <TripShell tripId={id} section={section as TripSection} />;
 }

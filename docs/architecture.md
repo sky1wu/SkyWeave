@@ -9,7 +9,7 @@
 - DayItem 时间为相对 Day 午夜的分钟偏移，支持次日；固定活动不因迟到延后结束，note 不阻断路线。
 - WGS-84 坐标对象 lat/lng，polyline [lng, lat]；只在高德边界转换。
 - 自动重算 debounce 500ms；保留所有有效候选和用户选择，过期响应不覆盖新版本。
-- 业务 mutation、版本校验和 Activity Log 同事务；SSE 通知后重新获取数据。
+- 业务 mutation、版本校验和 Activity Log 同事务；页面快照使用只读事务批量查询。SSE 携带变更序号，共享行程布局合并请求并按需刷新；地图坐标按日期版本独立加载。详见 [性能说明](performance.md)。
 
 ## 数据库
 

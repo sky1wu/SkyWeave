@@ -20,7 +20,7 @@ export const dispatchFinance: ApiDispatcher = ({
   data,
 }) => {
   if (root === "trips" && action === "expenses") {
-    if (method === "GET") return snapshot(id, user).expenses;
+    if (method === "GET") return snapshot(id, user, "expenses").expenses;
     if (method === "POST") return saveExpense(id, user, data);
   } else if (root === "expenses" && !action) {
     if (method === "PATCH") {

@@ -5,6 +5,9 @@ export type Item = typeof s.items.$inferSelect;
 export type PoolPlace = typeof s.poolPlaces.$inferSelect;
 export type Leg = typeof s.legs.$inferSelect;
 export type Alternative = typeof s.alternatives.$inferSelect;
+// Workspace responses keep route instructions; map geometry is loaded separately.
+export type RouteAlternative = Omit<Alternative, "polyline"> &
+  Partial<Pick<Alternative, "polyline">>;
 export type Participant = typeof s.participants.$inferSelect;
 export type Expense = typeof s.expenses.$inferSelect;
 export type Split = typeof s.splits.$inferSelect;
@@ -18,7 +21,7 @@ export type Activity = typeof s.activity.$inferSelect & { actorName: string };
 export type Comment = typeof s.comments.$inferSelect & { authorName: string };
 export type DayPlan = Day & {
   items: Item[];
-  legs: (Leg & { alternatives: Alternative[] })[];
+  legs: (Leg & { alternatives: RouteAlternative[] })[];
 };
 export interface TripSnapshot {
   trip: Trip;
@@ -33,6 +36,20 @@ export interface TripSnapshot {
   comments: Comment[];
   activity: Activity[];
   invites: Invite[];
+}
+export const tripSections = [
+  "plan",
+  "view",
+  "expenses",
+  "members",
+  "activity",
+] as const;
+export type TripSection = (typeof tripSections)[number];
+export type VersionedSnapshot = TripSnapshot & { sequence: number };
+export interface DayGeometry {
+  dayId: string;
+  version: number;
+  alternatives: Pick<Alternative, "id" | "polyline">[];
 }
 export type Mode = Leg["mode"];
 export const modeLabels: Record<Mode, string> = {

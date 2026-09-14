@@ -7,7 +7,8 @@ import type {
   Day,
   Participant,
   Member,
-  TripSnapshot,
+  TripSection,
+  VersionedSnapshot,
   Expense,
   Split,
   Settlement,
@@ -21,63 +22,97 @@ import * as v from "./validation";
 import {
   access,
   checkVersion,
-  getDay,
+  getDays,
   getTrip,
+  groupBy,
   log,
+  readTx,
   revision,
   tx,
+  tripSequence,
   uid,
   type Actor,
 } from "./service-core";
 
-export function snapshot(tripId: string, actor: Actor): TripSnapshot {
-  return tx(() => {
+export function snapshot(
+  tripId: string,
+  actor: Actor,
+  section?: TripSection,
+): VersionedSnapshot {
+  return readTx(() => {
     const member = access(tripId, actor);
-    const expenses = many<Expense>(
-      "SELECT * FROM expenses WHERE tripId = ? ORDER BY incurredAt DESC, id",
-      tripId,
+    const includes = (...sections: TripSection[]) =>
+      !section || sections.includes(section);
+    const splits = groupBy(
+      includes("plan", "expenses")
+        ? many<Split>(
+            "SELECT s.* FROM expense_splits s JOIN expenses e ON e.id=s.expenseId WHERE e.tripId=?",
+            tripId,
+          )
+        : [],
+      (split) => split.expenseId,
+    );
+    const expenses = (
+      includes("plan", "expenses")
+        ? many<Expense>(
+            "SELECT * FROM expenses WHERE tripId = ? ORDER BY incurredAt DESC, id",
+            tripId,
+          )
+        : []
     ).map((e) => ({
       ...e,
-      splits: many<Split>(
-        "SELECT * FROM expense_splits WHERE expenseId = ?",
-        e.id,
-      ),
+      splits: splits.get(e.id) ?? [],
     }));
     return {
+      sequence: tripSequence(tripId),
       trip: getTrip(tripId),
       currentUserId: actor.id,
       role: member.role,
-      poolPlaces: many<PoolPlace>(
-        "SELECT * FROM trip_places WHERE tripId=? ORDER BY position, createdAt, id",
-        tripId,
-      ),
-      days: many<Day>(
-        "SELECT * FROM days WHERE tripId = ? ORDER BY position",
-        tripId,
-      ).map((d) => getDay(d.id)),
-      participants: many<Participant>(
-        "SELECT * FROM trip_participants WHERE tripId = ? ORDER BY createdAt, id",
-        tripId,
-      ),
+      poolPlaces: includes("plan")
+        ? many<PoolPlace>(
+            "SELECT * FROM trip_places WHERE tripId=? ORDER BY position, createdAt, id",
+            tripId,
+          )
+        : [],
+      days: getDays(tripId, {
+        items: includes("plan", "view", "expenses"),
+        routes: !section
+          ? "full"
+          : includes("plan", "view")
+            ? "summary"
+            : "none",
+      }),
+      participants: includes("plan", "expenses", "members")
+        ? many<Participant>(
+            "SELECT * FROM trip_participants WHERE tripId = ? ORDER BY createdAt, id",
+            tripId,
+          )
+        : [],
       members: many<Member>(
         "SELECT m.*, u.name, u.email FROM trip_members m JOIN users u ON u.id = m.userId WHERE m.tripId = ? ORDER BY m.joinedAt",
         tripId,
       ),
       expenses,
-      settlements: many<Settlement>(
-        "SELECT * FROM settlements WHERE tripId = ? ORDER BY settledAt DESC",
-        tripId,
-      ),
-      comments: many<Comment>(
-        "SELECT c.*, u.name authorName FROM comments c JOIN users u ON u.id = c.authorUserId WHERE c.tripId = ? ORDER BY c.createdAt",
-        tripId,
-      ),
-      activity: many<Activity>(
-        "SELECT a.*, u.name actorName FROM activity_logs a JOIN users u ON u.id = a.actorUserId WHERE a.tripId = ? ORDER BY a.sequence DESC LIMIT 200",
-        tripId,
-      ),
+      settlements: includes("expenses")
+        ? many<Settlement>(
+            "SELECT * FROM settlements WHERE tripId = ? ORDER BY settledAt DESC",
+            tripId,
+          )
+        : [],
+      comments: includes("plan", "expenses", "activity")
+        ? many<Comment>(
+            "SELECT c.*, u.name authorName FROM comments c JOIN users u ON u.id = c.authorUserId WHERE c.tripId = ? ORDER BY c.createdAt",
+            tripId,
+          )
+        : [],
+      activity: includes("activity")
+        ? many<Activity>(
+            "SELECT a.*, u.name actorName FROM activity_logs a JOIN users u ON u.id = a.actorUserId WHERE a.tripId = ? ORDER BY a.sequence DESC LIMIT 200",
+            tripId,
+          )
+        : [],
       invites:
-        member.role === "owner"
+        member.role === "owner" && includes("members")
           ? many<Invite>(
               "SELECT id, tripId, role, participantId, expiresAt, maxUses, usedCount, revokedAt, createdByUserId, createdAt, version FROM trip_invites WHERE tripId = ? ORDER BY createdAt DESC",
               tripId,

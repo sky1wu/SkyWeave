@@ -19,7 +19,7 @@ export function events(
       const send = (s: string) => {
         if (!stopped) controller.enqueue(encoder.encode(s));
       };
-      send(`event: sync\ndata: {}\n\n`);
+      send(`event: sync\ndata: ${JSON.stringify({ sequence: cursor })}\n\n`);
       const timer = setInterval(() => {
         try {
           access(tripId, actor);

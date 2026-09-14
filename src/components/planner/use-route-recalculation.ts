@@ -40,17 +40,23 @@ export function useRouteRecalculation({
       routeJobs.current++;
       setRouting(true);
       try {
+        let changed = false;
         for (const target of targets) {
           if (cancelled) break;
           routedVersions.current.set(target.id, target.version);
           try {
-            await api(`/days/${target.id}/routes/recalculate`, "POST", {});
+            const result = await api<{ changed: boolean }>(
+              `/days/${target.id}/routes/recalculate`,
+              "POST",
+              {},
+            );
+            changed = changed || result.changed;
           } catch (error) {
             routedVersions.current.delete(target.id);
             throw error;
           }
         }
-        await current.current.refresh();
+        if (changed) await current.current.refresh();
       } catch (error) {
         if (error instanceof ApiFailure && error.status === 409)
           await current.current.refresh();

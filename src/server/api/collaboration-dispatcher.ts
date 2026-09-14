@@ -26,19 +26,19 @@ export const dispatchCollaboration: ApiDispatcher = ({
   if (root === "trips" && action === "events" && method === "GET")
     return events(id, user, request);
   if (root === "trips" && action === "participants") {
-    if (method === "GET") return snapshot(id, user).participants;
+    if (method === "GET") return snapshot(id, user, "members").participants;
     if (method === "POST" && !subId) return createParticipant(id, user, data);
     if (method === "PATCH" && subId)
       return editParticipant(id, subId, user, data);
     if (method === "DELETE" && subId)
       return deleteParticipant(id, subId, user, expectedVersion(data));
   } else if (root === "trips" && action === "members") {
-    if (method === "GET") return snapshot(id, user).members;
+    if (method === "GET") return snapshot(id, user, "members").members;
     if (method === "PATCH" && subId) return editMember(id, subId, user, data);
   } else if (root === "trips" && action === "invites") {
     if (method === "GET") {
       access(id, user, "owner");
-      return snapshot(id, user).invites;
+      return snapshot(id, user, "members").invites;
     }
     if (method === "POST" && !subId) return createInvite(id, user, data);
     if (method === "DELETE" && subId)
@@ -46,9 +46,9 @@ export const dispatchCollaboration: ApiDispatcher = ({
   } else if (root === "invites" && action === "join" && method === "POST")
     return joinInvite(id, user);
   else if (root === "trips" && action === "activity" && method === "GET")
-    return snapshot(id, user).activity;
+    return snapshot(id, user, "activity").activity;
   else if (root === "trips" && action === "comments") {
-    if (method === "GET") return snapshot(id, user).comments;
+    if (method === "GET") return snapshot(id, user, "activity").comments;
     if (method === "POST") return addComment(id, user, data);
   }
   return UNHANDLED;

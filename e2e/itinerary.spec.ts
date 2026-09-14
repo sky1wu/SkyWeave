@@ -275,7 +275,7 @@ test("无日期行程可浏览、导出失败可重试", async ({ page }) => {
   await register(page);
   const snapshot = await createTrip(page, false);
   // Legacy snapshots can have no dates; new trips receive dates from the API.
-  await page.route(`**/api/trips/${snapshot.trip.id}`, (route) =>
+  await page.route(`**/api/trips/${snapshot.trip.id}?section=view`, (route) =>
     route.fulfill({
       json: {
         ...snapshot,

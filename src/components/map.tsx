@@ -9,6 +9,7 @@ import { routeEndpoint } from "@/domain/transport";
 import { mapLocations, type MapLocation } from "@/domain/map-locations";
 import { mapCategory, markerElement, arrangeMapLabels } from "./map-marker";
 import { PlaceCategory } from "./place-category";
+import { useDayGeometry } from "./trip-data";
 interface MapObject {
   destroy(): void;
   add(object: unknown): void;
@@ -89,7 +90,7 @@ export type MapFocus =
 // AMap setFitView uses top, bottom, left, right (not CSS clockwise order).
 export type MapInsets = [number, number, number, number];
 export function TripMap({
-  day,
+  day: summaryDay,
   days,
   pool,
   selectedPool,
@@ -115,14 +116,16 @@ export function TripMap({
   view: "pool" | "timeline" | "map";
   insets: MapInsets;
 }) {
+  const { day, error: geometryError } = useDayGeometry(summaryDay);
   const container = useRef<HTMLDivElement>(null),
     instance = useRef<MapObject | null>(null),
     overlays = useRef<unknown[]>([]),
     fit = useRef("");
   const callbacks = useRef({ select, selectPool, pick, picking });
   const [sdk, setSdk] = useState<SDK | null>(null),
-    [error, setError] = useState(""),
+    [mapError, setError] = useState(""),
     [testMode, setTestMode] = useState(false);
+  const error = mapError || geometryError;
   const locations = useMemo(
     () => mapLocations(day, pool, days),
     [day, pool, days],
@@ -302,6 +305,14 @@ export function TripMap({
       locations.map((p) => [p.id, p.lat, p.lng]),
       focus,
       leg?.selectedAlternativeId,
+      // Geometry arrives after the lightweight snapshot. Fit again when the
+      // selected polylines become available, without embedding all coordinates.
+      day?.legs.map((route) => {
+        const selected = route.alternatives.find(
+          (a) => a.id === route.selectedAlternativeId,
+        );
+        return [route.id, selected?.id, selected?.polyline?.length ?? 0];
+      }),
       leg?.manualDurationMinutes,
       view,
       insets,

@@ -261,25 +261,29 @@ export const legs = sqliteTable(
     uniqueIndex("legs_pair").on(t.dayId, t.fromItemId, t.toItemId),
   ],
 );
-export const alternatives = sqliteTable("route_alternatives", {
-  id: text().primaryKey(),
-  travelLegId: text()
-    .notNull()
-    .references(() => legs.id, { onDelete: "cascade" }),
-  provider: text().notNull().default("amap"),
-  fingerprint: text().notNull(),
-  position: integer().notNull(),
-  label: text().notNull(),
-  distanceMeters: integer().notNull(),
-  durationSeconds: integer().notNull(),
-  walkingDistanceMeters: integer(),
-  transferCount: integer(),
-  polyline: text({ mode: "json" }).$type<[number, number][]>().notNull(),
-  steps: text({ mode: "json" }).$type<RouteStep[]>().notNull(),
-  summary: text().notNull(),
-  geometryComplete: integer({ mode: "boolean" }).notNull(),
-  fetchedAt: integer().notNull(),
-});
+export const alternatives = sqliteTable(
+  "route_alternatives",
+  {
+    id: text().primaryKey(),
+    travelLegId: text()
+      .notNull()
+      .references(() => legs.id, { onDelete: "cascade" }),
+    provider: text().notNull().default("amap"),
+    fingerprint: text().notNull(),
+    position: integer().notNull(),
+    label: text().notNull(),
+    distanceMeters: integer().notNull(),
+    durationSeconds: integer().notNull(),
+    walkingDistanceMeters: integer(),
+    transferCount: integer(),
+    polyline: text({ mode: "json" }).$type<[number, number][]>().notNull(),
+    steps: text({ mode: "json" }).$type<RouteStep[]>().notNull(),
+    summary: text().notNull(),
+    geometryComplete: integer({ mode: "boolean" }).notNull(),
+    fetchedAt: integer().notNull(),
+  },
+  (t) => [index("alternatives_leg_position").on(t.travelLegId, t.position)],
+);
 export interface RouteStep {
   mode: string;
   instruction: string;

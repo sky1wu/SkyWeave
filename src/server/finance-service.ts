@@ -22,7 +22,7 @@ import {
 import { snapshot } from "./trip-service";
 
 export function balances(tripId: string, actor: Actor) {
-  const data = snapshot(tripId, actor);
+  const data = snapshot(tripId, actor, "expenses");
   return calculateBalances(
     data.participants.map((p) => p.id),
     data.expenses,

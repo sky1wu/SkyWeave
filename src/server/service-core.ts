@@ -7,8 +7,10 @@ import type {
   Item,
   Leg,
   Alternative,
+  RouteAlternative,
   Member,
   DayPlan,
+  DayGeometry,
 } from "@/domain/types";
 import { sqlite, one, many, run, insert } from "./db";
 import { AppError, conflict, requireValue } from "./errors";
@@ -21,6 +23,95 @@ export interface Actor {
 }
 export const uid = randomUUID;
 export const tx = <T>(fn: () => T): T => sqlite.transaction(fn).immediate();
+// A consistent read snapshot must not acquire SQLite's single writer slot.
+export const readTx = <T>(fn: () => T): T => sqlite.transaction(fn).deferred();
+export function tripSequence(tripId: string) {
+  return one<{ sequence: number }>(
+    "SELECT coalesce(max(sequence),0) sequence FROM activity_logs WHERE tripId=?",
+    tripId,
+  )!.sequence;
+}
+export function groupBy<T>(rows: T[], key: (row: T) => string) {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const id = key(row);
+    const group = groups.get(id);
+    if (group) group.push(row);
+    else groups.set(id, [row]);
+  }
+  return groups;
+}
+const summaryColumns =
+  "id,travelLegId,provider,fingerprint,position,label,distanceMeters,durationSeconds,walkingDistanceMeters,transferCount,steps,summary,geometryComplete,fetchedAt"
+    .split(",")
+    .map((column) => `a.${column}`)
+    .join(",");
+
+export function getDays(
+  tripId: string,
+  options: { items: boolean; routes: "full" | "summary" | "none" } = {
+    items: true,
+    routes: "full",
+  },
+): DayPlan[] {
+  const days = many<Day>(
+    "SELECT * FROM days WHERE tripId=? ORDER BY position",
+    tripId,
+  );
+  const items = groupBy(
+    options.items
+      ? many<Item>(
+          "SELECT i.* FROM day_items i JOIN days d ON d.id=i.dayId WHERE d.tripId=? ORDER BY i.position",
+          tripId,
+        )
+      : [],
+    (item) => item.dayId,
+  );
+  const legs =
+    options.routes === "none"
+      ? []
+      : many<Leg>(
+          "SELECT l.* FROM travel_legs l JOIN days d ON d.id=l.dayId WHERE d.tripId=?",
+          tripId,
+        );
+  const alternatives = groupBy(
+    options.routes === "none"
+      ? []
+      : many<RouteAlternative>(
+          `SELECT ${options.routes === "full" ? "a.*" : summaryColumns} FROM route_alternatives a JOIN travel_legs l ON l.id=a.travelLegId JOIN days d ON d.id=l.dayId WHERE d.tripId=? ORDER BY a.position`,
+          tripId,
+        ),
+    (alternative) => alternative.travelLegId,
+  );
+  const groupedLegs = groupBy(
+    legs.map((leg) => ({
+      ...leg,
+      alternatives: alternatives.get(leg.id) ?? [],
+    })),
+    (leg) => leg.dayId,
+  );
+  return days.map((day) => ({
+    ...day,
+    items: items.get(day.id) ?? [],
+    legs: groupedLegs.get(day.id) ?? [],
+  }));
+}
+
+export function dayGeometry(dayId: string, actor: Actor): DayGeometry {
+  return readTx(() => {
+    const day = requireValue(one<Day>("SELECT * FROM days WHERE id=?", dayId));
+    access(day.tripId, actor);
+    return {
+      dayId,
+      version: day.version,
+      // The map draws only the selected route, not every candidate.
+      alternatives: many<Pick<Alternative, "id" | "polyline">>(
+        "SELECT a.id, a.polyline FROM route_alternatives a JOIN travel_legs l ON l.id=a.travelLegId AND l.selectedAlternativeId=a.id WHERE l.dayId=?",
+        dayId,
+      ),
+    };
+  });
+}
 export function revision(actor: Actor) {
   const now = Date.now();
   return {
@@ -76,6 +167,13 @@ export function getTrip(id: string) {
 }
 export function getDay(id: string): DayPlan {
   const day = requireValue(one<Day>("SELECT * FROM days WHERE id = ?", id));
+  const alternatives = groupBy(
+    many<Alternative>(
+      "SELECT a.* FROM route_alternatives a JOIN travel_legs l ON l.id=a.travelLegId WHERE l.dayId=? ORDER BY a.position",
+      id,
+    ),
+    (alternative) => alternative.travelLegId,
+  );
   return {
     ...day,
     items: many<Item>(
@@ -85,10 +183,7 @@ export function getDay(id: string): DayPlan {
     legs: many<Leg>("SELECT * FROM travel_legs WHERE dayId = ?", id).map(
       (l) => ({
         ...l,
-        alternatives: many<Alternative>(
-          "SELECT * FROM route_alternatives WHERE travelLegId = ? ORDER BY position",
-          l.id,
-        ),
+        alternatives: alternatives.get(l.id) ?? [],
       }),
     ),
   };

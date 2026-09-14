@@ -13,12 +13,14 @@ export async function api<T>(
   path: string,
   method = "GET",
   data?: unknown,
+  options?: { signal?: AbortSignal },
 ): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method,
     headers: { "Content-Type": "application/json" },
     ...(data !== undefined ? { body: JSON.stringify(data) } : {}),
     cache: "no-store",
+    signal: options?.signal,
   });
   const result = await response.json();
   if (!response.ok) {

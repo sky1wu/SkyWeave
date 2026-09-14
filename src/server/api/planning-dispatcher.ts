@@ -21,7 +21,7 @@ import {
   reorder,
 } from "../planning-service";
 import { calculateDay, calculateLeg } from "../routing";
-import { access, uid } from "../service-core";
+import { access, dayGeometry, uid } from "../service-core";
 import { snapshot } from "../trip-service";
 import { expectedVersion, UNHANDLED, type ApiDispatcher } from "./dispatcher";
 
@@ -36,8 +36,16 @@ export const dispatchPlanning: ApiDispatcher = async ({
   user,
   data,
 }) => {
+  if (
+    root === "days" &&
+    action === "geometry" &&
+    path.length === 3 &&
+    method === "GET"
+  )
+    return dayGeometry(id, user);
   if (root === "trips" && action === "places") {
-    if (method === "GET" && !subId) return snapshot(id, user).poolPlaces;
+    if (method === "GET" && !subId)
+      return snapshot(id, user, "plan").poolPlaces;
     if (method === "POST" && !subId) return savePoolPlace(id, user, data);
     if (method === "POST" && subId === "reorder" && path.length === 4)
       return reorderPoolPlaces(id, user, data);

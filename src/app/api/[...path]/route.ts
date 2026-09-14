@@ -65,9 +65,14 @@ async function handler(request: Request, context: Context): Promise<Response> {
       status = result.status;
       return result;
     }
-    return Response.json(result, {
+    const response = Response.json(result, {
       headers: { "X-Request-Id": requestId, "Cache-Control": "no-store" },
     });
+    response.headers.set(
+      "Server-Timing",
+      `app;dur=${(performance.now() - started).toFixed(1)}`,
+    );
+    return response;
   } catch (error) {
     status =
       error instanceof AppError
