@@ -858,10 +858,20 @@ test("手机卡片：滑动滚动、长按排序与取消", async ({ browser }) 
       .toBeGreaterThan(20);
     expect(await order()).toEqual(initial);
     await expect(page.locator(".planner-drag-preview")).not.toBeVisible();
+    // Scaling makes the mismatch between viewport and scroll coordinates
+    // deterministic, instead of relying on mobile compositor timing.
+    await pane.evaluate((element) => {
+      element.style.transform = "scale(0.9)";
+      element.style.transformOrigin = "top left";
+    });
     await page.locator(".day-tabs button").first().click();
     await expect
       .poll(() => pane.evaluate((e) => e.scrollTop))
       .toBeLessThanOrEqual(2);
+    await pane.evaluate((element) => {
+      element.style.removeProperty("transform");
+      element.style.removeProperty("transform-origin");
+    });
     const start = (await page.locator(".timeline-item").first().boundingBox())!;
     const target = (await page.locator(".timeline-item").nth(1).boundingBox())!;
     await touch("touchStart", start.x + 5, start.y + 12);

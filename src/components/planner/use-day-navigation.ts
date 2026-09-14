@@ -97,9 +97,9 @@ export function useDayNavigation({
           0,
           Math.min(
             pane.scrollHeight - pane.clientHeight,
-            pane.scrollTop +
-              section.getBoundingClientRect().top -
-              pane.getBoundingClientRect().top,
+            // The pane is the positioned parent, so this stays in scroll
+            // coordinates even during touch scrolling or visual transforms.
+            section.offsetTop,
           ),
         );
         if (Math.abs(pane.scrollTop - top) > 1)
