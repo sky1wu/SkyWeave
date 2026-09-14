@@ -191,7 +191,10 @@ export function TripMap({
     const createMarker = (point: MapLocation) => {
       const active =
         !!(point.itemId && point.itemId === selected) ||
-        !!(point.poolPlaceId && point.poolPlaceId === selectedPool);
+        !!(
+          selectedPool &&
+          (point.poolPlaceId ?? point.sourcePlaceId) === selectedPool
+        );
       const node = markerElement(point, active);
       const marker = new sdk.Marker({
         position: mapPoint(point.lng, point.lat),
@@ -285,8 +288,15 @@ export function TripMap({
         lineByItem.get(focus.id),
       ].filter(Boolean);
     } else if (focus?.kind === "point") {
-      const existing = focus.poolPlaceId
-        ? markers.get(`pool:${focus.poolPlaceId}`)
+      // Scheduled places and transport endpoints already have a map marker.
+      const existingPoint = focus.poolPlaceId
+        ? locations.find(
+            (point) =>
+              (point.poolPlaceId ?? point.sourcePlaceId) === focus.poolPlaceId,
+          )
+        : undefined;
+      const existing = existingPoint
+        ? markers.get(existingPoint.id)
         : undefined;
       targets = [
         existing ??
@@ -370,7 +380,9 @@ export function TripMap({
       : [];
   const selectedPoints = locations.flatMap((point, i) =>
     (point.itemId && ids.includes(point.itemId)) ||
-    (focus?.kind === "point" && point.poolPlaceId === focus.poolPlaceId)
+    (focus?.kind === "point" &&
+      focus.poolPlaceId &&
+      (point.poolPlaceId ?? point.sourcePlaceId) === focus.poolPlaceId)
       ? [{ x: 130 + (i % 3) * 180, y: 110 + Math.floor(i / 3) * 140 }]
       : [],
   );

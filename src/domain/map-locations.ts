@@ -8,6 +8,7 @@ export interface MapLocation {
   id: string;
   itemId?: string;
   poolPlaceId?: string;
+  sourcePlaceId?: string | null;
   endpoint?: "origin" | "destination";
   title: string;
   category: string;
@@ -32,6 +33,7 @@ export function mapLocations(
           result.push({
             id: `${item.id}:${endpoint}`,
             itemId: item.id,
+            sourcePlaceId: point.sourcePlaceId,
             endpoint,
             title: point.name,
             category: transportLabels[item.transport.mode],
@@ -44,6 +46,7 @@ export function mapLocations(
       result.push({
         id: item.id,
         itemId: item.id,
+        sourcePlaceId: item.sourcePlaceId,
         title: item.title,
         category:
           item.placeCategory === "未分类"
