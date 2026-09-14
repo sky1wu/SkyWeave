@@ -475,21 +475,24 @@
   background: var(--muted);
   color: var(--primary);
 }
-.trip-workspace .trip-nav {
+.workspace-sidebar {
   grid-column: 1;
   grid-row: 2;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: #fff;
+}
+.trip-workspace .trip-nav {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
   gap: 12px;
   padding: 24px 10px;
-  width: 88px;
+  width: 100%;
   height: calc(100dvh - 76px);
   min-height: 0;
   border: 0;
-  border-right: 1px solid var(--border);
-  background: #fff;
   position: sticky;
   top: 0;
 }
@@ -1164,10 +1167,11 @@
   .compact-trip-header .brand {
     padding-right: 18px;
   }
+  .workspace-sidebar {
+    border-right: 0;
+  }
   .trip-workspace .trip-nav {
     position: static;
-    grid-column: 1;
-    grid-row: 2;
     width: 100%;
     height: 50px;
     min-height: 50px;

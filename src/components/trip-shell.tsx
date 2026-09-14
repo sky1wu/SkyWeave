@@ -142,26 +142,28 @@ export function TripShell({
         </Link>
         <SettingsLink />
       </header>
-      <nav className="trip-nav" aria-label="行程导航">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.key}
-            href={`/trips/${tripId}/${tab.key}`}
-            className={section === tab.key ? "active" : ""}
-            aria-current={section === tab.key ? "page" : undefined}
-          >
-            <tab.icon size={15} />
-            {tab.label}
-          </Link>
-        ))}
-        <span className="workspace-permission">
-          {section === "view"
-            ? "浏览模式"
-            : data.role === "viewer"
-              ? "只读，可评论"
-              : "共同编辑"}
-        </span>
-      </nav>
+      <div className="workspace-sidebar">
+        <nav className="trip-nav" aria-label="行程导航">
+          {tabs.map((tab) => (
+            <Link
+              key={tab.key}
+              href={`/trips/${tripId}/${tab.key}`}
+              className={section === tab.key ? "active" : ""}
+              aria-current={section === tab.key ? "page" : undefined}
+            >
+              <tab.icon size={15} />
+              {tab.label}
+            </Link>
+          ))}
+          <span className="workspace-permission">
+            {section === "view"
+              ? "浏览模式"
+              : data.role === "viewer"
+                ? "只读，可评论"
+                : "共同编辑"}
+          </span>
+        </nav>
+      </div>
       <div className="workspace-content">
         {error && (
           <div className="px-6 pt-3">
