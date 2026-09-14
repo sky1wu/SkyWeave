@@ -26,6 +26,12 @@ import { FixedArrival } from "./fixed-arrival";
 import { cardDragListeners } from "./card-drag";
 import { PlaceCategory } from "./place-category";
 import { transportLabels } from "@/domain/transport";
+function formatStayDuration(minutes: number) {
+  if (minutes <= 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return `${hours} 小时${remainder ? ` ${remainder} 分钟` : ""}`;
+}
 export function TimelineItem({
   item,
   index,
@@ -245,7 +251,7 @@ export function TimelineItem({
           {!item.transport && (
             <span>
               <Clock3 size={12} />
-              停留 {item.stayMinutes} 分钟
+              停留 {formatStayDuration(item.stayMinutes)}
             </span>
           )}
         </div>

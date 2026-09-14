@@ -1358,7 +1358,7 @@ test("事项时间：结束时间与停留时长双向同步、跨日和保存",
   expect(
     (await call<TripSnapshot>(page, `/trips/${id}`)).days[0].items[0],
   ).toMatchObject({ startMinutes: 1200, endMinutes: 1560, stayMinutes: 360 });
-  await expect(card).toContainText("停留 360 分钟");
+  await expect(card).toContainText("停留 6 小时");
 
   await page.reload();
   await card.getByRole("button", { name: "编辑", exact: true }).click();
