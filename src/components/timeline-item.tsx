@@ -248,7 +248,7 @@ export function TimelineItem({
                 : " 固定活动"}
             </span>
           )}
-          {!item.transport && (
+          {!item.transport && item.stayMinutes > 0 && (
             <span>
               <Clock3 size={12} />
               停留 {formatStayDuration(item.stayMinutes)}
