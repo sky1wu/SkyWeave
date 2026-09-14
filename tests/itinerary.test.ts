@@ -143,8 +143,33 @@ it("preserves overnight service details and does not invent times for an unknown
     kind: "info",
     text: "上海站 → 杭州站",
   });
+  expect(
+    result.stops[0].details.map((detail) => detail.text).join(),
+  ).not.toMatch(/预计|提前|到达时间待定/);
+  expect(result.stops[0].warnings).toEqual([]);
   expect(result.stops[1].time).toBe("时间待定");
   expect(result.stops[1].connection?.summary).toBe("交通待规划");
+});
+
+it("omits first-stop arrival estimates on every day and retains unknown arrivals for later stops", () => {
+  const days = [0, 1].map((position) =>
+    day(
+      [
+        item("first", 0, { fixedTime: true, startMinutes: 540 }),
+        item("next", 1, { fixedTime: true, startMinutes: 600 }),
+      ],
+      { id: `day-${position}`, position },
+    ),
+  );
+  for (const result of itineraryDays(days)) {
+    expect(result.stops[0].time).toBe("09:00");
+    expect(result.stops[0].details).toEqual([]);
+    expect(result.stops[0].warnings).toEqual([]);
+    expect(result.stops[1].details).toContainEqual({
+      kind: "info",
+      text: "到达时间待定",
+    });
+  }
 });
 
 it("orders days without changing their day numbers and handles missing dates and empty days", () => {

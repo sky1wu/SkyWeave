@@ -147,7 +147,7 @@ export function itineraryDays(days: DayPlan[]): ItineraryDay[] {
                 "address",
               );
             } else add(item.address, "address");
-            if (scheduled) {
+            if (scheduled && !entry.isDayStart) {
               add(
                 entry.arrival === null
                   ? "到达时间待定"

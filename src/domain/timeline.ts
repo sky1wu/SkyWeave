@@ -3,6 +3,8 @@ import type { DayPlan, Item } from "./types";
 import { routeEndpoint, transportTiming } from "./transport";
 export interface TimelineEntry {
   itemId: string;
+  isDayStart: boolean;
+  // The first item has no inbound arrival; null otherwise means unknown.
   arrival: number | null;
   start: number | null;
   departure: number | null;
@@ -37,6 +39,7 @@ export function calculateTimeline(day: DayPlan) {
   const entries: TimelineEntry[] = [];
   const departures: Record<string, number | null> = {};
   for (const item of [...day.items].sort((a, b) => a.position - b.position)) {
+    const isDayStart = entries.length === 0;
     const warnings: string[] = [];
     if (item.type !== "note") {
       if (item.transport) {
@@ -73,12 +76,17 @@ export function calculateTimeline(day: DayPlan) {
       }
       previous = item;
     }
-    const arrival = clock;
+    const arrival = isDayStart ? null : clock;
     if (item.transport) {
-      const timing = transportTiming(item, arrival);
+      const timing = transportTiming(
+        item,
+        arrival,
+        isDayStart ? day.startMinutes * 60 : undefined,
+      );
       clock = timing.departure;
       entries.push({
         itemId: item.id,
+        isDayStart,
         arrival,
         ...timing,
         warnings: [...warnings, ...timing.warnings],
@@ -108,12 +116,14 @@ export function calculateTimeline(day: DayPlan) {
         arrival >= plannedEnd
       )
         warnings.push("活动已结束，预计错过");
-      if (arrival === null) warnings.push("到达时间不确定，后续按活动时间暂估");
+      if (!isDayStart && arrival === null)
+        warnings.push("到达时间不确定，后续按活动时间暂估");
       clock = arrival === null ? fixedStart : Math.max(arrival, fixedStart);
       const start = clock;
       clock = Math.max(clock, plannedEnd ?? clock);
       entries.push({
         itemId: item.id,
+        isDayStart,
         arrival,
         start,
         departure: clock,
@@ -130,9 +140,10 @@ export function calculateTimeline(day: DayPlan) {
           plannedEnd !== null
             ? Math.max(clock, plannedEnd)
             : clock + item.stayMinutes * 60;
-      if (arrival === null) warnings.push("到达时间不确定");
+      if (!isDayStart && arrival === null) warnings.push("到达时间不确定");
       entries.push({
         itemId: item.id,
+        isDayStart,
         arrival,
         start,
         departure: clock,

@@ -8,7 +8,8 @@ export function FixedArrival({
   item: Item;
   entry: TimelineEntry;
 }) {
-  if (!item.fixedTime || item.startMinutes === null) return null;
+  if (entry.isDayStart || !item.fixedTime || item.startMinutes === null)
+    return null;
   if (entry.arrival === null)
     return (
       <p className="fixed-arrival unknown">到达时间待定，无法判断是否准时</p>

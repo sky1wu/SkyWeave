@@ -52,7 +52,11 @@ export function routeEndpoint(
   };
 }
 
-export function transportTiming(item: Item, arrival: number | null) {
+export function transportTiming(
+  item: Item,
+  arrival: number | null,
+  dayStart?: number,
+) {
   const plan = item.transport!;
   const warnings: string[] = [];
   const fixedStart = item.startMinutes === null ? null : item.startMinutes * 60;
@@ -70,13 +74,18 @@ export function transportTiming(item: Item, arrival: number | null) {
   const missed =
     lateMinutes > 0 ||
     (fixedEnd !== null && arrival !== null && arrival > fixedEnd);
-  const start = fixedStart ?? (duration !== null ? arrival : null);
+  const start =
+    fixedStart ?? (duration !== null ? (arrival ?? dayStart ?? null) : null);
   let departure =
     fixedEnd ?? (start !== null && duration !== null ? start + duration : null);
   if (missed) {
     warnings.push("预计赶不上此班次，后续到达时间不确定");
     departure = null;
-  } else if (arrival === null && (fixedStart !== null || fixedEnd !== null)) {
+  } else if (
+    arrival === null &&
+    dayStart === undefined &&
+    (fixedStart !== null || fixedEnd !== null)
+  ) {
     warnings.push("接驳到达时间不确定，后续按填写时间暂估");
   }
   if (departure === null && !missed) warnings.push("交通到达时间待定");

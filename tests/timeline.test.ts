@@ -88,11 +88,43 @@ it("calculates travel, stays, and a note without breaking geography", () => {
     day(items, [leg("a", "b", 27), leg("b", "c", 20)]),
   );
   expect(result.entries.map((i) => i.arrival)).toEqual([
-    480 * 60,
+    null,
     480 * 60,
     512 * 60,
     562 * 60,
   ]);
+});
+it("starts with the first appointment's schedule without estimating an inbound arrival", () => {
+  const first = item("first", 3, {
+    fixedTime: true,
+    startMinutes: 420,
+    endMinutes: 450,
+  });
+  const next = item("next", 8, {
+    fixedTime: true,
+    startMinutes: 480,
+    endMinutes: 510,
+  });
+  const result = calculateTimeline(
+    day([next, first], [leg("first", "next", 15)]),
+  );
+  expect(result.entries[0]).toMatchObject({
+    itemId: "first",
+    isDayStart: true,
+    arrival: null,
+    start: 420 * 60,
+    departure: 450 * 60,
+    earlyMinutes: 0,
+    lateMinutes: 0,
+    warnings: [],
+  });
+  expect(result.departures.firstnext).toBe(450 * 60);
+  expect(result.entries[1]).toMatchObject({
+    isDayStart: false,
+    arrival: 465 * 60,
+    earlyMinutes: 15,
+    warnings: [],
+  });
 });
 it("keeps fixed end times when late and never rewinds after a missed event", () => {
   const items = [
@@ -152,6 +184,34 @@ const rail = transportInput.parse({
   origin: { name: "出发站", lat: 22.6, lng: 114.1 },
   destination: { name: "到达站", lat: 39.8, lng: 116.4 },
 });
+it.each([480, 1320])(
+  "does not infer early arrival or a missed flight for the first item when the day starts at %i minutes",
+  (startMinutes) => {
+    const flight = item("flight", 0, {
+      type: "transport",
+      fixedTime: true,
+      startMinutes: 19 * 60 + 5,
+      endMinutes: 21 * 60 + 55,
+      transport: { ...rail, mode: "flight" },
+    });
+    const result = calculateTimeline(
+      day(
+        [flight, item("hotel", 1)],
+        [leg("flight", "hotel", 15)],
+        startMinutes,
+      ),
+    );
+    expect(result.entries[0]).toMatchObject({
+      arrival: null,
+      start: (19 * 60 + 5) * 60,
+      departure: (21 * 60 + 55) * 60,
+      earlyMinutes: 0,
+      lateMinutes: 0,
+      warnings: [],
+    });
+    expect(result.entries[1].arrival).toBe((22 * 60 + 10) * 60);
+  },
+);
 it("connects to the departure station and from the arrival station around an independent journey", () => {
   const a = item("a", 0),
     trip = item("t", 1, {
