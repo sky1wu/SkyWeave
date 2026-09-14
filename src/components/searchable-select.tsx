@@ -44,7 +44,8 @@ export function SearchableSelect({
   const id = useId(),
     anchor = useRef<HTMLButtonElement>(null);
   const [local, setLocal] = useState(defaultValue),
-    [query, setQuery] = useState("");
+    [query, setQuery] = useState(""),
+    [open, setOpen] = useState(false);
   const selected = value ?? local;
   const selectedLabel =
     options.find((o) => o.value === selected)?.label || selected || placeholder;
@@ -62,6 +63,7 @@ export function SearchableSelect({
     <div className={cn("searchable-select grid min-w-0 gap-2", className)}>
       {!hideLabel && <Label htmlFor={id}>{label}</Label>}
       <Combobox
+        open={open}
         items={choices.map((o) => o.value)}
         value={selected}
         name={name}
@@ -74,6 +76,7 @@ export function SearchableSelect({
         inputValue={query}
         onInputValueChange={setQuery}
         onOpenChange={(open) => {
+          setOpen(open);
           if (open) setQuery("");
         }}
         onValueChange={(option) => {
@@ -89,6 +92,18 @@ export function SearchableSelect({
           render={<Button variant="outline" />}
           role="combobox"
           aria-label={label}
+          onKeyDown={(event) => {
+            // Focus may still be on the trigger while the popup is opening.
+            if (
+              event.key === "Escape" &&
+              open &&
+              !event.nativeEvent.isComposing
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+              setOpen(false);
+            }
+          }}
           className={cn(
             "select-trigger h-9 w-full min-w-0 justify-between px-3 font-normal",
             hideLabel && "gap-1 px-2 text-xs",

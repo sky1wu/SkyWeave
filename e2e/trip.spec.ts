@@ -1251,11 +1251,13 @@ test("SkyWeave：精简排序、日历拖动、自动路线、分类和城市选
   await page.getByRole("option", { name: "使用“咖啡”", exact: true }).click();
   await category.click();
   await expect(category).toHaveAttribute("aria-expanded", "true");
-  await page.keyboard.press("Escape");
+  // Escape can arrive before focus moves from the trigger into the popup.
+  await category.press("Escape");
   await expect(category).toHaveAttribute("aria-expanded", "false");
   await expect(
     page.getByRole("dialog", { name: "编辑行程事项", exact: true }),
   ).toBeVisible();
+  await expect(category).toBeFocused();
   await page.getByRole("button", { name: "保存事项", exact: true }).click();
   await expect(page.getByTestId(`item-${a.id}`)).toContainText("咖啡");
   await page.getByRole("combobox", { name: "城市", exact: true }).click();
@@ -1418,7 +1420,9 @@ test("组件库交互：嵌套下拉、焦点返回、删除确认和手机抽�
   await expect(category).toHaveText("餐饮");
   await category.click();
   await expect(category).toHaveAttribute("aria-expanded", "true");
-  await page.keyboard.press("Escape");
+  await page.getByLabel("搜索地点分类", { exact: true }).press("Escape");
+  await expect(category).toHaveAttribute("aria-expanded", "false");
+  await expect(category).toBeFocused();
   await expect(dialog).toBeVisible();
   await expect(dialog.getByLabel("名称", { exact: true })).toHaveValue(
     "未提交修改",
@@ -1436,7 +1440,8 @@ test("组件库交互：嵌套下拉、焦点返回、删除确认和手机抽�
       )
       .toBe(true);
   }
-  await dialog.getByRole("button", { name: "关闭", exact: true }).click();
+  await category.press("Escape");
+  await expect(dialog).not.toBeVisible();
   await expect(edit).toBeFocused();
   expect(
     (await call<TripSnapshot>(page, `/trips/${id}`)).days[0].items[0].title,
@@ -1476,6 +1481,16 @@ test("组件库交互：嵌套下拉、焦点返回、删除确认和手机抽�
   await sheet.getByRole("combobox", { name: "地点分类", exact: true }).click();
   await page.getByLabel("搜索地点分类", { exact: true }).fill("住宿");
   await page.getByRole("option", { name: "住宿", exact: true }).click();
+  const mobileCategory = sheet.getByRole("combobox", {
+    name: "地点分类",
+    exact: true,
+  });
+  await mobileCategory.click();
+  await expect(mobileCategory).toHaveAttribute("aria-expanded", "true");
+  await mobileCategory.press("Escape");
+  await expect(mobileCategory).toHaveAttribute("aria-expanded", "false");
+  await expect(sheet).toBeVisible();
+  await expect(mobileCategory).toHaveText("住宿");
   await sheet
     .getByRole("checkbox", { name: "固定时间活动", exact: true })
     .check();
