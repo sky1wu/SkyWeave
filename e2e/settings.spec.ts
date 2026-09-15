@@ -112,6 +112,20 @@ test("昵称校验、保存失败重试、持久化、成员同步与手机入�
   expect(((await snapshot.json()) as TripSnapshot).members[0].name).toBe(
     "一起去旅行",
   );
+  const memberCard = page.locator(".member-card");
+  await expect(memberCard.getByRole("heading")).toHaveText("一起去旅行");
+  await expect(memberCard.locator(".avatar")).toHaveText("一");
+  await expect(
+    memberCard.getByRole("button", { name: "修改姓名", exact: true }),
+  ).toHaveCount(0);
+  const renamed = await page.request.post("/api/auth/update-user", {
+    headers: { Origin: origin },
+    data: { name: "山海旅行者" },
+  });
+  expect(renamed.ok()).toBe(true);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(memberCard.getByRole("heading")).toHaveText("山海旅行者");
+  await expect(memberCard.locator(".avatar")).toHaveText("山");
   const link = page.getByRole("link", { name: "用户设置", exact: true });
   await expect(link).toBeVisible();
   await page.setViewportSize({ width: 320, height: 844 });
@@ -121,7 +135,7 @@ test("昵称校验、保存失败重试、持久化、成员同步与手机入�
     ),
   ).toBe(true);
   await link.click();
-  await expect(name).toHaveValue("一起去旅行");
+  await expect(name).toHaveValue("山海旅行者");
   await page.getByRole("link", { name: "所有行程" }).click();
   await expect(page.getByRole("link", { name: "用户设置" })).toBeVisible();
   expect(

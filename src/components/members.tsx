@@ -97,12 +97,13 @@ export function Members({
       <div className="member-grid">
         {snapshot.participants.map((p) => {
           const m = snapshot.members.find((m) => m.userId === p.userId);
+          const name = m?.name ?? p.name;
           return (
             <section className="member-card" key={p.id}>
               <div className="member-identity">
-                <div className="avatar large">{p.name.slice(0, 1)}</div>
+                <div className="avatar large">{name.slice(0, 1)}</div>
                 <div>
-                  <h3 className="font-semibold">{p.name}</h3>
+                  <h3 className="font-semibold">{name}</h3>
                   <p className="text-xs muted mt-1">
                     {p.status === "inactive"
                       ? "已停用 · 历史账目保留"
@@ -133,7 +134,7 @@ export function Members({
                     <>
                       <NativeSelect
                         className="max-w-32 text-xs"
-                        aria-label={`${p.name} 角色`}
+                        aria-label={`${name} 角色`}
                         value={m.role}
                         onChange={(e) =>
                           act(() =>
@@ -187,14 +188,16 @@ export function Members({
                       专属邀请
                     </Button>
                   )}
-                  <Button
-                    variant="outline"
-                    type="button"
-                    className="btn"
-                    onClick={() => setRename(p)}
-                  >
-                    修改姓名
-                  </Button>
+                  {!p.userId && (
+                    <Button
+                      variant="outline"
+                      type="button"
+                      className="btn"
+                      onClick={() => setRename(p)}
+                    >
+                      修改姓名
+                    </Button>
+                  )}
                   {!m && (
                     <Button
                       variant="outline"
