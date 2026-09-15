@@ -103,6 +103,30 @@ GitHub Actions 会为每个 Pull Request 并行运行两组检查：[常规检�
 
 ## 部署与备份
 
+### 用户忘记密码：管理员重置
+
+管理员需有部署服务器的终端或 Docker 操作权限；行程里的 owner 角色没有账号管理权限。
+
+Docker 部署在项目目录执行（已有部署需先用 `docker compose up -d --build` 更新到包含脚本的镜像）：
+
+```sh
+docker compose exec app node scripts/reset-password.mjs user@example.com
+```
+
+本地部署在项目目录执行：
+
+```sh
+npm run user:reset-password -- user@example.com
+```
+
+将 `user@example.com` 替换为用户注册邮箱，核对显示的数据库路径和账号，再按提示输入两次 **8–128 个字符**的新密码。输入不会显示；不要将密码写在命令参数中。按 `Ctrl+C` 可取消输入。
+
+脚本使用与登录相同的 Better Auth 密码哈希，立即注销该用户所有网页登录会话并清除未使用的密码重置链接；不改动行程、账单、其他用户或 MCP 令牌。用户可立即用新密码登录，无需重启服务。
+
+本地读取 `.env*` 配置，显式设置的 `DATABASE_PATH` 优先；Docker 使用容器的数据卷。数据库必须已存在，邮箱必须对应一个已有的密码登录账号。脚本不依赖邮件服务，也不需要旧密码。自动化可使用 `--password-stdin`，从标准输入提供新密码和确认密码两行。
+
+### 数据持久化与备份
+
 Compose 使用单个应用容器和 `trip-data` 数据卷，应用以非 root 用户运行。费用、邀请、会话及路线候选都存入 SQLite，重启后继续保留。`/api/health` 用于健康检查。
 
 更新时重新执行 `docker compose up -d --build`。正常停止/重启不会删除数据卷；`docker compose down -v` 会删除数据，不能用于日常更新。

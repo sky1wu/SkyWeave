@@ -12,6 +12,7 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
+    "user:reset-password": "node scripts/reset-password.mjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run build",
     "format:check": "prettier --check src tests e2e scripts .github",
     "smoke:amap": "tsx scripts/smoke-amap.ts"
@@ -22,6 +23,7 @@
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "@better-auth/drizzle-adapter": "^1.7.4",
+    "@better-auth/utils": "0.4.2",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
