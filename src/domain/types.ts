@@ -9,6 +9,10 @@ export type Alternative = typeof s.alternatives.$inferSelect;
 export type RouteAlternative = Omit<Alternative, "polyline"> &
   Partial<Pick<Alternative, "polyline">>;
 export type Participant = typeof s.participants.$inferSelect;
+export type ParticipantAlias = Omit<
+  typeof s.participantAliases.$inferSelect,
+  "userId"
+>;
 export type Expense = typeof s.expenses.$inferSelect;
 export type Split = typeof s.splits.$inferSelect;
 export type Settlement = typeof s.settlements.$inferSelect;

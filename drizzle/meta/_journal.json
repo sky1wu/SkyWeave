@@ -57,6 +57,13 @@
       "when": 1789314893138,
       "tag": "0007_route_lookup_index",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1789447664431,
+      "tag": "0008_participant_aliases",
+      "breakpoints": true
     }
   ]
 }

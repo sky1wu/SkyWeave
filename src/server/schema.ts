@@ -136,6 +136,23 @@ export const participants = sqliteTable(
   },
   (t) => [uniqueIndex("participants_user").on(t.tripId, t.userId)],
 );
+export const participantAliases = sqliteTable(
+  "participant_aliases",
+  {
+    userId: text()
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    participantId: text()
+      .notNull()
+      .references(() => participants.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    version: integer().notNull().default(1),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.participantId] }),
+    index("participant_aliases_participant_idx").on(t.participantId),
+  ],
+);
 export const invites = sqliteTable("trip_invites", {
   id: text().primaryKey(),
   tripId: text()

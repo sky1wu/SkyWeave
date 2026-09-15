@@ -15,6 +15,7 @@
 
 认证：users / sessions / accounts / verifications；Agent 令牌：mcp_tokens（只保存摘要，绑定用户与可选行程范围）。
 协作：trips / trip_members / trip_participants / trip_invites。
+私人备注：participant_aliases，以当前用户和同行者为联合主键，独立鉴权读取，不进入共享快照、活动记录或导出。
 规划：trip_places / days / day_items / travel_legs / route_alternatives。
 账目：expenses / expense_splits / settlements。
 交流：comments / activity_logs。

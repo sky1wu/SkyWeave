@@ -5,7 +5,13 @@ import { NativeSelect } from "./ui/native-select";
 import { Button } from "./ui/button";
 import { useState, useEffect } from "react";
 import { UserPlus, Link2, Copy, Users, Mail, Ban, Trash2 } from "lucide-react";
-import type { TripSnapshot, Participant } from "@/domain/types";
+import type {
+  TripSnapshot,
+  Participant,
+  ParticipantAlias,
+} from "@/domain/types";
+import { useParticipantAliases } from "@/hooks/use-participant-aliases";
+import { MemberAliasEditor } from "./member-alias-editor";
 import type { Mutate } from "./planner";
 import { ErrorText, Modal } from "./ui";
 import { useConfirmation } from "./confirmation";
@@ -17,6 +23,11 @@ export function Members({
   mutate: Mutate;
 }) {
   const { confirm, confirmation } = useConfirmation();
+  const aliases = useParticipantAliases(snapshot.trip.id);
+  const [aliasTarget, setAliasTarget] = useState<{
+    originalName: string;
+    alias: ParticipantAlias;
+  } | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState(""),
     [newPerson, setNewPerson] = useState(false),
@@ -94,16 +105,37 @@ export function Members({
         </div>
       </div>
       <ErrorText error={error} />
+      {aliases.error && (
+        <div className="mb-4">
+          <ErrorText error={aliases.error} />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void aliases.refresh()}
+          >
+            重试加载备注名
+          </Button>
+        </div>
+      )}
       <div className="member-grid">
         {snapshot.participants.map((p) => {
           const m = snapshot.members.find((m) => m.userId === p.userId);
-          const name = m?.name ?? p.name;
+          const originalName = m?.name ?? p.name;
+          const alias = aliases.aliases?.find(
+            (entry) => entry.participantId === p.id,
+          );
+          const name = alias?.name || originalName;
           return (
             <section className="member-card" key={p.id}>
               <div className="member-identity">
                 <div className="avatar large">{name.slice(0, 1)}</div>
-                <div>
-                  <h3 className="font-semibold">{name}</h3>
+                <div className="min-w-0">
+                  <h3 className="font-semibold break-words">{name}</h3>
+                  {alias?.name && (
+                    <p className="text-xs muted mt-1 break-words">
+                      {m ? "昵称" : "姓名"}：{originalName} · 备注仅你可见
+                    </p>
+                  )}
                   <p className="text-xs muted mt-1">
                     {p.status === "inactive"
                       ? "已停用 · 历史账目保留"
@@ -128,6 +160,24 @@ export function Members({
                   可参与分摊，接受专属邀请后绑定账号。
                 </p>
               )}
+              <Button
+                type="button"
+                variant="outline"
+                className="btn mt-3 self-start"
+                disabled={aliases.aliases === null}
+                onClick={() =>
+                  setAliasTarget({
+                    originalName,
+                    alias: alias ?? {
+                      participantId: p.id,
+                      name: "",
+                      version: 0,
+                    },
+                  })
+                }
+              >
+                {alias?.name ? "修改备注名" : "设置备注名"}
+              </Button>
               {owner && (
                 <div className="member-actions">
                   {m && m.role !== "owner" && (
@@ -238,6 +288,15 @@ export function Members({
           );
         })}
       </div>
+      {aliasTarget && (
+        <MemberAliasEditor
+          originalName={aliasTarget.originalName}
+          alias={aliasTarget.alias}
+          save={aliases.save}
+          refresh={aliases.refresh}
+          close={() => setAliasTarget(null)}
+        />
+      )}
       {owner && (
         <>
           <h3 className="font-semibold mt-10 mb-4">邀请记录</h3>

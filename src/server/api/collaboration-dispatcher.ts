@@ -11,10 +11,15 @@ import {
 } from "../collaboration-service";
 import { access } from "../service-core";
 import { snapshot } from "../trip-service";
+import {
+  listParticipantAliases,
+  saveParticipantAlias,
+} from "../participant-alias-service";
 import { expectedVersion, UNHANDLED, type ApiDispatcher } from "./dispatcher";
 
 export const dispatchCollaboration: ApiDispatcher = ({
   request,
+  path,
   root,
   id,
   action,
@@ -23,6 +28,13 @@ export const dispatchCollaboration: ApiDispatcher = ({
   user,
   data,
 }) => {
+  if (root === "trips" && action === "participant-aliases") {
+    if (method === "GET" && path.length === 3)
+      return listParticipantAliases(id, user);
+    if (method === "PATCH" && subId && path.length === 4)
+      return saveParticipantAlias(id, subId, user, data);
+    return UNHANDLED;
+  }
   if (root === "trips" && action === "events" && method === "GET")
     return events(id, user, request);
   if (root === "trips" && action === "participants") {

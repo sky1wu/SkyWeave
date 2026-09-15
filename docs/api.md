@@ -94,6 +94,8 @@ Day 使用 `position` 排序，`startMinutes` 默认 480。DayItem 使用 `posit
 | 方法     | 路径                                         | 行为                                                                                          |
 | -------- | -------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | GET      | `/api/trips/:id/members`                     | 成员列表                                                                                      |
+| GET      | `/api/trips/:id/participant-aliases`         | 当前用户在此行程的私人备注名（所有活跃角色可用）                                                |
+| PATCH    | `/api/trips/:id/participant-aliases/:participantId` | 当前用户设置或清空自己的备注名                                                           |
 | PATCH    | `/api/trips/:id/members/:userId`             | owner 修改 role/status，不能移除或降级 owner                                                  |
 | GET/POST | `/api/trips/:id/participants`                | 同行者列表 / 添加未注册同行者                                                                 |
 | PATCH    | `/api/trips/:id/participants/:participantId` | owner 改姓名或停用未注册同行者                                                                |
@@ -106,6 +108,8 @@ Day 使用 `position` 排序，`startMinutes` 默认 480。DayItem 使用 `posit
 | GET/POST | `/api/trips/:id/comments`                    | 查看 / 发表纯文本评论                                                                         |
 
 删除同行者请求为 `{ expectedVersion }`，适用于启用或停用的未注册同行者。已有付款、分摊或结算记录时返回 400 `PARTICIPANT_HAS_RECORDS`，应改用停用以保留历史账目；已绑定账号的同行者通过成员管理移出行程。删除成功后，其专属邀请同步删除并失效。
+
+私人备注名请求为 `{ name, expectedVersion }`，姓名去除首尾空格后最多 100 字，空字符串表示清空；首次设置的 `expectedVersion` 为 `0`。列表与保存响应只包含当前用户的 `{ participantId, name, version }`，清空后保留版本以防旧编辑覆盖。接口从登录会话确定备注所属用户，不接受 `userId`；owner 也不能读取或修改他人的备注。备注仅用于此行程的成员卡片，不改变昵称或记账姓名，不进入共享快照、协作动态、SSE、MCP、公开分享或导出文件。返回成员页面或窗口重新获得焦点时重新加载；删除同行者或行程时级联清理。
 
 邀请输入包含 `role: editor | viewer`、可选 `participantId`、`expiresAt`、`maxUses`。默认七天、最多十次；专属邀请固定单次使用。响应中的原始 token 仅在创建时返回，列表不会包含 tokenHash。
 
