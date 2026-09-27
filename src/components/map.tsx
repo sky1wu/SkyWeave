@@ -7,6 +7,7 @@ import type { DayPlan, Item, PoolPlace } from "@/domain/types";
 import { located } from "@/domain/timeline";
 import { routeEndpoint } from "@/domain/transport";
 import { mapLocations, type MapLocation } from "@/domain/map-locations";
+import { branchesOf, planningItems } from "@/domain/parallel";
 import { mapCategory, markerElement, arrangeMapLabels } from "./map-marker";
 import { PlaceCategory } from "./place-category";
 import { useDayGeometry } from "./trip-data";
@@ -208,7 +209,9 @@ export function TripMap({
           const place = pool.find((p) => p.id === point.poolPlaceId);
           if (place) callbacks.current.selectPool(place);
         } else {
-          const item = day?.items.find((i) => i.id === point.itemId);
+          const item = (day ? planningItems(day) : []).find(
+            (i) => i.id === point.itemId,
+          );
           if (item) callbacks.current.select(item);
         }
       });
@@ -221,8 +224,10 @@ export function TripMap({
       const alternative = leg.alternatives.find(
         (a) => a.id === leg.selectedAlternativeId,
       );
-      const a = day?.items.find((i) => i.id === leg.fromItemId),
-        b = day?.items.find((i) => i.id === leg.toItemId);
+      const a = (day ? planningItems(day) : []).find(
+          (i) => i.id === leg.fromItemId,
+        ),
+        b = (day ? planningItems(day) : []).find((i) => i.id === leg.toItemId);
       const from = a && routeEndpoint(a, "departure"),
         to = b && routeEndpoint(b, "arrival");
       const points =
@@ -235,7 +240,10 @@ export function TripMap({
       if (points.length >= 2) {
         const line = new sdk.Polyline({
           path: points.map((p) => mapPoint(p[0], p[1])),
-          strokeColor: leg.mode === "manual" ? "#ed9045" : "#0762DF",
+          strokeColor:
+            (day &&
+              branchesOf(day).find((b) => b.id === leg.branchId)?.color) ||
+            (leg.mode === "manual" ? "#ed9045" : "#0762DF"),
           strokeWeight: 4,
           strokeOpacity: 0.85,
           strokeStyle: leg.mode === "manual" ? "dashed" : "solid",
@@ -258,7 +266,10 @@ export function TripMap({
             mapPoint(origin.lng!, origin.lat!),
             mapPoint(destination.lng!, destination.lat!),
           ],
-          strokeColor: "#8c70ad",
+          strokeColor:
+            (day &&
+              branchesOf(day).find((b) => b.id === item.branchId)?.color) ||
+            "#8c70ad",
           strokeWeight: 3,
           strokeOpacity: 0.8,
           strokeStyle: "dashed",
@@ -273,8 +284,10 @@ export function TripMap({
         ? day?.legs.find((l) => l.id === focus.id)
         : undefined;
     if (leg) {
-      const a = day?.items.find((i) => i.id === leg.fromItemId),
-        b = day?.items.find((i) => i.id === leg.toItemId);
+      const a = (day ? planningItems(day) : []).find(
+          (i) => i.id === leg.fromItemId,
+        ),
+        b = (day ? planningItems(day) : []).find((i) => i.id === leg.toItemId);
       targets = [
         markers.get(a?.transport ? `${a.id}:destination` : leg.fromItemId),
         markers.get(b?.transport ? `${b.id}:origin` : leg.toItemId),
@@ -406,6 +419,7 @@ export function TripMap({
     id: string,
     alternative: string,
     independent = false,
+    color?: string,
   ) =>
     a >= 0 && b >= 0 ? (
       <line
@@ -416,7 +430,7 @@ export function TripMap({
         y1={110 + Math.floor(a / 3) * 140}
         x2={130 + (b % 3) * 180}
         y2={110 + Math.floor(b / 3) * 140}
-        stroke={independent ? "#8c70ad" : "#0762DF"}
+        stroke={color ?? (independent ? "#8c70ad" : "#0762DF")}
         strokeWidth="4"
         strokeDasharray={
           independent || alternative === "manual" ? "10 8" : undefined
@@ -469,6 +483,9 @@ export function TripMap({
                   pointIndex(leg.toItemId, "origin"),
                   leg.id,
                   leg.selectedAlternativeId ?? "manual",
+                  false,
+                  day &&
+                    branchesOf(day).find((b) => b.id === leg.branchId)?.color,
                 ),
             )}
             {day?.items
@@ -480,12 +497,16 @@ export function TripMap({
                   item.id,
                   "independent",
                   true,
+                  day &&
+                    branchesOf(day).find((b) => b.id === item.branchId)?.color,
                 ),
               )}
             {locations.map((point, i) => {
               const activate = () => {
                 const place = pool.find((p) => p.id === point.poolPlaceId),
-                  item = day?.items.find((p) => p.id === point.itemId);
+                  item = (day ? planningItems(day) : []).find(
+                    (p) => p.id === point.itemId,
+                  );
                 if (place) selectPool(place);
                 else if (item) select(item);
               };

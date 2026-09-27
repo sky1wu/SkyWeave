@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { contextualDays } from "@/domain/parallel";
+import {
+  saveParallel,
+  transferParallel,
+  parallelTransferPreview,
+} from "../parallel-service";
 import { amap } from "@/amap/service";
 import { routeRequestSchema } from "@/amap/requests";
 import type { Leg } from "@/domain/types";
@@ -21,7 +27,7 @@ import {
   reorder,
 } from "../planning-service";
 import { calculateDay, calculateLeg } from "../routing";
-import { access, dayGeometry, uid } from "../service-core";
+import { access, dayGeometry, uid, getDays } from "../service-core";
 import { snapshot } from "../trip-service";
 import { expectedVersion, UNHANDLED, type ApiDispatcher } from "./dispatcher";
 
@@ -36,6 +42,21 @@ export const dispatchPlanning: ApiDispatcher = async ({
   user,
   data,
 }) => {
+  if (root === "trips" && action === "parallel") {
+    if (method === "POST" && !subId) return saveParallel(id, user, data);
+    if (method === "POST" && subId === "transfer")
+      return transferParallel(id, user, data);
+    if (method === "GET" && subId) {
+      const preview = parallelTransferPreview(id, subId, user);
+      return {
+        items: preview.items.map(({ id, title, dayId }) => ({
+          id,
+          title,
+          dayId,
+        })),
+      };
+    }
+  }
   if (
     root === "days" &&
     action === "geometry" &&
@@ -59,7 +80,7 @@ export const dispatchPlanning: ApiDispatcher = async ({
     if (method === "GET") {
       const day = getDay(id);
       access(day.tripId, user);
-      return day;
+      return contextualDays(getDays(day.tripId)).find((d) => d.id === id)!;
     }
     if (method === "PATCH") return editDay(id, user, data);
     if (method === "DELETE") {

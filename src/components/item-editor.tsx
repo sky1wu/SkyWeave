@@ -14,6 +14,7 @@ import { SearchableSelect } from "./searchable-select";
 export function itemPayload(item: Item) {
   return {
     title: item.title,
+    branchId: item.branchId ?? null,
     type: item.type,
     description: item.description,
     amapPoiId: item.amapPoiId,
@@ -216,11 +217,13 @@ export function ItemEditor({
           <Label>
             类型
             <NativeSelect name="type" defaultValue={item?.type ?? "place"}>
-              {Object.entries(typeLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
+              {Object.entries(typeLabels)
+                .filter(([value]) => value !== "parallel")
+                .map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
             </NativeSelect>
           </Label>
         </div>

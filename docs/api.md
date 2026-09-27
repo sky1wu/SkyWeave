@@ -37,7 +37,7 @@
 
 `POST /api/trips/import`：登录用户发送行程文件的 JSON 内容（需要同源 Origin），成功返回 `{ id }`，创建由当前用户拥有的新行程。每次导入生成独立副本，不覆盖已有行程。
 
-文件结构为 `{ format: "skyweave-trip", version: 1, exportedAt, trip, days, poolPlaces, participants, expenses, settlements }`。每日内容嵌套 `items`、`legs`，路线包含候选与折线；数组顺序保存日期、事项、地点池及候选顺序。费用包含分摊明细，保留原始币种金额、换算金额及分摊尾差。导入重新生成全部实体 ID 并映射所有引用。
+文件结构为 `{ format: "skyweave-trip", version: 3, exportedAt, trip, days, poolPlaces, participants, expenses, settlements }`。每日内容嵌套 `items`、`legs`，路线包含候选与折线；数组顺序保存日期、事项、地点池及候选顺序。费用包含分摊明细，保留原始币种金额、换算金额及分摊尾差。导入重新生成全部实体 ID 并映射所有引用。
 
 文件字段采用白名单，不包含账号关联、成员权限、邀请令牌、公开分享链接、评论或活动日志。所有记账参与人以未关联账号的同行者导入。服务器验证版本、日期、坐标、标识唯一性、引用归属及账目一致性后，在单个事务中写入，失败时整体回滚。无效文件返回 `400 INVALID_TRIP_FILE`；文件大小以 UTF-8 字节计，上限 20 MiB，超限返回 `413 BODY_TOO_LARGE`。常规写入接口仍限制为 512 KiB。
 
@@ -170,3 +170,42 @@ Settlement 使用 `fromParticipantId`、`toParticipantId`、`amountMinor`、`cur
 快照的 `sequence` 与数据在同一个 SQLite 只读事务中读取。首次加载、SSE 初始化/重连共享请求；下载期间出现更高变更序号时，客户端追加刷新。切换行程标签复用共享布局中的数据和 SSE；窗口重新获得焦点或重新进入缓存页面时先检查 `/revision`，并更新不产生行程动态的成员昵称/邮箱。写操作完成后使已缓存页面失效；权限撤销清空行程缓存并取消请求。
 
 普通 API 的成功 JSON 响应提供 `Server-Timing: app;dur=...`（单位毫秒，包含鉴权、业务读取和响应序列化，不含网络下载）与 `X-Request-Id`。部署和性能验收见 [性能说明](performance.md)。
+
+
+## 分头行动
+
+`type: "parallel"` 的事项表示行动段，`branchId` 指定其上一级分组（空值为共同时间线）。普通事项、独立交通与嵌套行动段均可加入分组；分组成员必须是上一级成员的子集，不能循环嵌套。同一个人在同一段只能属于一组。没有集合点的行动段可在同日继续安排其他独立行动段，但不会自动生成两段之间的接驳路线。
+
+```json
+{
+  "title": "分批抵达",
+  "type": "parallel",
+  "parallelPlan": {
+    "splitItemId": null,
+    "joinItemId": "默认集合事项 ID",
+    "joinPolicy": "fixed",
+    "branches": [
+      { "id": "分组 A 的唯一 ID", "title": "车站组", "participantIds": ["同行者 ID"], "startMinutes": 540 },
+      { "id": "分组 B 的唯一 ID", "title": "机场组", "participantIds": ["另一同行者 ID"], "startMinutes": 600, "joinItemId": "本组集合事项 ID", "joinPolicy": "fixed", "catchUpItemId": "迟到后改赴的后续事项 ID" }
+    ]
+  }
+}
+```
+
+每段 2–8 组。分开点和集合点可跨日期，但必须属于行动段的同一层级；集合点位于行动段之后。各组省略 `joinItemId` 时继承默认集合点，设为 `null` 表示各自结束。每组可覆盖 `joinPolicy`，同一集合点必须采用一致规则；`fixed` 要求目标事项有固定开始时间。`startMinutes` 相对行动段所属日期零点，跨午夜可超过 1440。
+
+`catchUpItemId` 用于固定时间集合：预计迟到时直接从组内最后一个地点前往该后续会合点，跳过中间安排。追赶路线使用独立 `routeRole: "catch_up"`，可独立选交通方式和方案。没有设置追赶点时，迟到者沿原路径继续，个人时间不会被重置为团队的约定时间。错过固定班次仍会使该人的后续时间未知。
+
+时间计算遍历整趟行程的个人路径。`wait_all` 等待当前会合点的参与者，未到此处的其他组不参与等待；未知到达时间会保持集合时间未知。固定活动按约定时间显示，`entries[].people` 保留每个人的实际预计开始、离开、迟到与跳过状态，个人筛选使用对应时钟。集合项的 `rendezvous.arrivals` 保留分组到达与等待信息。跨日到达可以使用负秒数表示前一天到达。
+
+路线唯一键为 `(dayId, fromItemId, toItemId, branchId, routeRole)`，`dayId` 是到达事项所属日期。共同路线 `branchId` 为 `""`，普通路线 `routeRole` 为 `"main"`。起点可以在其他日期。日详情包含 `contextItems`、`contextDays`、`contextLegs`，供跨日计算及地图端点使用；行程快照仍按天返回各自数据，避免重复传输。
+
+### 批量编辑与整段处理
+
+- `POST /api/trips/:id/parallel`：原子创建/修改行动段并分配现有事项。请求包含 `dayId, title, parallelPlan, branchId?`、修改时的 `sectionId, expectedVersion`、`assignments: [{itemId, branchId, expectedVersion}]`，以及行程全部日期的 `expectedDays: [{id, expectedVersion}]`。任何版本、人员或路径校验失败都会回滚全部修改。
+- `GET /api/trips/:id/parallel/:sectionId`：返回整段处理预览，列出组内、嵌套和公共分开／集合／追赶点。
+- `POST /api/trips/:id/parallel/transfer`：请求 `sectionId, operation: "copy" | "move", targetDayId, targetBranchId?, beforeItemId?, expectedDays`。保留各事项相对日期与路线选择；目标日期范围不足时需先延长行程。复制会生成全新的事项、分组和候选 ID，不复制账单；移动保留 ID 并同步关联账单日期。影响其他行动段且使路径无效时整笔回滚。
+
+原有单项创建、修改、排序、地点池 schedule 与 move 接口继续可用。没有任何锚点的行动段，编辑配置保持原位置。非空行动段不能直接删除；使用中的同行者不能直接删除，可以停用以保留历史。
+
+文件版本为 3，兼容导入版本 1、2。导入跨日引用时先创建所有日期和事项，再创建路线，所有分组、集合点、追赶点和同行者引用都会重新映射。

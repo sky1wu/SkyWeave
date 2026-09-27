@@ -15,7 +15,9 @@
     "user:reset-password": "node scripts/reset-password.mjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run build",
     "format:check": "prettier --check src tests e2e scripts .github",
-    "smoke:amap": "tsx scripts/smoke-amap.ts"
+    "smoke:amap": "tsx scripts/smoke-amap.ts",
+    "smoke:parallel": "tsx scripts/smoke-parallel-amap.ts",
+    "smoke:parallel:browser": "node scripts/smoke-parallel-browser.mjs"
   },
   "engines": {
     "node": ">=22"

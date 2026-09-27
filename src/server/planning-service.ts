@@ -13,12 +13,51 @@ import {
   rebuildLegs,
   revision,
   touchDay,
+  touchRelatedDays,
   tx,
   uid,
   type Actor,
 } from "./service-core";
 
 export { getDay, rebuildLegs, touchDay } from "./service-core";
+
+export function placeParallel(
+  dayId: string,
+  itemId: string,
+  plan: Item["parallelPlan"],
+  actor: Actor,
+) {
+  if (!plan) return;
+  const current = getDay(dayId).items;
+  const originalIndex = current.findIndex((item) => item.id === itemId);
+  const items = current.filter((item) => item.id !== itemId);
+  const joins = [
+    plan.joinItemId,
+    ...plan.branches.map((b) => b.joinItemId),
+  ].filter((id): id is string => !!id);
+  const localJoins = items
+    .map((item, i) => (joins.includes(item.id) ? i : -1))
+    .filter((i) => i >= 0);
+  const split = items.findIndex((item) => item.id === plan.splitItemId);
+  const at =
+    split >= 0
+      ? split + 1
+      : localJoins.length
+        ? Math.min(...localJoins)
+        : originalIndex;
+  const ids = items.map((i) => i.id);
+  ids.splice(Math.max(0, at), 0, itemId);
+  ids.forEach((id, position) =>
+    run(
+      "UPDATE day_items SET position=?, version=version+1, updatedAt=?, updatedByUserId=? WHERE id=? AND position!=?",
+      position,
+      Date.now(),
+      actor.id,
+      id,
+      position,
+    ),
+  );
+}
 
 export function editDay(dayId: string, actor: Actor, body: unknown) {
   const { expectedVersion, ...data } = v.dayInput
@@ -36,6 +75,7 @@ export function editDay(dayId: string, actor: Actor, body: unknown) {
       updatedAt: Date.now(),
       updatedByUserId: actor.id,
     });
+    touchRelatedDays(dayId, actor);
     log(day.tripId, actor, "day.updated", "day", dayId, "更新了当天安排");
     return { id: dayId };
   });
@@ -97,6 +137,7 @@ export function createItem(dayId: string, actor: Actor, body: unknown) {
       ...data,
       ...revision(actor),
     });
+    placeParallel(dayId, id, data.parallelPlan, actor);
     rebuildLegs(dayId, actor);
     touchDay(dayId, actor);
     log(
@@ -143,6 +184,8 @@ export function editItem(itemId: string, actor: Actor, body: unknown) {
       updatedAt: Date.now(),
       updatedByUserId: actor.id,
     });
+    if (data.parallelPlan)
+      placeParallel(day.id, itemId, data.parallelPlan, actor);
     const endpointChanged = (side: "arrival" | "departure") => {
       const old = routeEndpoint(item, side),
         next = routeEndpoint({ ...item, ...data }, side);
@@ -197,6 +240,19 @@ export function deleteItem(itemId: string, actor: Actor, expected: number) {
     const day = getDay(item.dayId);
     access(day.tripId, actor, "edit");
     checkVersion(item, expected);
+    if (
+      item.parallelPlan &&
+      day.items.some((child) =>
+        item.parallelPlan!.branches.some(
+          (branch) => branch.id === child.branchId,
+        ),
+      )
+    )
+      throw new AppError(
+        400,
+        "VALIDATION",
+        "此行动段仍有组内事项，请先将事项移出分组或逐项删除",
+      );
     run(
       "DELETE FROM comments WHERE targetType='day_item' AND targetId=?",
       itemId,
@@ -296,6 +352,7 @@ export function editLeg(legId: string, actor: Actor, body: unknown) {
       updatedByUserId: actor.id,
     });
     touchDay(day.id, actor);
+    touchRelatedDays(day.id, actor);
     log(
       day.tripId,
       actor,

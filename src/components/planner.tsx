@@ -1,7 +1,24 @@
 "use client";
 import { useConfirmation } from "./confirmation";
 import { Button } from "./ui/button";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  branchesOf,
+  contextualDays,
+  dayRoots,
+  displayItems,
+  mainItems,
+  participantDay,
+} from "@/domain/parallel";
+import {
+  ParallelBlock,
+  ParallelEditor,
+  ParallelTransferEditor,
+  ParticipantFilter,
+  Rendezvous,
+} from "./parallel-plan";
+import { NativeSelect } from "./ui/native-select";
+import { Label } from "./ui/label";
 import { DndContext, DragOverlay, useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -18,10 +35,11 @@ import {
   ChevronDown,
   LocateFixed,
   TrainFront,
+  GitFork,
 } from "lucide-react";
 import { ApiFailure } from "@/lib/client";
 import type { DayPlan, Item, Expense, TripSnapshot } from "@/domain/types";
-import { calculateTimeline } from "@/domain/timeline";
+import { calculateTripTimelines } from "@/domain/timeline";
 import { formatMoney } from "@/domain/money";
 import { placeCategories } from "@/domain/planning";
 import { ItemEditor, itemPayload, TimeField, readTime } from "./item-editor";
@@ -47,6 +65,7 @@ function DaySection({
   settings,
   addItem,
   addTransport,
+  addParallel,
   billCount,
   dropTarget,
 }: {
@@ -56,6 +75,7 @@ function DaySection({
   settings: () => void;
   addItem?: () => void;
   addTransport?: () => void;
+  addParallel?: () => void;
   billCount: number;
   dropTarget: DropTarget | null;
 }) {
@@ -84,6 +104,14 @@ function DaySection({
         <div className="day-actions">
           {addItem && (
             <>
+              <button
+                className="day-transport-action"
+                aria-label={`向${day.title}添加分头行动`}
+                onClick={addParallel}
+              >
+                <GitFork size={14} />
+                分头行动
+              </button>
               <button
                 className="day-transport-action"
                 aria-label={`向${day.title}添加交通`}
@@ -156,6 +184,7 @@ export function Planner({
       dayId: string;
       item?: Item;
       transport?: boolean;
+      branchId?: string;
     } | null>(null),
     [point, setPoint] = useState<{ lat: number; lng: number } | null>(null),
     [picking, setPicking] = useState(false),
@@ -164,12 +193,46 @@ export function Planner({
     [dayEditor, setDayEditor] = useState<DayPlan | null>(null),
     [compactItems, setCompactItems] = useState(false),
     [focus, setFocus] = useState<MapFocus | null>(null);
+  const [parallelEditor, setParallelEditor] = useState<{
+    dayId: string;
+    item?: Item;
+    branchId?: string | null;
+    initial?: { splitItemId: string | null; joinItemId: string | null };
+  } | null>(null);
+  const [assignment, setAssignment] = useState<Item | null>(null);
+  const [personFilter, setPersonFilter] = useState("");
+  const participantId =
+    personFilter === "me"
+      ? (snapshot.participants.find((p) => p.userId === snapshot.currentUserId)
+          ?.id ?? null)
+      : personFilter || null;
+  const planDays = useMemo(
+    () => contextualDays(snapshot.days),
+    [snapshot.days],
+  );
+  const timelines = useMemo(
+    () => calculateTripTimelines(snapshot.days, participantId),
+    [snapshot.days, participantId],
+  );
+  const visibleDays = useMemo(
+    () =>
+      planDays.map((day) =>
+        participantDay(day, participantId, timelines.get(day.id)),
+      ),
+    [planDays, participantId, timelines],
+  );
+  const [sectionTransfer, setSectionTransfer] = useState<{
+    section: Item;
+    operation: "copy" | "move";
+  } | null>(null);
+  const hasParallel = snapshot.days.some((day) =>
+    day.items.some((item) => item.parallelPlan),
+  );
   const [poolCollapsed, setPoolCollapsed] = useState(false),
     [timelineCollapsed, setTimelineCollapsed] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const day =
-    snapshot.days.find((candidate) => candidate.id === selectedDay) ??
-    snapshot.days[0];
+    planDays.find((candidate) => candidate.id === selectedDay) ?? planDays[0];
   const editable = snapshot.role !== "viewer";
   const categories = [
     ...new Set([
@@ -270,7 +333,7 @@ export function Planner({
       >
         <div
           ref={workspaceRef}
-          className={`planner-grid pool-layout floating-workspace view-${view}`}
+          className={`planner-grid pool-layout floating-workspace view-${view}${hasParallel ? " has-parallel" : ""}`}
         >
           <div className="map-workspace-controls">
             <div className="mobile-switch">
@@ -429,6 +492,18 @@ export function Planner({
                 </div>
               </div>
 
+              {hasParallel && (
+                <ParticipantFilter
+                  participants={snapshot.participants}
+                  currentUserId={snapshot.currentUserId}
+                  value={personFilter}
+                  onChange={(value) => {
+                    setPersonFilter(value);
+                    setSelected(null);
+                    setFocus({ kind: "day", request: Date.now() });
+                  }}
+                />
+              )}
               <div
                 ref={timelineRef}
                 className="timeline-pane continuous-timeline"
@@ -439,11 +514,360 @@ export function Planner({
                 onPointerDown={releaseNavigationLock}
                 aria-label="连续行程时间线"
               >
-                {snapshot.days.map((targetDay, dayIndex) => {
-                  const timeline = calculateTimeline(targetDay),
+                {planDays.map((targetDay, dayIndex) => {
+                  const timeline = timelines.get(targetDay.id)!,
                     dayBills = snapshot.expenses.filter(
                       (e) => e.dayId === targetDay.id && !e.dayItemId,
                     );
+                  const renderItem = (item: Item): ReactNode => {
+                    if (item.parallelPlan) return renderSection(item);
+                    const own = timeline.entries.find(
+                      (e) => e.itemId === item.id,
+                    );
+                    if (
+                      participantId &&
+                      !own?.skipped &&
+                      !visibleDays
+                        .find((d) => d.id === targetDay.id)
+                        ?.items.some((i) => i.id === item.id)
+                    )
+                      return null;
+                    const i = displayItems(
+                      participantDay(targetDay, participantId, timeline),
+                    ).findIndex((candidate) => candidate.id === item.id);
+
+                    const entry = timeline.entries.find(
+                      (e) => e.itemId === item.id,
+                    )!;
+                    const incoming = targetDay.legs.filter(
+                      (leg) =>
+                        leg.toItemId === item.id &&
+                        leg.routeRole !== "catch_up" &&
+                        (!participantId ||
+                          Object.hasOwn(timeline.departures, leg.id)) &&
+                        !branchesOf(targetDay).some(
+                          (b) => b.id === leg.branchId && b.joinId === item.id,
+                        ),
+                    );
+                    return (
+                      <div
+                        key={item.id}
+                        className={
+                          dropTarget?.dayId === targetDay.id &&
+                          dropTarget.beforeItemId === item.id
+                            ? "drop-before"
+                            : ""
+                        }
+                      >
+                        {incoming.map((leg) => (
+                          <div
+                            key={leg.id}
+                            className="timeline-leg"
+                            hidden={compactItems}
+                          >
+                            {leg.branchId && (
+                              <span className="parallel-route-label">
+                                {
+                                  branchesOf(targetDay).find(
+                                    (b) => b.id === leg.branchId,
+                                  )?.title
+                                }
+                              </span>
+                            )}
+                            <LegCard
+                              leg={leg}
+                              destination={item}
+                              arrival={entry}
+                              editable={editable}
+                              focus={() => focusLeg(targetDay, leg.id)}
+                              mutate={(data) =>
+                                mutate(`/legs/${leg.id}`, "PATCH", data)
+                              }
+                            />
+                          </div>
+                        ))}
+                        <Rendezvous
+                          entry={entry}
+                          participants={snapshot.participants}
+                        />
+                        <TimelineItem
+                          assign={() => setAssignment(item)}
+                          split={
+                            item.type !== "note"
+                              ? () => {
+                                  const common = snapshot.days
+                                    .flatMap((d) => d.items)
+                                    .filter(
+                                      (i) =>
+                                        (i.branchId ?? null) ===
+                                          (item.branchId ?? null) &&
+                                        i.type !== "note",
+                                    );
+                                  const next =
+                                    common[
+                                      common.findIndex(
+                                        (i) => i.id === item.id,
+                                      ) + 1
+                                    ];
+                                  setParallelEditor({
+                                    dayId: item.dayId,
+                                    branchId: item.branchId ?? null,
+                                    initial: {
+                                      splitItemId: item.id,
+                                      joinItemId:
+                                        next?.type !== "parallel"
+                                          ? (next?.id ?? null)
+                                          : null,
+                                    },
+                                  });
+                                }
+                              : undefined
+                          }
+                          meet={
+                            item.type !== "note"
+                              ? () => {
+                                  const common = snapshot.days
+                                    .flatMap((d) => d.items)
+                                    .filter(
+                                      (i) =>
+                                        (i.branchId ?? null) ===
+                                          (item.branchId ?? null) &&
+                                        i.type !== "note",
+                                    );
+                                  const previous =
+                                    common[
+                                      common.findIndex(
+                                        (i) => i.id === item.id,
+                                      ) - 1
+                                    ];
+                                  setParallelEditor({
+                                    dayId: item.dayId,
+                                    branchId: item.branchId ?? null,
+                                    initial: {
+                                      splitItemId:
+                                        previous?.type !== "parallel"
+                                          ? (previous?.id ?? null)
+                                          : null,
+                                      joinItemId: item.id,
+                                    },
+                                  });
+                                }
+                              : undefined
+                          }
+                          compact={compactItems}
+                          item={item}
+                          index={i}
+                          entry={entry}
+                          selected={selected === item.id}
+                          editable={editable}
+                          select={() => {
+                            selectItem(item);
+                            focusItem(item);
+                          }}
+                          edit={() => setEditing({ dayId: targetDay.id, item })}
+                          remove={async () => {
+                            if (
+                              await confirm(
+                                `删除「${item.title}」？相关费用将保留。`,
+                              )
+                            )
+                              void act(() =>
+                                mutate(`/items/${item.id}`, "DELETE", {
+                                  expectedVersion: item.version,
+                                }),
+                              );
+                          }}
+                          copy={() =>
+                            act(() =>
+                              mutate(`/days/${targetDay.id}/items`, "POST", {
+                                ...itemPayload(item),
+                                title: `${item.title}（副本）`,
+                              }),
+                            )
+                          }
+                          move={(direction) => move(item, direction)}
+                          expense={() => addExpense(item)}
+                          comment={() => addComment(item)}
+                          bills={snapshot.expenses.filter(
+                            (e) => e.dayItemId === item.id,
+                          )}
+                          baseCurrency={snapshot.trip.baseCurrency}
+                          openBill={editExpense}
+                          hasPrevious={dayIndex > 0}
+                          hasNext={dayIndex < snapshot.days.length - 1}
+                          moveDay={(direction) =>
+                            act(() =>
+                              transfer(
+                                item,
+                                snapshot.days[dayIndex + direction],
+                                null,
+                                item.branchId ?? null,
+                              ),
+                            )
+                          }
+                        />
+                      </div>
+                    );
+                  };
+                  function renderSection(item: Item): ReactNode {
+                    return (
+                      <ParallelBlock
+                        key={`${item.id}:${targetDay.id}`}
+                        days={planDays}
+                        transfer={(operation) =>
+                          setSectionTransfer({ section: item, operation })
+                        }
+                        addParallel={(branchId) => {
+                          const last = targetDay.items
+                            .filter(
+                              (i) =>
+                                i.branchId === branchId && i.type !== "note",
+                            )
+                            .at(-1);
+                          setParallelEditor({
+                            dayId: targetDay.id,
+                            branchId,
+                            initial: {
+                              splitItemId:
+                                last?.type !== "parallel"
+                                  ? (last?.id ?? null)
+                                  : null,
+                              joinItemId: null,
+                            },
+                          });
+                        }}
+                        item={item}
+                        day={targetDay}
+                        participants={snapshot.participants}
+                        pool={snapshot.poolPlaces}
+                        participantId={participantId}
+                        editable={editable}
+                        edit={() =>
+                          setParallelEditor({ dayId: item.dayId, item })
+                        }
+                        remove={() =>
+                          void act(async () => {
+                            if (
+                              await confirm(
+                                `删除「${item.title}」？行动段中仍有事项时需要先移出。`,
+                              )
+                            )
+                              await mutate(`/items/${item.id}`, "DELETE", {
+                                expectedVersion: item.version,
+                              });
+                          })
+                        }
+                        addItem={(branchId, transport, selectedDayId) =>
+                          setEditing({
+                            dayId: selectedDayId ?? targetDay.id,
+                            branchId,
+                            transport,
+                          })
+                        }
+                        addPlace={async (branchId, placeId, selectedDayId) => {
+                          const destinationDay = planDays.find(
+                            (d) => d.id === (selectedDayId ?? targetDay.id),
+                          )!;
+                          const place = snapshot.poolPlaces.find(
+                            (p) => p.id === placeId,
+                          )!;
+                          return mutate(
+                            `/trips/${snapshot.trip.id}/places/${placeId}/schedule`,
+                            "POST",
+                            {
+                              dayId: destinationDay.id,
+                              branchId,
+                              expectedVersion: place.version,
+                              expectedDayVersion: destinationDay.version,
+                            },
+                          );
+                        }}
+                        renderItem={renderItem}
+                        renderJoinLeg={(branchId, join, role = "main") => {
+                          const target = planDays.find(
+                            (d) => d.id === join.dayId,
+                          )!;
+                          const targetTimeline = timelines.get(target.id)!;
+                          const candidates = target.legs.filter(
+                            (l) =>
+                              l.branchId === branchId &&
+                              l.toItemId === join.id &&
+                              (l.routeRole ?? "main") === role &&
+                              (!participantId ||
+                                Object.hasOwn(targetTimeline.departures, l.id)),
+                          );
+                          const joint = targetTimeline.entries.find(
+                            (e) => e.itemId === join.id,
+                          )!;
+                          return candidates.map((leg) => {
+                            const route = leg.alternatives.find(
+                              (a) => a.id === leg.selectedAlternativeId,
+                            );
+                            const duration =
+                              leg.mode === "manual"
+                                ? leg.manualDurationMinutes == null
+                                  ? null
+                                  : leg.manualDurationMinutes * 60
+                                : (route?.durationSeconds ?? null);
+                            const departure =
+                              targetTimeline.departures[leg.id] ?? null;
+                            const at =
+                              departure === null || duration === null
+                                ? null
+                                : departure + duration;
+                            const arrival = {
+                              ...joint,
+                              arrival: at,
+                              earlyMinutes:
+                                at === null || join.startMinutes === null
+                                  ? 0
+                                  : Math.max(
+                                      0,
+                                      Math.ceil(
+                                        (join.startMinutes * 60 - at) / 60,
+                                      ),
+                                    ),
+                              lateMinutes:
+                                at === null || join.startMinutes === null
+                                  ? 0
+                                  : Math.max(
+                                      0,
+                                      Math.ceil(
+                                        (at - join.startMinutes * 60) / 60,
+                                      ),
+                                    ),
+                            };
+                            return (
+                              <div key={leg.id}>
+                                {candidates.length > 1 && (
+                                  <span className="parallel-route-label">
+                                    从{" "}
+                                    {
+                                      snapshot.days
+                                        .flatMap((d) => d.items)
+                                        .find((i) => i.id === leg.fromItemId)
+                                        ?.title
+                                    }{" "}
+                                    出发
+                                  </span>
+                                )}
+                                <LegCard
+                                  leg={leg}
+                                  destination={join}
+                                  arrival={arrival}
+                                  editable={editable}
+                                  focus={() => focusLeg(target, leg.id)}
+                                  mutate={(data) =>
+                                    mutate(`/legs/${leg.id}`, "PATCH", data)
+                                  }
+                                />
+                              </div>
+                            );
+                          });
+                        }}
+                      />
+                    );
+                  }
                   return (
                     <DaySection
                       key={targetDay.id}
@@ -464,6 +888,25 @@ export function Planner({
                               })
                           : undefined
                       }
+                      addParallel={
+                        editable
+                          ? () => {
+                              const last = mainItems(targetDay)
+                                .filter((i) => i.type !== "note")
+                                .at(-1);
+                              setParallelEditor({
+                                dayId: targetDay.id,
+                                initial: {
+                                  splitItemId:
+                                    last?.type !== "parallel"
+                                      ? (last?.id ?? null)
+                                      : null,
+                                  joinItemId: null,
+                                },
+                              });
+                            }
+                          : undefined
+                      }
                       billCount={
                         snapshot.expenses.filter(
                           (e) => e.dayId === targetDay.id,
@@ -472,101 +915,7 @@ export function Planner({
                       dropTarget={dropTarget}
                     >
                       <div className="timeline-list">
-                        {targetDay.items.map((item, i) => {
-                          const leg = targetDay.legs.find(
-                              (l) => l.toItemId === item.id,
-                            ),
-                            entry = timeline.entries.find(
-                              (e) => e.itemId === item.id,
-                            )!;
-                          return (
-                            <div
-                              key={item.id}
-                              className={
-                                dropTarget?.dayId === targetDay.id &&
-                                dropTarget.beforeItemId === item.id
-                                  ? "drop-before"
-                                  : ""
-                              }
-                            >
-                              {leg && (
-                                <div
-                                  className="timeline-leg"
-                                  hidden={compactItems}
-                                >
-                                  <LegCard
-                                    leg={leg}
-                                    destination={item}
-                                    arrival={entry}
-                                    editable={editable}
-                                    focus={() => focusLeg(targetDay, leg.id)}
-                                    mutate={(data) =>
-                                      mutate(`/legs/${leg.id}`, "PATCH", data)
-                                    }
-                                  />
-                                </div>
-                              )}
-                              <TimelineItem
-                                compact={compactItems}
-                                item={item}
-                                index={i}
-                                entry={entry}
-                                selected={selected === item.id}
-                                editable={editable}
-                                select={() => {
-                                  selectItem(item);
-                                  focusItem(item);
-                                }}
-                                edit={() =>
-                                  setEditing({ dayId: targetDay.id, item })
-                                }
-                                remove={async () => {
-                                  if (
-                                    await confirm(
-                                      `删除「${item.title}」？相关费用将保留。`,
-                                    )
-                                  )
-                                    void act(() =>
-                                      mutate(`/items/${item.id}`, "DELETE", {
-                                        expectedVersion: item.version,
-                                      }),
-                                    );
-                                }}
-                                copy={() =>
-                                  act(() =>
-                                    mutate(
-                                      `/days/${targetDay.id}/items`,
-                                      "POST",
-                                      {
-                                        ...itemPayload(item),
-                                        title: `${item.title}（副本）`,
-                                      },
-                                    ),
-                                  )
-                                }
-                                move={(direction) => move(item, direction)}
-                                expense={() => addExpense(item)}
-                                comment={() => addComment(item)}
-                                bills={snapshot.expenses.filter(
-                                  (e) => e.dayItemId === item.id,
-                                )}
-                                baseCurrency={snapshot.trip.baseCurrency}
-                                openBill={editExpense}
-                                hasPrevious={dayIndex > 0}
-                                hasNext={dayIndex < snapshot.days.length - 1}
-                                moveDay={(direction) =>
-                                  act(() =>
-                                    transfer(
-                                      item,
-                                      snapshot.days[dayIndex + direction],
-                                      null,
-                                    ),
-                                  )
-                                }
-                              />
-                            </div>
-                          );
-                        })}
+                        {dayRoots(targetDay).map(renderItem)}
                       </div>
                       {dayBills.length > 0 && (
                         <div className="day-bills">
@@ -598,7 +947,7 @@ export function Planner({
           </section>
           <section className="map-pane">
             <TripMap
-              day={day}
+              day={visibleDays.find((candidate) => candidate.id === day?.id)}
               days={snapshot.days}
               pool={snapshot.poolPlaces}
               selectedPool={selectedPool}
@@ -639,7 +988,12 @@ export function Planner({
                   ? `/items/${editing.item.id}`
                   : `/days/${editing.dayId}/items`,
                 editing.item ? "PATCH" : "POST",
-                data,
+                {
+                  ...data,
+                  ...(!editing.item && editing.branchId
+                    ? { branchId: editing.branchId }
+                    : {}),
+                },
               )
             }
           />
@@ -654,11 +1008,98 @@ export function Planner({
                   ? `/items/${editing.item.id}`
                   : `/days/${editing.dayId}/items`,
                 editing.item ? "PATCH" : "POST",
-                data,
+                {
+                  ...data,
+                  ...(!editing.item && editing.branchId
+                    ? { branchId: editing.branchId }
+                    : {}),
+                },
               )
             }
           />
         ))}
+      {parallelEditor && (
+        <ParallelEditor
+          day={planDays.find((d) => d.id === parallelEditor.dayId)!}
+          days={planDays}
+          item={parallelEditor.item}
+          initial={parallelEditor.initial}
+          parentBranchId={parallelEditor.branchId}
+          participants={snapshot.participants}
+          close={() => setParallelEditor(null)}
+          save={(data) =>
+            mutate(`/trips/${snapshot.trip.id}/parallel`, "POST", {
+              ...data,
+              dayId: parallelEditor.dayId,
+              ...(parallelEditor.item
+                ? { sectionId: parallelEditor.item.id }
+                : {}),
+              expectedDays: snapshot.days.map((day) => ({
+                id: day.id,
+                expectedVersion: day.version,
+              })),
+            })
+          }
+        />
+      )}
+      {sectionTransfer && (
+        <ParallelTransferEditor
+          section={sectionTransfer.section}
+          days={snapshot.days}
+          operation={sectionTransfer.operation}
+          close={() => setSectionTransfer(null)}
+          save={(data) =>
+            mutate(`/trips/${snapshot.trip.id}/parallel/transfer`, "POST", data)
+          }
+        />
+      )}
+      {assignment && (
+        <Modal
+          title={`调整「${assignment.title}」的分组`}
+          close={() => setAssignment(null)}
+        >
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const branchId =
+                new FormData(event.currentTarget).get("branchId") || null;
+              void act(async () => {
+                await mutate(`/items/${assignment.id}`, "PATCH", {
+                  expectedVersion: assignment.version,
+                  branchId,
+                });
+                setAssignment(null);
+              });
+            }}
+          >
+            <ErrorText error={error} />
+            <Label>
+              所属安排
+              <NativeSelect
+                name="branchId"
+                defaultValue={assignment.branchId ?? ""}
+              >
+                <option value="">共同时间线</option>
+                {branchesOf(
+                  planDays.find((d) => d.id === assignment.dayId)!,
+                ).map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {
+                      snapshot.days
+                        .flatMap((d) => d.items)
+                        .find((i) => i.id === b.sectionId)?.title
+                    }{" "}
+                    · {b.title}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Label>
+            <Button type="submit" className="btn primary">
+              保存分组
+            </Button>
+          </form>
+        </Modal>
+      )}
       {point && (
         <PoolPlaceEditor
           point={point}

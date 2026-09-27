@@ -1,6 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import {
@@ -12,6 +18,9 @@ import {
   Pencil,
   Route,
 } from "lucide-react";
+import { participantDay, contextualDays } from "@/domain/parallel";
+import { calculateTripTimelines } from "@/domain/timeline";
+import { ParticipantFilter } from "./parallel-plan";
 import type { DayPlan, TripSnapshot } from "@/domain/types";
 import { mapLocations } from "@/domain/map-locations";
 import type { MapFocus } from "./map";
@@ -32,7 +41,22 @@ const ItineraryMap = dynamic(
 const noMapDays: DayPlan[] = [];
 
 export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
-  const days = useMemo(() => itineraryDays(snapshot.days), [snapshot.days]);
+  const [personFilter, setPersonFilter] = useState("");
+  const participantId =
+    personFilter === "me"
+      ? (snapshot.participants.find((p) => p.userId === snapshot.currentUserId)
+          ?.id ?? null)
+      : personFilter || null;
+  const days = useMemo(
+    () => itineraryDays(snapshot.days, snapshot.participants, participantId),
+    [snapshot.days, snapshot.participants, participantId],
+  );
+  const visibleDays = useMemo(() => {
+    const timelines = calculateTripTimelines(snapshot.days, participantId);
+    return contextualDays(snapshot.days).map((day) =>
+      participantDay(day, participantId, timelines.get(day.id)),
+    );
+  }, [snapshot.days, participantId]);
   const dates = itineraryDateRange(
     snapshot.trip.startDate,
     snapshot.trip.endDate,
@@ -46,7 +70,17 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
         days,
       }}
       canEdit={snapshot.role !== "viewer"}
-      mapDays={snapshot.days}
+      mapDays={visibleDays}
+      filter={
+        snapshot.days.some((day) => day.items.some((i) => i.parallelPlan)) ? (
+          <ParticipantFilter
+            participants={snapshot.participants}
+            currentUserId={snapshot.currentUserId}
+            value={personFilter}
+            onChange={setPersonFilter}
+          />
+        ) : undefined
+      }
       actions={
         <>
           {snapshot.role !== "viewer" && (
@@ -68,11 +102,13 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
 export function ItineraryContent({
   itinerary: { title, dates, timezone, days },
   actions,
+  filter,
   canEdit = false,
   mapDays = noMapDays,
 }: {
   itinerary: ItineraryDocument;
   actions?: ReactNode;
+  filter?: ReactNode;
   canEdit?: boolean;
   mapDays?: DayPlan[];
 }) {
@@ -132,6 +168,7 @@ export function ItineraryContent({
           </Button>
         </div>
       </div>
+      {filter}
       <div className="itinerary-cover">
         <div className="itinerary-cover-title">
           <h3>{title}</h3>
@@ -251,7 +288,25 @@ export function ItineraryContent({
               ) : (
                 <ol className="itinerary-stops">
                   {day.stops.map((stop, index) => (
-                    <li key={stop.id}>
+                    <li
+                      key={stop.id}
+                      style={
+                        stop.branch
+                          ? ({
+                              "--branch-color": stop.branch.color,
+                            } as CSSProperties)
+                          : undefined
+                      }
+                    >
+                      {stop.branch && (
+                        <div className="itinerary-branch-label">
+                          <strong>{stop.branch.title}</strong>
+                          <span>
+                            {stop.branch.people || stop.branch.sectionTitle} ·
+                            分头行动
+                          </span>
+                        </div>
+                      )}
                       {stop.connection && (
                         <div className="itinerary-connection">
                           <Route size={16} aria-hidden="true" />
@@ -274,7 +329,7 @@ export function ItineraryContent({
                         </div>
                       )}
                       <article
-                        className="itinerary-stop"
+                        className={`itinerary-stop${stop.branch ? " itinerary-parallel-stop" : ""}`}
                         id={`itinerary-stop-${stop.id}`}
                         tabIndex={-1}
                         data-map-selected={selectedItem === stop.id}

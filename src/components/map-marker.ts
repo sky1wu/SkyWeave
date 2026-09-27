@@ -59,7 +59,7 @@ export function markerElement(point: MapLocation, active: boolean) {
   const { icon, color, glyph } = mapCategory(point.category);
   const node = document.createElement("button");
   node.className = `map-marker map-place-marker ${point.poolPlaceId ? "unplanned" : "planned"} ${active ? "active" : ""}`;
-  node.style.setProperty("--marker-color", color);
+  node.style.setProperty("--marker-color", point.color ?? color);
   node.dataset.locationId = point.id;
   node.dataset.icon = icon;
   node.dataset.category = point.category;
@@ -101,7 +101,9 @@ export function markerElement(point: MapLocation, active: boolean) {
   }
   const label = document.createElement("span");
   label.className = "map-marker-label";
-  label.textContent = point.title;
+  label.textContent = point.branchTitle
+    ? `${point.branchTitle} · ${point.title}`
+    : point.title;
   if (point.endpoint) {
     const endpoint = document.createElement("small");
     endpoint.textContent = point.endpoint === "origin" ? "出发" : "到达";

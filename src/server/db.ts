@@ -21,7 +21,13 @@ export const db = drizzle(sqlite, { schema });
 migrate(db, { migrationsFolder: resolve("drizzle") });
 
 type Param = string | number | null;
-const jsonFields = new Set(["polyline", "steps", "splitMeta", "transport"]);
+const jsonFields = new Set([
+  "polyline",
+  "steps",
+  "splitMeta",
+  "transport",
+  "parallelPlan",
+]);
 const booleanFields = new Set([
   "fixedTime",
   "geometryComplete",

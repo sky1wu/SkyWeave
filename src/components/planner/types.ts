@@ -11,6 +11,7 @@ export type PlannerView = "pool" | "timeline" | "map";
 export interface DropTarget {
   dayId: string;
   beforeItemId: string | null;
+  branchId?: string | null;
 }
 
 export type InteractionSequence = MutableRefObject<number>;

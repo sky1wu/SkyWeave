@@ -3,6 +3,9 @@ import { tripDates } from "@/domain/calendar";
 import { calculateBalances, convertMoney, splitExpense } from "@/domain/money";
 import { TRIP_FILE_FORMAT, TRIP_FILE_VERSION } from "@/domain/trip-file";
 import { AppError } from "./errors";
+import { parallelTripError } from "@/domain/parallel";
+import type { Item } from "@/domain/types";
+import { tripRouteConnections } from "@/domain/timeline";
 import * as v from "./validation";
 
 const nonnegative = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
@@ -49,6 +52,8 @@ export const fileLeg = v.legInput
     id: v.id,
     fromItemId: v.id,
     toItemId: v.id,
+    branchId: z.string().max(100).default(""),
+    routeRole: z.enum(["main", "catch_up"]).default("main"),
     mode: v.legInput.shape.mode.unwrap(),
     provider: z.string().max(100),
     selectedAlternativeId: v.id.nullable(),
@@ -90,7 +95,7 @@ export const fileSettlement = v.settlementInput.strip().extend({
 });
 export const tripFileSchema = z.object({
   format: z.literal(TRIP_FILE_FORMAT),
-  version: z.literal(TRIP_FILE_VERSION),
+  version: z.union([z.literal(1), z.literal(2), z.literal(TRIP_FILE_VERSION)]),
   exportedAt: z.iso.datetime(),
   trip: fileTrip,
   days: z.array(fileDay).max(366),
@@ -116,7 +121,9 @@ export function parseTripFile(body: unknown): TripFile {
     "version" in body
   ) {
     ensure(
-      body.version === TRIP_FILE_VERSION,
+      body.version === 1 ||
+        body.version === 2 ||
+        body.version === TRIP_FILE_VERSION,
       "暂不支持此行程文件版本，请使用当前版本导出的文件",
     );
   }
@@ -170,8 +177,28 @@ export function parseTripFile(body: unknown): TripFile {
       "每日日期与行程日期范围不一致",
     );
   }
+  const planDays = file.days.map((day, position) => ({
+    ...day,
+    position,
+    items: day.items.map(
+      (item, index) => ({ ...item, dayId: day.id, position: index }) as Item,
+    ),
+  }));
+  const allItems = collect(file.days.flatMap((day) => day.items));
+  const allBranches = collect(
+    file.days.flatMap((day) =>
+      day.items.flatMap((item) => item.parallelPlan?.branches ?? []),
+    ),
+  );
+  const branchError = parallelTripError(planDays, people);
+  ensure(!branchError, branchError ?? "分头行动安排无效");
+  const allowedConnections = new Set(
+    tripRouteConnections(planDays).map(({ from, to, branchId, routeRole }) =>
+      JSON.stringify([from.id, to.id, branchId, routeRole]),
+    ),
+  );
   for (const day of file.days) {
-    const items = collect(day.items);
+    const items = new Set(day.items.map((item) => item.id));
     collect(day.legs);
     for (const item of day.items) {
       itemDays.set(item.id, day.id);
@@ -196,12 +223,22 @@ export function parseTripFile(body: unknown): TripFile {
     }
     const pairs = new Set<string>();
     for (const leg of day.legs) {
-      reference(leg.fromItemId, items);
+      reference(leg.fromItemId, allItems);
       reference(leg.toItemId, items);
-      const pair = JSON.stringify([leg.fromItemId, leg.toItemId]);
+      if (leg.branchId) reference(leg.branchId, allBranches);
+      const pair = JSON.stringify([
+        leg.fromItemId,
+        leg.toItemId,
+        leg.branchId,
+        leg.routeRole,
+      ]);
       ensure(
         leg.fromItemId !== leg.toItemId && !pairs.has(pair),
         "交通路线起终点无效或重复",
+      );
+      ensure(
+        !allowedConnections || allowedConnections.has(pair),
+        "交通路线不属于对应分组的连续安排",
       );
       pairs.add(pair);
       reference(leg.selectedAlternativeId, collect(leg.alternatives));

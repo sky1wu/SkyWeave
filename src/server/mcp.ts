@@ -1,10 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import {
+  saveParallel,
+  transferParallel,
+  parallelSaveInput,
+  parallelTransferInput,
+} from "./parallel-service";
+import { contextualDays } from "@/domain/parallel";
 import { amap } from "@/amap/service";
-import { calculateTimeline } from "@/domain/timeline";
+import { calculateTimeline, calculateTripTimelines } from "@/domain/timeline";
 import { calculateBalances, currencies, minorDigits } from "@/domain/money";
-import type { Day, Item, Leg, Participant, PoolPlace } from "@/domain/types";
+import type { Item, Leg, Participant, PoolPlace } from "@/domain/types";
 import { many, one } from "./db";
 import { AppError, requireValue } from "./errors";
 import { mcpAccess, type McpPrincipal } from "./mcp-tokens";
@@ -14,7 +21,7 @@ import {
   saveParticipantAlias,
 } from "./participant-alias-service";
 import { calculateDay } from "./routing";
-import { checkVersion, getDay, getTrip, tx } from "./service-core";
+import { checkVersion, getDay, getDays, getTrip, tx } from "./service-core";
 import { editTrip, listTrips, reorderDays, snapshot } from "./trip-service";
 import {
   createItem,
@@ -127,17 +134,20 @@ export function createMcpServer(principal: McpPrincipal) {
   }
   function dayResult(dayId: string) {
     const day = getDay(dayId);
-    return { day, timeline: calculateTimeline(day) };
+    const days = getDays(day.tripId);
+    return {
+      day: contextualDays(days).find((d) => d.id === day.id)!,
+      timeline: calculateTimeline(day, days),
+    };
   }
   function itinerary(tripId: string) {
     const role = mcpAccess(principal, tripId).role;
+    const days = getDays(tripId),
+      timelines = calculateTripTimelines(days);
     return {
       trip: getTrip(tripId),
       role,
-      days: many<Day>(
-        "SELECT * FROM days WHERE tripId=? ORDER BY position",
-        tripId,
-      ).map((day) => dayResult(day.id)),
+      days: days.map((day) => ({ day, timeline: timelines.get(day.id)! })),
       poolPlaces: many<PoolPlace>(
         "SELECT * FROM trip_places WHERE tripId=? ORDER BY position, createdAt, id",
         tripId,
@@ -242,8 +252,32 @@ export function createMcpServer(principal: McpPrincipal) {
       }),
   );
   register(
+    "save_parallel_section",
+    "原子创建或编辑分头行动，并批量分配现有事项。支持嵌套、跨日及各组独立集合点。expectedDays 包含行程全部日期的最新版本。",
+    { ...trip, ...parallelSaveInput.shape },
+    true,
+    ({ tripId, ...data }) =>
+      tx(() => {
+        mcpAccess(principal, tripId, true);
+        const saved = saveParallel(tripId, user, data);
+        return { ...saved, ...itinerary(tripId) };
+      }),
+  );
+  register(
+    "transfer_parallel_section",
+    "整段复制或移动分头行动，包含嵌套事项和公共分开/集合点，保留日期间隔。移动时账单关联跟随；复制不复制账单。",
+    { ...trip, ...parallelTransferInput.shape },
+    true,
+    ({ tripId, ...data }) =>
+      tx(() => {
+        mcpAccess(principal, tripId, true);
+        const saved = transferParallel(tripId, user, data);
+        return { ...saved, ...itinerary(tripId) };
+      }),
+  );
+  register(
     "create_item",
-    "在当天末尾新增景点、固定活动、酒店、独立交通、过关或备注。lat/lng 必须同时提供；固定活动设置 fixedTime 和起止分钟。",
+    "新增事项。分头行动使用 type=parallel 和 parallelPlan：splitItemId/joinItemId 为相邻共同事项或 null，branches 至少两组且人员不重叠。组内事项填写 branchId；同行者用 participantId。行动段按锚点插入，其余事项追加。lat/lng 必须同时提供。",
     {
       ...day,
       expectedDayVersion: v.version,
@@ -323,6 +357,10 @@ export function createMcpServer(principal: McpPrincipal) {
       ...expected,
       dayId: v.id,
       beforeItemId: v.id.nullable().optional(),
+      branchId: v.id
+        .nullable()
+        .optional()
+        .describe("目标分组，null 表示共同时间线；跨日省略时移入共同时间线"),
       expectedSourceDayVersion: v.version,
       expectedTargetDayVersion: v.version,
     },
@@ -428,6 +466,10 @@ export function createMcpServer(principal: McpPrincipal) {
       placeId: v.id,
       expectedDayVersion: v.version,
       beforeItemId: v.id.nullable().optional(),
+      branchId: v.id
+        .nullable()
+        .optional()
+        .describe("目标分组，null 表示共同时间线；跨日省略时移入共同时间线"),
     },
     true,
     ({ tripId, placeId, ...data }) =>

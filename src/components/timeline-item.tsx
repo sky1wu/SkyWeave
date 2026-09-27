@@ -52,6 +52,9 @@ export function TimelineItem({
   hasPrevious,
   hasNext,
   compact = false,
+  split,
+  meet,
+  assign,
 }: {
   item: Item;
   index: number;
@@ -72,6 +75,9 @@ export function TimelineItem({
   hasPrevious: boolean;
   hasNext: boolean;
   compact?: boolean;
+  split?: () => void;
+  meet?: () => void;
+  assign?: () => void;
 }) {
   const {
     attributes,
@@ -94,7 +100,7 @@ export function TimelineItem({
         transition,
         opacity: isDragging ? 0.55 : 1,
       }}
-      className={`timeline-item place-card ${compact ? "compact" : ""} ${editable ? "draggable-card" : ""} ${selected ? "selected" : ""} ${isDragging ? "dragging" : ""}`}
+      className={`timeline-item place-card ${entry.skipped ? "skipped-arrangement" : ""} ${compact ? "compact" : ""} ${editable ? "draggable-card" : ""} ${selected ? "selected" : ""} ${isDragging ? "dragging" : ""}`}
       id={`item-${item.id}`}
       data-testid={`item-${item.id}`}
       {...cardDragListeners(listeners)}
@@ -122,7 +128,13 @@ export function TimelineItem({
           className="item-time"
           aria-label={entry.start === null ? "时间待定" : undefined}
         >
-          {entry.start === null ? "待定" : formatTime(entry.start)}
+          {entry.skipped
+            ? "已跳过"
+            : entry.rendezvous?.policy === "wait_all" && entry.arrival === null
+              ? "待确认"
+              : entry.start === null
+                ? "待定"
+                : formatTime(entry.start)}
         </span>
         <span className="item-number">
           {String(index + 1).padStart(2, "0")}
@@ -159,6 +171,21 @@ export function TimelineItem({
                   className="sw-item-menu w-44"
                   aria-label={`${item.title}操作`}
                 >
+                  {split && (
+                    <DropdownMenuItem onClick={split}>
+                      从这里分头行动
+                    </DropdownMenuItem>
+                  )}
+                  {meet && (
+                    <DropdownMenuItem onClick={meet}>
+                      在这里集合
+                    </DropdownMenuItem>
+                  )}
+                  {assign && (
+                    <DropdownMenuItem onClick={assign}>
+                      调整分组
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={copy}>复制事项</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => move("up")}>
@@ -168,10 +195,10 @@ export function TimelineItem({
                     下移
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => move("first")}>
-                    设为当天起点
+                    {item.branchId ? "设为本组起点" : "设为当天起点"}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => move("last")}>
-                    设为当天终点
+                    {item.branchId ? "设为本组终点" : "设为当天终点"}
                   </DropdownMenuItem>
                   {hasPrevious && (
                     <DropdownMenuItem onClick={() => moveDay(-1)}>

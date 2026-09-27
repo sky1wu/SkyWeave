@@ -1,9 +1,13 @@
 import type * as s from "@/server/schema";
 export type Trip = typeof s.trips.$inferSelect;
 export type Day = typeof s.days.$inferSelect;
-export type Item = typeof s.items.$inferSelect;
+type StoredItem = typeof s.items.$inferSelect;
+export type Item = Omit<StoredItem, "branchId" | "parallelPlan"> &
+  Partial<Pick<StoredItem, "branchId" | "parallelPlan">>;
 export type PoolPlace = typeof s.poolPlaces.$inferSelect;
-export type Leg = typeof s.legs.$inferSelect;
+type StoredLeg = typeof s.legs.$inferSelect;
+export type Leg = Omit<StoredLeg, "branchId" | "routeRole"> &
+  Partial<Pick<StoredLeg, "branchId" | "routeRole">>;
 export type Alternative = typeof s.alternatives.$inferSelect;
 // Workspace responses keep route instructions; map geometry is loaded separately.
 export type RouteAlternative = Omit<Alternative, "polyline"> &
@@ -24,6 +28,9 @@ export type Member = typeof s.members.$inferSelect & {
 export type Activity = typeof s.activity.$inferSelect & { actorName: string };
 export type Comment = typeof s.comments.$inferSelect & { authorName: string };
 export type DayPlan = Day & {
+  contextItems?: Item[];
+  contextLegs?: (Leg & { alternatives: RouteAlternative[] })[];
+  contextDays?: Pick<Day, "id" | "position" | "startMinutes">[];
   items: Item[];
   legs: (Leg & { alternatives: RouteAlternative[] })[];
 };
@@ -70,6 +77,7 @@ export const typeLabels: Record<Item["type"], string> = {
   transport: "交通",
   border: "口岸",
   note: "备注",
+  parallel: "分头行动",
 };
 export const categoryLabels: Record<string, string> = {
   transport: "交通",

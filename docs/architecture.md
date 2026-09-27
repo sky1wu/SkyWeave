@@ -53,3 +53,15 @@ src/app 页面和 Route Handler；src/components 界面；src/domain 纯函数�
 8. E2E/Docker/交付文档
 
 每个独立功能增量检查后提交；真实 Key 与数据库永不提交。
+
+
+## 多人行程扩展
+
+- `src/domain/parallel.ts`：分组结构、完整行程校验、跨日展示上下文与个人筛选。
+- `src/domain/plan-graph.ts`：按个人展开嵌套行动段，生成共同／分组／追赶路线及拓扑顺序。
+- `src/domain/linear-timeline.ts`：原有单线时间规则，继续处理固定事项和独立交通。
+- `src/domain/trip-timeline.ts`：全程个人时钟、集合屏障、迟到后改道与个人时间投影。
+- `src/server/parallel-service.ts`：带日期版本检查的批量分组、整段预览、复制与移动事务。
+- `src/components/parallel-plan.tsx`：分组编辑器、批量归属、递归分组卡片和整段操作预览。
+
+`day_items.parallelPlan` 保存段内分组及集合规则，`day_items.branchId` 指向直接所属组。跨行引用由事务中的全程图校验保证。`travel_legs` 增加分组与路线角色，路线按到达日期存放；快照按天保存唯一数据，浏览器派生跨日上下文，避免重复传输。文件版本 3 兼容旧版本 1、2，并在导入时先创建所有事项、再恢复跨日路线。

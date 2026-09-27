@@ -1,11 +1,16 @@
 import { amap } from "@/amap/service";
 import type { RouteRequest } from "@/amap/requests";
-import { calculateTimeline, departureISO } from "@/domain/timeline";
+import {
+  calculateTimeline,
+  departureISO,
+  tripRouteConnections,
+} from "@/domain/timeline";
 import type { Leg } from "@/domain/types";
 import { routeEndpoint } from "@/domain/transport";
 import {
   access,
   getDay,
+  getDays,
   getTrip,
   log,
   tx,
@@ -21,17 +26,19 @@ export async function calculateLeg(legId: string, actor: Actor, force = false) {
     one<Leg>("SELECT * FROM travel_legs WHERE id=?", legId),
   );
   const day = getDay(leg.dayId);
+  const days = getDays(day.tripId);
+  const items = days.flatMap((d) => d.items);
   access(day.tripId, actor, "edit");
   if (leg.mode === "manual") return { changed: false };
   const origin = routeEndpoint(
-      requireValue(day.items.find((i) => i.id === leg.fromItemId)),
+      requireValue(items.find((i) => i.id === leg.fromItemId)),
       "departure",
     ),
     destination = routeEndpoint(
-      requireValue(day.items.find((i) => i.id === leg.toItemId)),
+      requireValue(items.find((i) => i.id === leg.toItemId)),
       "arrival",
     );
-  const departure = calculateTimeline(day).departures[legId] ?? null;
+  const departure = calculateTimeline(day, days).departures[legId] ?? null;
   const request: RouteRequest = {
     mode: leg.mode,
     origin: {
@@ -121,19 +128,29 @@ const pending =
   globalRouting.tripRouting ?? new Map<string, Promise<unknown>>();
 globalRouting.tripRouting = pending;
 export async function calculateDay(dayId: string, actor: Actor, force = false) {
-  access(getDay(dayId).tripId, actor, "edit");
-  const running = pending.get(dayId);
+  const tripId = getDay(dayId).tripId;
+  access(tripId, actor, "edit");
+  const running = pending.get(tripId);
   if (running) return running;
   const task = (async () => {
-    const day = getDay(dayId);
+    const days = getDays(tripId);
+    const allLegs = days.flatMap((day) => day.legs);
     let changed = false;
-    for (const item of day.items) {
-      const leg = day.legs.find((l) => l.toItemId === item.id);
+    for (const { from, to, branchId, routeRole } of tripRouteConnections(
+      days,
+    )) {
+      const leg = allLegs.find(
+        (l) =>
+          l.fromItemId === from.id &&
+          l.toItemId === to.id &&
+          (l.branchId ?? "") === branchId &&
+          (l.routeRole ?? "main") === routeRole,
+      );
       if (leg)
         changed = (await calculateLeg(leg.id, actor, force)).changed || changed;
     }
     return { id: dayId, changed };
-  })().finally(() => pending.delete(dayId));
-  pending.set(dayId, task);
+  })().finally(() => pending.delete(tripId));
+  pending.set(tripId, task);
   return task;
 }

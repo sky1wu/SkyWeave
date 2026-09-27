@@ -102,6 +102,18 @@ export function deleteParticipant(
         "已注册同行者请通过成员管理移出行程",
       );
     if (
+      one(
+        "SELECT i.id FROM day_items i JOIN days d ON d.id=i.dayId, json_each(i.parallelPlan, '$.branches') b, json_each(b.value, '$.participantIds') p WHERE d.tripId=? AND p.value=? LIMIT 1",
+        tripId,
+        p.id,
+      )
+    )
+      throw new AppError(
+        400,
+        "PARTICIPANT_HAS_PLANS",
+        "此同行者已有分组安排，请先调整分组，或改用停用以保留历史行程",
+      );
+    if (
       one("SELECT id FROM expenses WHERE payerParticipantId=? LIMIT 1", p.id) ||
       one(
         "SELECT id FROM expense_splits WHERE participantId=? LIMIT 1",

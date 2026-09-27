@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { displayItems } from "@/domain/parallel";
 import {
   closestCenter,
   KeyboardSensor,
@@ -29,6 +30,12 @@ const collision: CollisionDetection = (args) => {
   const hits = pointerWithin(eligible).filter(
     (hit) => hit.id !== args.active.id,
   );
+  const itemHits = hits.filter(
+    (hit) =>
+      !String(hit.id).startsWith("day:") &&
+      !String(hit.id).startsWith("branch:"),
+  );
+  if (itemHits.length) return itemHits;
   const items = hits.filter((hit) => !String(hit.id).startsWith("day:"));
   return items.length ? items : hits;
 };
@@ -66,6 +73,7 @@ export function usePlannerDnD({
     place: PoolPlace,
     targetDay: DayPlan,
     beforeItemId: string | null = null,
+    branchId?: string | null,
   ) {
     const interaction = markInteraction();
     setSelectedDay(targetDay.id);
@@ -75,6 +83,7 @@ export function usePlannerDnD({
       {
         dayId: targetDay.id,
         beforeItemId,
+        ...(branchId !== undefined ? { branchId } : {}),
         expectedVersion: place.version,
         expectedDayVersion: targetDay.version,
       },
@@ -87,11 +96,13 @@ export function usePlannerDnD({
     item: Item,
     target: DayPlan,
     beforeItemId: string | null,
+    branchId?: string | null,
   ) {
     const source = snapshot.days.find((day) => day.id === item.dayId)!;
     return mutate(`/items/${item.id}/move`, "POST", {
       dayId: target.id,
       beforeItemId,
+      ...(branchId !== undefined ? { branchId } : {}),
       expectedVersion: item.version,
       expectedSourceDayVersion: source.version,
       expectedTargetDayVersion: target.version,
@@ -122,7 +133,10 @@ export function usePlannerDnD({
 
   function move(item: Item, direction: "first" | "last" | "up" | "down") {
     const targetDay = snapshot.days.find((day) => day.id === item.dayId)!;
-    const ids = targetDay.items.map((candidate) => candidate.id);
+    const siblings = targetDay.items.filter(
+      (i) => (i.branchId ?? null) === (item.branchId ?? null),
+    );
+    const ids = siblings.map((candidate) => candidate.id);
     const from = ids.indexOf(item.id);
     const to =
       direction === "first"
@@ -134,7 +148,16 @@ export function usePlannerDnD({
             : Math.min(ids.length - 1, from + 1);
     ids.splice(from, 1);
     ids.splice(to, 0, item.id);
-    void act(() => reorder(targetDay, ids));
+    const siblingIds = new Set(ids);
+    let offset = 0;
+    void act(() =>
+      reorder(
+        targetDay,
+        targetDay.items.map((i) =>
+          siblingIds.has(i.id) ? ids[offset++] : i.id,
+        ),
+      ),
+    );
   }
 
   function targetFor(event: DragOverEvent | DragEndEvent): DropTarget | null {
@@ -142,8 +165,20 @@ export function usePlannerDnD({
     const dayId = event.over.data.current?.dayId as string | undefined;
     const targetDay = snapshot.days.find((day) => day.id === dayId);
     if (!targetDay) return null;
+    if (event.over.data.current?.kind === "branch")
+      return {
+        dayId: targetDay.id,
+        beforeItemId: null,
+        branchId: event.over.data.current.branchId,
+      };
     if (event.over.data.current?.kind === "item")
-      return { dayId: targetDay.id, beforeItemId: String(event.over.id) };
+      return {
+        dayId: targetDay.id,
+        beforeItemId: String(event.over.id),
+        branchId:
+          targetDay.items.find((i) => i.id === String(event.over!.id))
+            ?.branchId ?? null,
+      };
     const activator = event.activatorEvent;
     const y =
       activator instanceof MouseEvent
@@ -152,12 +187,16 @@ export function usePlannerDnD({
           ? event.active.rect.current.translated.top +
             event.active.rect.current.translated.height / 2
           : Infinity;
-    const before = targetDay.items.find((item) => {
+    const before = displayItems(targetDay).find((item) => {
       if (item.id === event.active.id) return false;
       const node = document.getElementById(`item-${item.id}`);
       return node && node.getBoundingClientRect().bottom > y;
     });
-    return { dayId: targetDay.id, beforeItemId: before?.id ?? null };
+    return {
+      dayId: targetDay.id,
+      beforeItemId: before?.id ?? null,
+      branchId: before?.branchId ?? null,
+    };
   }
 
   function dragEnd(event: DragEndEvent) {
@@ -184,7 +223,9 @@ export function usePlannerDnD({
         (candidate) => candidate.id === event.active.data.current?.placeId,
       );
       if (place)
-        void act(() => schedule(place, targetDay, target.beforeItemId));
+        void act(() =>
+          schedule(place, targetDay, target.beforeItemId, target.branchId),
+        );
       return;
     }
     const item = snapshot.days
@@ -193,6 +234,7 @@ export function usePlannerDnD({
     if (!item) return;
     if (
       item.dayId === target.dayId &&
+      (item.branchId ?? null) === (target.branchId ?? null) &&
       event.over?.data.current?.kind === "item"
     ) {
       const ids = targetDay.items.map((candidate) => candidate.id);
@@ -202,7 +244,10 @@ export function usePlannerDnD({
       ids.splice(from, 1);
       ids.splice(to, 0, item.id);
       void act(() => reorder(targetDay, ids));
-    } else void act(() => transfer(item, targetDay, target.beforeItemId));
+    } else
+      void act(() =>
+        transfer(item, targetDay, target.beforeItemId, target.branchId),
+      );
   }
 
   return {

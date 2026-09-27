@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { tripFilename } from "@/domain/trip-file";
+import { tripFilename, TRIP_FILE_VERSION } from "@/domain/trip-file";
 import type { TripFile } from "@/server/trip-file-schema";
 
 const directory = mkdtempSync(`${tmpdir()}/trip-file-`);
@@ -263,7 +263,7 @@ describe("portable trip files", () => {
     expect(response.headers.get("content-disposition")).toContain(
       encodeURIComponent("杭州 _ 上海之旅.skyweave.json"),
     );
-    expect((await response.json()).version).toBe(1);
+    expect((await response.json()).version).toBe(TRIP_FILE_VERSION);
     s.editMember(id, viewer.id, owner, {
       expectedVersion: 1,
       status: "inactive",

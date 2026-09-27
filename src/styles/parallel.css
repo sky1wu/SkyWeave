@@ -1,0 +1,311 @@
+.participant-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.participant-filter > span {
+  white-space: nowrap;
+}
+.participant-filter > svg {
+  flex-shrink: 0;
+}
+.participant-filter select {
+  min-width: 0;
+  flex: 1;
+}
+.parallel-block {
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid #c9d8e8;
+  border-radius: 12px;
+  background: #f5f8fc;
+  container-type: inline-size;
+}
+.parallel-block > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground);
+}
+.parallel-block > header > strong {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.parallel-block > header > div {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--primary);
+}
+.parallel-boundary,
+.parallel-departure,
+.parallel-empty,
+.parallel-unassigned {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted-foreground);
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.parallel-lanes {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.parallel-lane {
+  min-width: 0;
+  background: white;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--branch-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.parallel-lane > summary {
+  padding: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--branch-color);
+  overflow-wrap: anywhere;
+}
+.parallel-lane > summary > span {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  margin-top: 3px;
+}
+.parallel-lane-content {
+  padding: 0 8px 8px;
+}
+.parallel-lane .timeline-item {
+  margin-bottom: 8px;
+}
+.parallel-lane .item-left {
+  width: 42px;
+  flex-basis: 42px;
+}
+.parallel-lane .timeline-leg {
+  margin-left: 0;
+}
+.parallel-lane .item-meta {
+  flex-wrap: wrap;
+}
+.parallel-lane .item-time {
+  font-size: 11px;
+}
+.parallel-lane .item-title {
+  font-size: 13px;
+}
+.parallel-add {
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.parallel-add > div:first-child {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.parallel-pool {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.parallel-pool > select {
+  min-width: 0;
+  width: 100%;
+  font-size: 12px;
+}
+.parallel-join-leg > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--branch-color);
+}
+.parallel-editor-groups {
+  display: grid;
+  gap: 14px;
+}
+.parallel-editor-groups fieldset {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--branch-color);
+  border-radius: 8px;
+  padding: 12px;
+}
+.parallel-editor-groups legend {
+  color: var(--branch-color);
+  font-weight: 650;
+  padding: 0 5px;
+  font-size: 13px;
+}
+.parallel-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin: 12px 0;
+}
+.parallel-people label {
+  font-weight: 400;
+}
+.rendezvous {
+  margin: 10px 0 6px;
+  padding: 10px 12px;
+  border: 1px solid #b9d8f4;
+  border-radius: 8px;
+  background: #edf6ff;
+  font-size: 12px;
+}
+.rendezvous > strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #0757b5;
+}
+.rendezvous ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.rendezvous li {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.rendezvous li > span:first-child {
+  font-weight: 650;
+}
+.itinerary-branch-label {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin: 8px 0;
+  border-left: 3px solid var(--branch-color, #167d8d);
+  color: var(--branch-color, #167d8d);
+  background: #f5f8fc;
+  font-size: 12px;
+}
+.itinerary-branch-label span {
+  color: var(--muted-foreground);
+}
+.itinerary-parallel-stop {
+  border-left: 3px solid var(--branch-color, #167d8d);
+}
+@container (min-width: 540px) {
+  .parallel-lanes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1280px) {
+  .floating-workspace.has-parallel .floating-timeline {
+    --panel-width: 660px;
+  }
+}
+@media (max-width: 600px) {
+  .parallel-block {
+    padding: 9px;
+  }
+  .participant-filter {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+  }
+  .parallel-editor .actions {
+    flex-wrap: wrap;
+  }
+  .planner-day-heading {
+    flex-wrap: wrap;
+  }
+  .day-actions {
+    flex-wrap: wrap;
+  }
+}
+.parallel-block > header {
+  flex-wrap: wrap;
+}
+.parallel-block > header > div {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.parallel-lane .parallel-block {
+  margin: 8px 0;
+  padding: 8px;
+}
+.parallel-lane .parallel-block .parallel-lanes {
+  grid-template-columns: 1fr;
+}
+.parallel-batch {
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.parallel-batch > summary {
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--primary);
+}
+.parallel-batch-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+.parallel-batch-toolbar > select {
+  flex: 1;
+  min-width: 100px;
+}
+.parallel-batch-items {
+  max-height: 280px;
+  overflow-y: auto;
+}
+.parallel-batch-items > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, 150px);
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  padding: 8px 0;
+}
+.parallel-batch-items label {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.parallel-batch ul {
+  font-size: 12px;
+  line-height: 1.8;
+  padding: 10px 0;
+}
+.parallel-add > select {
+  width: 100%;
+  margin-bottom: 6px;
+}
+.parallel-route-label {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.skipped-arrangement .item-title {
+  text-decoration: line-through;
+  color: var(--muted-foreground);
+}
+.skipped-arrangement .item-time {
+  color: var(--muted-foreground);
+}
+
+.parallel-lanes {
+  align-items: start;
+}
+.parallel-lane .parallel-block > header > div {
+  flex-basis: 100%;
+  padding-left: 25px;
+}

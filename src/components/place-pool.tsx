@@ -215,11 +215,13 @@ export function PoolPlaceEditor({
           <Label>
             事项类型
             <NativeSelect name="type" defaultValue={place?.type ?? "place"}>
-              {Object.entries(typeLabels).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
+              {Object.entries(typeLabels)
+                .filter(([value]) => value !== "parallel")
+                .map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
             </NativeSelect>
           </Label>
         </div>

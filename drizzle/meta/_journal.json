@@ -64,6 +64,20 @@
       "when": 1789447664431,
       "tag": "0008_participant_aliases",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790520992642,
+      "tag": "0009_parallel_itineraries",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790524563060,
+      "tag": "0010_advanced_parallel_routes",
+      "breakpoints": true
     }
   ]
 }

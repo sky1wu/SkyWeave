@@ -194,6 +194,7 @@ export function schedulePlace(
     .strictObject({
       dayId: id,
       beforeItemId: id.nullable().optional(),
+      branchId: id.nullable().optional(),
       expectedVersion: version,
       expectedDayVersion: version,
     })
@@ -215,6 +216,11 @@ export function schedulePlace(
     if (data.beforeItemId && !day.items.some((i) => i.id === data.beforeItemId))
       throw new AppError(400, "VALIDATION", "插入位置不属于目标日期");
     const created = createItem(day.id, actor, {
+      branchId:
+        data.branchId !== undefined
+          ? data.branchId
+          : (day.items.find((i) => i.id === data.beforeItemId)?.branchId ??
+            null),
       title: place.title,
       type: place.type,
       placeCategory: place.placeCategory,
@@ -241,6 +247,7 @@ export function moveItem(itemId: string, actor: Actor, body: unknown) {
     .strictObject({
       dayId: id,
       beforeItemId: id.nullable().optional(),
+      branchId: id.nullable().optional(),
       expectedVersion: version,
       expectedSourceDayVersion: version,
       expectedTargetDayVersion: version,
@@ -276,6 +283,12 @@ export function moveItem(itemId: string, actor: Actor, body: unknown) {
     );
     update("day_items", itemId, {
       dayId: target.id,
+      branchId:
+        data.branchId !== undefined
+          ? data.branchId
+          : source.id === target.id
+            ? (item.branchId ?? null)
+            : null,
       version: item.version + 1,
       updatedAt: Date.now(),
       updatedByUserId: actor.id,

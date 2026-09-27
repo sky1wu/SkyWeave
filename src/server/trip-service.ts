@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DateTime } from "luxon";
+import { parallelTripError } from "@/domain/parallel";
 import { dayTitle, tripDates } from "@/domain/calendar";
 import type {
   Trip,
@@ -82,7 +83,7 @@ export function snapshot(
             ? "summary"
             : "none",
       }),
-      participants: includes("plan", "expenses", "members")
+      participants: includes("plan", "view", "expenses", "members")
         ? many<Participant>(
             "SELECT * FROM trip_participants WHERE tripId = ? ORDER BY createdAt, id",
             tripId,
@@ -315,6 +316,16 @@ export function reorderDays(tripId: string, actor: Actor, body: unknown) {
       updatedAt: Date.now(),
       updatedByUserId: actor.id,
     });
+    const planned = getDays(tripId, { items: true, routes: "none" });
+    if (planned.some((day) => day.items.some((item) => item.parallelPlan))) {
+      const error = parallelTripError(planned);
+      if (error)
+        throw new AppError(
+          400,
+          "PARALLEL_ORDER",
+          `调整日期会破坏分组安排：${error}`,
+        );
+    }
     log(tripId, actor, "day.reordered", "trip", tripId, "调整了每日行程顺序");
     return { id: tripId };
   });

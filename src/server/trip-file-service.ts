@@ -69,6 +69,7 @@ export function importTripFile(actor: Actor, body: unknown) {
     assign(file.settlements);
     for (const day of file.days) {
       assign(day.items);
+      day.items.forEach((item) => assign(item.parallelPlan?.branches ?? []));
       assign(day.legs);
       day.legs.forEach((leg) => assign(leg.alternatives));
     }
@@ -108,7 +109,8 @@ export function importTripFile(actor: Actor, body: unknown) {
         ...rev,
       });
     for (const [position, day] of file.days.entries()) {
-      const { items, legs, ...fields } = day;
+      const { items, legs: _legs, ...fields } = day;
+      void _legs;
       const dayId = ref(day.id);
       insert("days", { ...fields, id: dayId, tripId, position, ...rev });
       for (const [position, item] of items.entries()) {
@@ -133,11 +135,33 @@ export function importTripFile(actor: Actor, body: unknown) {
           dayId,
           position,
           sourcePlaceId: optionalRef(item.sourcePlaceId),
+          branchId: optionalRef(item.branchId),
+          parallelPlan: item.parallelPlan
+            ? {
+                ...item.parallelPlan,
+                splitItemId: optionalRef(item.parallelPlan.splitItemId),
+                joinItemId: optionalRef(item.parallelPlan.joinItemId),
+                branches: item.parallelPlan.branches.map((branch) => ({
+                  ...branch,
+                  id: ref(branch.id),
+                  participantIds: branch.participantIds.map(ref),
+                  ...(branch.joinItemId !== undefined
+                    ? { joinItemId: optionalRef(branch.joinItemId) }
+                    : {}),
+                  ...(branch.catchUpItemId !== undefined
+                    ? { catchUpItemId: optionalRef(branch.catchUpItemId) }
+                    : {}),
+                })),
+              }
+            : null,
           transport,
           ...rev,
         });
       }
-      for (const leg of legs) {
+    }
+    for (const day of file.days) {
+      const dayId = ref(day.id);
+      for (const leg of day.legs) {
         const { alternatives, ...fields } = leg;
         const travelLegId = ref(leg.id);
         insert("travel_legs", {
@@ -146,6 +170,7 @@ export function importTripFile(actor: Actor, body: unknown) {
           dayId,
           fromItemId: ref(leg.fromItemId),
           toItemId: ref(leg.toItemId),
+          branchId: leg.branchId ? ref(leg.branchId) : "",
           selectedAlternativeId: optionalRef(leg.selectedAlternativeId),
           ...rev,
         });

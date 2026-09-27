@@ -117,11 +117,12 @@ export function useDayNavigation({
       setSelectedDay(item.dayId);
       setTimelineCollapsed(false);
       setView("timeline");
-      requestAnimationFrame(() =>
-        document
-          .getElementById(`item-${item.id}`)
-          ?.scrollIntoView({ behavior: "smooth", block: "nearest" }),
-      );
+      requestAnimationFrame(() => {
+        const node = document.getElementById(`item-${item.id}`);
+        const group = node?.closest("details");
+        if (group) group.open = true;
+        node?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
     },
     [
       lockNavigation,

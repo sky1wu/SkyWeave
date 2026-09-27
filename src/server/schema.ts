@@ -1,4 +1,5 @@
 import type { TransportPlan } from "@/domain/transport";
+import type { ParallelPlan } from "@/domain/parallel";
 import {
   sqliteTable,
   text,
@@ -221,9 +222,19 @@ export const items = sqliteTable(
       .notNull()
       .references(() => days.id, { onDelete: "cascade" }),
     type: text({
-      enum: ["place", "event", "hotel", "transport", "border", "note"],
+      enum: [
+        "place",
+        "event",
+        "hotel",
+        "transport",
+        "border",
+        "note",
+        "parallel",
+      ],
     }).notNull(),
     position: integer().notNull(),
+    branchId: text(),
+    parallelPlan: text({ mode: "json" }).$type<ParallelPlan>(),
     title: text().notNull(),
     description: text(),
     sourcePlaceId: text().references(() => poolPlaces.id, {
@@ -251,6 +262,10 @@ export const legs = sqliteTable(
     dayId: text()
       .notNull()
       .references(() => days.id, { onDelete: "cascade" }),
+    branchId: text().notNull().default(""),
+    routeRole: text({ enum: ["main", "catch_up"] })
+      .notNull()
+      .default("main"),
     fromItemId: text()
       .notNull()
       .references(() => items.id, { onDelete: "cascade" }),
@@ -275,7 +290,13 @@ export const legs = sqliteTable(
   },
   (t) => [
     index("legs_day").on(t.dayId),
-    uniqueIndex("legs_pair").on(t.dayId, t.fromItemId, t.toItemId),
+    uniqueIndex("legs_pair").on(
+      t.dayId,
+      t.fromItemId,
+      t.toItemId,
+      t.branchId,
+      t.routeRole,
+    ),
   ],
 );
 export const alternatives = sqliteTable(

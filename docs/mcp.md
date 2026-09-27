@@ -167,3 +167,14 @@ try {
 令牌管理 REST 接口为 `GET/POST /api/mcp-tokens` 和 `DELETE /api/mcp-tokens/:id`，需要网页登录会话；写入还需同源 Origin 和 JSON。创建参数：`{ name, permission: "read" | "edit", tripId: string | null, expiresInDays: 1..365 }`；删除请求体为 `{}`。
 
 远程使用时配置正确的 `BETTER_AUTH_URL`，通过 HTTPS 连接，并让反向代理保留 Authorization 请求头。带 Origin 的 MCP 请求仅接受该配置地址的 Origin；普通 Agent 请求可不带 Origin。
+
+
+### 分头行动
+
+`create_item` / `update_item` 支持 `type: "parallel"`、`parallelPlan` 与 `branchId`。可嵌套分组、跨日设置集合点、按组指定 `joinItemId` / `joinPolicy`，并通过 `catchUpItemId` 设置迟到后改赴的后续会合点。先用 `get_participants` 获取同行者 ID；嵌套成员只能来自上一级分组，分组 ID 推荐 UUID。
+
+`save_parallel_section` 原子保存行动段和现有事项的批量归属；`transfer_parallel_section` 整段复制或移动，包含嵌套事项与公共分开／集合点，保留日期间隔。两者都需要 `expectedDays`，包含行程所有日期的最新版本；冲突后重新读取并核对意图。
+
+`get_day` 返回跨日上下文与个人时间；`get_itinerary` 返回全行程。集合项的 `rendezvous` 包含分组到达信息，`people` 包含每个人的预计时间和跳过状态。`recalculate_routes` 按整趟行程的依赖顺序处理各组与追赶路线。`move_item` / `schedule_place` 可指定跨日分组的 `branchId`。
+
+完整字段、版本兼容和事务语义见 [API 分头行动](api.md#分头行动)。

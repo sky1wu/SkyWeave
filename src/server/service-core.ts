@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { routePairs } from "@/domain/timeline";
+import { tripRouteConnections } from "@/domain/timeline";
+import { parallelTripError } from "@/domain/parallel";
 import { routeEndpoint } from "@/domain/transport";
 import type {
   Trip,
@@ -197,32 +198,88 @@ export function touchDay(id: string, actor: Actor) {
   );
 }
 export function rebuildLegs(dayId: string, actor: Actor) {
-  const day = getDay(dayId);
-  const pairs = routePairs(day.items);
-  for (const leg of day.legs)
+  const owner = requireValue(one<Day>("SELECT * FROM days WHERE id=?", dayId));
+  const days = getDays(owner.tripId);
+  const error = parallelTripError(
+    days,
+    new Set(
+      many<{ id: string }>(
+        "SELECT id FROM trip_participants WHERE tripId=?",
+        owner.tripId,
+      ).map((p) => p.id),
+    ),
+  );
+  if (error) throw new AppError(400, "VALIDATION", error);
+  const pairs = tripRouteConnections(days);
+  const old = days.flatMap((day) => day.legs);
+  for (const leg of old)
     if (
-      !pairs.some(([a, b]) => a.id === leg.fromItemId && b.id === leg.toItemId)
+      !pairs.some(
+        ({ from, to, branchId, routeRole }) =>
+          from.id === leg.fromItemId &&
+          to.id === leg.toItemId &&
+          branchId === (leg.branchId ?? "") &&
+          routeRole === (leg.routeRole ?? "main"),
+      )
     )
-      run("DELETE FROM travel_legs WHERE id = ?", leg.id);
-  for (const [a, b] of pairs)
-    if (!day.legs.some((l) => l.fromItemId === a.id && l.toItemId === b.id))
-      insert("travel_legs", {
-        id: uid(),
-        dayId,
-        fromItemId: a.id,
-        toItemId: b.id,
-        ...(routeEndpoint(a, "departure").lat ===
-          routeEndpoint(b, "arrival").lat &&
-        routeEndpoint(a, "departure").lng === routeEndpoint(b, "arrival").lng
-          ? {
-              mode: "manual",
-              provider: "manual",
-              manualDurationMinutes: 0,
-              manualDistanceMeters: 0,
-              manualDescription: "同一地点，无需移动",
-              status: "ready",
-            }
-          : {}),
-        ...revision(actor),
-      });
+      run("DELETE FROM travel_legs WHERE id=?", leg.id);
+  for (const { from: a, to: b, branchId, routeRole } of pairs) {
+    const existing = old.find(
+      (leg) =>
+        leg.fromItemId === a.id &&
+        leg.toItemId === b.id &&
+        (leg.branchId ?? "") === branchId &&
+        (leg.routeRole ?? "main") === routeRole,
+    );
+    if (existing) {
+      if (existing.dayId !== b.dayId)
+        run(
+          "UPDATE travel_legs SET dayId=?, version=version+1, updatedAt=?, updatedByUserId=? WHERE id=?",
+          b.dayId,
+          Date.now(),
+          actor.id,
+          existing.id,
+        );
+      continue;
+    }
+    const from = routeEndpoint(a, "departure"),
+      to = routeEndpoint(b, "arrival");
+    insert("travel_legs", {
+      id: uid(),
+      dayId: b.dayId,
+      branchId,
+      routeRole,
+      fromItemId: a.id,
+      toItemId: b.id,
+      ...(from.lat === to.lat && from.lng === to.lng
+        ? {
+            mode: "manual",
+            provider: "manual",
+            manualDurationMinutes: 0,
+            manualDistanceMeters: 0,
+            manualDescription: "同一地点，无需移动",
+            status: "ready",
+          }
+        : {}),
+      ...revision(actor),
+    });
+  }
+  if (days.some((day) => day.items.some((item) => item.parallelPlan)))
+    for (const day of days) if (day.id !== dayId) touchDay(day.id, actor);
+}
+export function touchRelatedDays(dayId: string, actor: Actor) {
+  const day = requireValue(one<Day>("SELECT * FROM days WHERE id=?", dayId));
+  if (
+    one(
+      "SELECT i.id FROM day_items i JOIN days d ON d.id=i.dayId WHERE d.tripId=? AND i.parallelPlan IS NOT NULL LIMIT 1",
+      day.tripId,
+    )
+  )
+    run(
+      "UPDATE days SET version=version+1, updatedAt=?, updatedByUserId=? WHERE tripId=? AND id!=?",
+      Date.now(),
+      actor.id,
+      day.tripId,
+      dayId,
+    );
 }

@@ -220,6 +220,13 @@ export async function renderItineraryPoster(
     if (!day.stops.length) paragraph("当天暂无安排，留一点时间自由探索。", 20);
     for (const [index, stop] of day.stops.entries()) {
       ensureSpace(180);
+      if (stop.branch)
+        paragraph(
+          `${stop.branch.title} · ${stop.branch.people || stop.branch.sectionTitle}（分头行动）`,
+          19,
+          palette.blue,
+          650,
+        );
       if (stop.connection) {
         paragraph(stop.connection.summary, 17, palette.blue);
         if (stop.connection.description)

@@ -1026,3 +1026,90 @@ describe("MCP expenses and settlements", () => {
     expect(s.snapshot(other.trip.id, owner).expenses).toHaveLength(1);
   });
 });
+
+it("supports atomic group planning and section copying through MCP and enforces read-only tokens", async () => {
+  const owner = {
+    id: crypto.randomUUID(),
+    name: "Group owner",
+    email: `${crypto.randomUUID()}@example.test`,
+  };
+  insert("users", { ...owner, createdAt: 0, updatedAt: 0 });
+  const trip = s.createTrip(owner, {
+    title: "MCP 分组验证",
+    startDate: "2026-10-01",
+    endDate: "2026-10-02",
+  });
+  const data = s.snapshot(trip.id, owner);
+  const f = {
+    trip: data.trip,
+    days: data.days,
+    access: tokens.createMcpToken(owner, {
+      name: "Groups",
+      tripId: trip.id,
+      permission: "edit",
+    }),
+  };
+  const guest = s.createParticipant(f.trip.id, owner, { name: "分组同行者" });
+  const start = s.createItem(f.days[0].id, owner, { title: "共同出发点" }),
+    end = s.createItem(f.days[0].id, owner, { title: "共同集合点" });
+  const client = await connect(f.access.token);
+  const expectedDays = () =>
+    s
+      .snapshot(f.trip.id, owner)
+      .days.map((day) => ({ id: day.id, expectedVersion: day.version }));
+  const request = {
+    tripId: f.trip.id,
+    dayId: f.days[0].id,
+    title: "MCP 分组",
+    parallelPlan: {
+      splitItemId: start.id,
+      joinItemId: end.id,
+      joinPolicy: "wait_all",
+      branches: [
+        {
+          id: crypto.randomUUID(),
+          title: "甲组",
+          participantIds: [data.participants[0].id],
+          startMinutes: null,
+        },
+        {
+          id: crypto.randomUUID(),
+          title: "乙组",
+          participantIds: [guest.id],
+          startMinutes: null,
+        },
+      ],
+    },
+    expectedDays: expectedDays(),
+  };
+  const saved = await call<{ id: string }>(
+    client,
+    "save_parallel_section",
+    request,
+  );
+  const copied = await call<{ id: string }>(
+    client,
+    "transfer_parallel_section",
+    {
+      tripId: f.trip.id,
+      sectionId: saved.id,
+      operation: "copy",
+      targetDayId: f.days[1].id,
+      expectedDays: expectedDays(),
+    },
+  );
+  expect(
+    s.getDay(f.days[1].id).items.some((item) => item.id === copied.id),
+  ).toBe(true);
+  const read = tokens.createMcpToken(owner, {
+    name: "Read groups",
+    tripId: f.trip.id,
+    permission: "read",
+  });
+  const viewer = await connect(read.token);
+  const denied = await viewer.callTool({
+    name: "save_parallel_section",
+    arguments: { ...request, expectedDays: expectedDays() },
+  });
+  expect(denied.isError).toBe(true);
+});

@@ -3,6 +3,7 @@ import { typeLabels } from "./types";
 import { located } from "./timeline";
 import { transportLabels } from "./transport";
 import { poolPlaceCounts } from "./planning";
+import { branchesOf, displayItems, planningItems } from "./parallel";
 
 export interface MapLocation {
   id: string;
@@ -15,6 +16,8 @@ export interface MapLocation {
   lat: number;
   lng: number;
   number?: number;
+  branchTitle?: string;
+  color?: string;
 }
 
 export function mapLocations(
@@ -24,8 +27,13 @@ export function mapLocations(
 ): MapLocation[] {
   const scheduled = poolPlaceCounts(days);
   const result: MapLocation[] = [];
-  for (const [index, item] of (day?.items ?? []).entries()) {
-    if (item.type === "note") continue;
+  const branches = day ? branchesOf(day) : [];
+  for (const [index, item] of (day ? displayItems(day) : []).entries()) {
+    const branch = branches.find((b) => b.id === item.branchId);
+    const group = branch
+      ? { branchTitle: branch.title, color: branch.color }
+      : {};
+    if (item.type === "note" || item.type === "parallel") continue;
     if (item.transport) {
       for (const endpoint of ["origin", "destination"] as const) {
         const point = item.transport[endpoint];
@@ -40,6 +48,7 @@ export function mapLocations(
             lat: point.lat!,
             lng: point.lng!,
             number: index + 1,
+            ...group,
           });
       }
     } else if (located(item))
@@ -55,7 +64,28 @@ export function mapLocations(
         lat: item.lat!,
         lng: item.lng!,
         number: index + 1,
+        ...group,
       });
+  }
+  for (const leg of day?.legs ?? []) {
+    if (result.some((point) => point.itemId === leg.fromItemId)) continue;
+    const origin =
+      day && planningItems(day).find((item) => item.id === leg.fromItemId);
+    if (!origin) continue;
+    const point = origin.transport?.destination ?? origin;
+    if (!located(point)) continue;
+    const group = branches.find((b) => b.id === leg.branchId);
+    result.push({
+      id: origin.transport ? `${origin.id}:destination` : origin.id,
+      itemId: origin.id,
+      title: `${origin.transport?.destination.name ?? origin.title}（跨日出发）`,
+      category: origin.placeCategory,
+      lat: point.lat!,
+      lng: point.lng!,
+      ...(origin.transport ? { endpoint: "destination" as const } : {}),
+      branchTitle: group?.title,
+      color: group?.color,
+    });
   }
   for (const place of pool)
     if (!scheduled.has(place.id) && place.type !== "note" && located(place))
