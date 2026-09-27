@@ -28,6 +28,8 @@ export type Member = typeof s.members.$inferSelect & {
 export type Activity = typeof s.activity.$inferSelect & { actorName: string };
 export type Comment = typeof s.comments.$inferSelect & { authorName: string };
 export type DayPlan = Day & {
+  participantIds?: string[];
+  visibleParticipantId?: string;
   contextItems?: Item[];
   contextLegs?: (Leg & { alternatives: RouteAlternative[] })[];
   contextDays?: Pick<Day, "id" | "position" | "startMinutes">[];

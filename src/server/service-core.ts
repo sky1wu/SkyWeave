@@ -91,8 +91,17 @@ export function getDays(
     })),
     (leg) => leg.dayId,
   );
+  const participantIds = [...items.values()].some((rows) =>
+    rows.some((item) => item.parallelPlan),
+  )
+    ? many<{ id: string }>(
+        "SELECT id FROM trip_participants WHERE tripId=? AND status='active'",
+        tripId,
+      ).map((person) => person.id)
+    : undefined;
   return days.map((day) => ({
     ...day,
+    ...(participantIds ? { participantIds } : {}),
     items: items.get(day.id) ?? [],
     legs: groupedLegs.get(day.id) ?? [],
   }));
@@ -177,6 +186,10 @@ export function getDay(id: string): DayPlan {
   );
   return {
     ...day,
+    participantIds: many<{ id: string }>(
+      "SELECT id FROM trip_participants WHERE tripId=? AND status='active'",
+      day.tripId,
+    ).map((person) => person.id),
     items: many<Item>(
       "SELECT * FROM day_items WHERE dayId = ? ORDER BY position",
       id,

@@ -4,6 +4,7 @@ import {
   displayItems,
   contextualDays,
   planningItems,
+  participantDay,
 } from "./parallel";
 import { modeLabels, typeLabels } from "./types";
 import { calculateTripTimelines, formatTime } from "./timeline";
@@ -143,9 +144,10 @@ export function itineraryDays(
     !!participantId && !!fullGraph?.people.includes(participantId);
   return contextualDays(days)
     .sort((a, b) => a.position - b.position)
-    .map((day) => {
-      const graph = fullGraph ?? compilePlan([day]);
-      const timeline = timelines.get(day.id)!;
+    .map((sourceDay) => {
+      const graph = fullGraph ?? compilePlan([sourceDay]);
+      const timeline = timelines.get(sourceDay.id)!;
+      const day = participantDay(sourceDay, participantId, timeline, true);
       const allItems = planningItems(day);
       const branches = branchesOf(day);
       const allowed = new Set(
@@ -248,9 +250,22 @@ export function itineraryDays(
                       .map((id) => participants.find((p) => p.id === id)?.name)
                       .filter(Boolean)
                       .join("、") || `${b.participantIds.length} 位同行者`
-                  }${b.joinItemId !== undefined ? (b.joinItemId ? `；在「${allItems.find((i) => i.id === b.joinItemId)?.title ?? "集合点"}」集合` : "；各自结束") : ""}${b.catchUpItemId ? `；迟到后改赴「${allItems.find((i) => i.id === b.catchUpItemId)?.title ?? "后续会合点"}」` : ""}`,
+                  }${b.departureItemId ? `；从「${allItems.find((i) => i.id === b.departureItemId)?.title ?? "本组起点"}」出发` : ""}${b.joinItemId !== undefined ? (b.joinItemId ? `；在「${allItems.find((i) => i.id === b.joinItemId)?.title ?? "集合点"}」集合` : "；各自结束") : ""}${b.catchUpItemId ? `；迟到后改赴「${allItems.find((i) => i.id === b.catchUpItemId)?.title ?? "后续会合点"}」` : ""}`,
                   "info",
                 );
+            }
+            const entryRules = [...graph.admissions].filter(
+              ([person, start]) =>
+                start.itemId === item.id &&
+                (!participantId || person === participantId),
+            );
+            for (const [person, start] of entryRules) {
+              const name =
+                participants.find((p) => p.id === person)?.name ?? "同行者";
+              add(
+                `${name}${start.at === "meeting" ? "在此集合点" : "从这里"}加入行程`,
+                "info",
+              );
             }
             if (entry.rendezvous) {
               if (item.startMinutes !== null)

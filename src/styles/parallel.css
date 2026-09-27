@@ -309,3 +309,67 @@
   flex-basis: 100%;
   padding-left: 25px;
 }
+
+.branch-departure {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.branch-departure-search {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: var(--muted);
+  border-radius: 8px;
+}
+.branch-departure-results {
+  max-height: 220px;
+  overflow: auto;
+  list-style: none;
+  padding: 0;
+}
+.branch-departure-results button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 9px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.branch-departure-results button:hover {
+  background: var(--accent);
+}
+.branch-departure-results span {
+  color: var(--muted-foreground);
+}
+.branch-departure-search summary,
+.branch-entrants summary {
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 12px;
+}
+.branch-entrants {
+  padding: 10px 0;
+  border-top: 1px dashed var(--border);
+}
+.branch-entrant {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+}
+.parallel-entry-note {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  padding: 4px 0;
+}
+
+.participation-note {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border-bottom: 1px solid var(--border);
+}

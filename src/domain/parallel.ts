@@ -13,7 +13,29 @@ export const parallelPlanInput = z.strictObject({
         id,
         title: z.string().trim().min(1).max(80),
         participantIds: z.array(id).min(1).max(100),
-        startMinutes: z.number().int().min(0).max(10080).nullable(),
+        startMinutes: z
+          .number()
+          .int()
+          .min(0)
+          .max(366 * 1440 + 10080)
+          .nullable(),
+        departureItemId: id.nullable().optional(),
+        entrants: z
+          .array(
+            z.strictObject({
+              participantId: id,
+              at: z.enum(["departure", "meeting"]),
+              arrivalMinutes: z
+                .number()
+                .int()
+                .min(0)
+                .max(10080)
+                .nullable()
+                .optional(),
+            }),
+          )
+          .max(100)
+          .optional(),
         joinItemId: id.nullable().optional(),
         joinPolicy: z.enum(["wait_all", "fixed"]).optional(),
         catchUpItemId: id.nullable().optional(),
@@ -95,7 +117,12 @@ export function sectionDescendants(items: Item[], sectionId: string) {
 export function dayRoots(
   day: Pick<
     DayPlan,
-    "id" | "position" | "items" | "contextItems" | "contextDays"
+    | "id"
+    | "position"
+    | "items"
+    | "contextItems"
+    | "contextDays"
+    | "visibleParticipantId"
   >,
 ) {
   const all = planningItems(day),
@@ -105,16 +132,20 @@ export function dayRoots(
       (item) =>
         item.parallelPlan &&
         !item.branchId &&
-        item.dayId !== day.id &&
+        !day.items.some((local) => local.id === item.id) &&
+        (!day.visibleParticipantId ||
+          item.parallelPlan.branches.some((branch) =>
+            branch.participantIds.includes(day.visibleParticipantId!),
+          )) &&
         (day.contextDays?.find((d) => d.id === item.dayId)?.position ??
-          Infinity) < day.position,
+          Infinity) <= day.position,
     )
     .filter((item) => {
       const descendants = sectionDescendants(all, item.id);
       const endpoints = branches
         .filter((b) => descendants.has(b.sectionId))
         .flatMap((b) => [b.joinId, b.catchUpItemId]);
-      return all.some(
+      return (item.dayId === day.id ? day.items : all).some(
         (candidate) =>
           (descendants.has(candidate.id) || endpoints.includes(candidate.id)) &&
           (day.contextDays?.find((d) => d.id === candidate.dayId)?.position ??
@@ -125,7 +156,16 @@ export function dayRoots(
 }
 export function displayItems(
   day: Pick<DayPlan, "items"> &
-    Partial<Pick<DayPlan, "id" | "position" | "contextItems" | "contextDays">>,
+    Partial<
+      Pick<
+        DayPlan,
+        | "id"
+        | "position"
+        | "contextItems"
+        | "contextDays"
+        | "visibleParticipantId"
+      >
+    >,
 ) {
   const roots =
     day.id !== undefined && day.position !== undefined
@@ -229,6 +269,25 @@ export function parallelTripError(
     )
       return "分开点必须在行动段之前";
     for (const b of plan.branches) {
+      if (b.departureItemId) {
+        const departure = byId.get(b.departureItemId);
+        if (
+          !departure ||
+          departure.branchId !== b.id ||
+          departure.type === "note" ||
+          departure.type === "parallel"
+        )
+          return `「${b.title}」的出发地点必须是本组的地点或交通安排`;
+        const first = [...days]
+          .sort((a, b) => a.position - b.position)
+          .flatMap((day) => orderedItems(day.items))
+          .find(
+            (candidate) =>
+              candidate.branchId === b.id && candidate.type !== "note",
+          );
+        if (first?.id !== departure.id)
+          return `「${b.title}」的出发地点必须排在本组其他安排之前`;
+      }
       for (const person of b.participantIds) {
         if (people && !people.has(person)) return "分组成员不属于此行程";
         if (assigned.has(person))
@@ -240,8 +299,19 @@ export function parallelTripError(
           return "嵌套分组只能安排上一级分组中的同行者";
         assigned.add(person);
       }
+      const entrants = b.entrants ?? [];
+      if (
+        new Set(entrants.map((entrant) => entrant.participantId)).size !==
+          entrants.length ||
+        entrants.some(
+          (entrant) => !b.participantIds.includes(entrant.participantId),
+        )
+      )
+        return `「${b.title}」的加入设置只能填写本组成员且不能重复`;
       const joinId =
         b.joinItemId === undefined ? plan.joinItemId : b.joinItemId;
+      if (!joinId && entrants.some((entrant) => entrant.at === "meeting"))
+        return `请先为「${b.title}」选择集合点，再设置在集合点加入的成员`;
       const join = joinId ? byId.get(joinId) : undefined;
       const policy = b.joinPolicy ?? plan.joinPolicy;
       if (joinId) {
@@ -292,7 +362,9 @@ export function participantDay(
     entries: import("./linear-timeline").TimelineEntry[];
     departures: Record<string, number | null>;
     activeLegIds?: string[];
+    participationStart?: { position: number };
   },
+  includeSkipped = false,
 ): DayPlan {
   if (!participantId)
     return timeline?.activeLegIds
@@ -303,29 +375,49 @@ export function participantDay(
           ),
         }
       : day;
+  if (
+    timeline?.participationStart &&
+    day.position < timeline.participationStart.position
+  )
+    return {
+      ...day,
+      items: [],
+      legs: [],
+      contextItems: [],
+      visibleParticipantId: participantId,
+    };
   const allowed = new Set(
     branchesOf(day)
       .filter((b) => b.participantIds.includes(participantId))
       .map((b) => b.id),
   );
+  const items = day.items.filter(
+    (item) =>
+      (!item.branchId || allowed.has(item.branchId)) &&
+      (!timeline ||
+        !allowed.size ||
+        timeline.entries
+          .find((entry) => entry.itemId === item.id)
+          ?.people?.some(
+            (person) =>
+              person.participantId === participantId &&
+              (includeSkipped || !person.skipped),
+          )),
+  );
   return {
     ...day,
-    items: day.items.filter(
-      (i) =>
-        (!i.branchId || allowed.has(i.branchId)) &&
-        (!timeline ||
-          !allowed.size ||
-          timeline.entries
-            .find((entry) => entry.itemId === i.id)
-            ?.people?.some(
-              (person) =>
-                person.participantId === participantId && !person.skipped,
-            )),
-    ),
+    items,
+    visibleParticipantId: participantId,
+    contextItems: [
+      ...(day.contextItems ?? []),
+      ...day.items.filter(
+        (item) => !items.some((visible) => visible.id === item.id),
+      ),
+    ],
     legs: day.legs.filter(
-      (l) =>
-        (!l.branchId || allowed.has(l.branchId)) &&
-        (!timeline || Object.hasOwn(timeline.departures, l.id)),
+      (leg) =>
+        (!leg.branchId || allowed.has(leg.branchId)) &&
+        (!timeline || Object.hasOwn(timeline.departures, leg.id)),
     ),
   };
 }

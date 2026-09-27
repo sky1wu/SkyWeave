@@ -145,6 +145,17 @@ export function importTripFile(actor: Actor, body: unknown) {
                   ...branch,
                   id: ref(branch.id),
                   participantIds: branch.participantIds.map(ref),
+                  ...(branch.entrants
+                    ? {
+                        entrants: branch.entrants.map((entrant) => ({
+                          ...entrant,
+                          participantId: ref(entrant.participantId),
+                        })),
+                      }
+                    : {}),
+                  ...(branch.departureItemId !== undefined
+                    ? { departureItemId: optionalRef(branch.departureItemId) }
+                    : {}),
                   ...(branch.joinItemId !== undefined
                     ? { joinItemId: optionalRef(branch.joinItemId) }
                     : {}),

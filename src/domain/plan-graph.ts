@@ -3,7 +3,7 @@ import type { PlanBranch } from "./parallel";
 
 export type PlanDay = Pick<
   DayPlan,
-  "id" | "position" | "startMinutes" | "items"
+  "id" | "position" | "startMinutes" | "items" | "participantIds"
 >;
 export interface BranchInfo extends PlanBranch {
   sectionId: string;
@@ -17,12 +17,21 @@ export interface JoinVisit {
   policy: "wait_all" | "fixed";
   catchUpItemId?: string | null;
 }
+export interface ParticipationStart {
+  branchId: string;
+  at: "departure" | "meeting";
+  itemId: string;
+  dayId: string;
+  arrivalMinutes?: number | null;
+  seedItemId?: string;
+}
 export interface PlanStep {
   itemId: string;
   scope: string;
   reset: boolean;
   disconnected?: boolean;
   fork?: BranchInfo;
+  admission?: ParticipationStart;
   join?: JoinVisit;
   approach?: { targetId: string; join: JoinVisit };
 }
@@ -77,10 +86,19 @@ export function compilePlan(days: PlanDay[]) {
       });
     }
   const people = [
-    ...new Set([...branches.values()].flatMap((b) => b.participantIds)),
+    ...new Set(
+      [...branches.values()]
+        .flatMap((b) => b.participantIds)
+        .concat(
+          [...branches.values()].some((branch) => branch.entrants?.length)
+            ? orderedDays.flatMap((day) => day.participantIds ?? [])
+            : [],
+        ),
+    ),
   ];
   if (!people.length) people.push("__all__");
   const paths = new Map<string, PlanStep[]>();
+  const admissions = new Map<string, ParticipationStart>();
   for (const person of people) {
     const visiting = new Set<string>();
     function walk(scope: string): PlanStep[] {
@@ -137,7 +155,9 @@ export function compilePlan(days: PlanDay[]) {
         result.push({
           itemId: item.id,
           scope,
-          reset: !item.parallelPlan.splitItemId,
+          reset:
+            branch.departureItemId !== undefined ||
+            !item.parallelPlan.splitItemId,
           fork: branch,
         });
         forceReset = false;
@@ -186,14 +206,149 @@ export function compilePlan(days: PlanDay[]) {
       visiting.delete(scope);
       return result;
     }
-    const path = walk("");
+    const fullPath = walk("");
+    const admissionCandidates = [...branches.values()]
+      .flatMap((branch) => {
+        const entrant = branch.entrants?.find(
+          (entrant) => entrant.participantId === person,
+        );
+        const forkIndex = fullPath.findIndex(
+          (step) => step.fork?.id === branch.id,
+        );
+        if (!entrant || forkIndex < 0) return [];
+        const section = byId.get(branch.sectionId)!;
+        const shared =
+          branch.departureItemId === undefined
+            ? section.parallelPlan!.splitItemId
+            : null;
+        let index = forkIndex,
+          boundary = section,
+          seedItemId: string | undefined;
+        if (entrant.at === "meeting") {
+          index = fullPath.findIndex(
+            (step, i) => i > forkIndex && step.itemId === branch.joinId,
+          );
+          if (index < 0)
+            throw new Error(`「${branch.title}」没有可加入的集合点`);
+          boundary = byId.get(fullPath[index].itemId)!;
+        } else if (shared) {
+          boundary = byId.get(shared)!;
+          seedItemId = shared;
+        } else {
+          const at = fullPath.findIndex((step, i) => {
+            if (i <= forkIndex) return false;
+            const candidate = byId.get(step.itemId)!;
+            if (candidate.type === "note" || candidate.type === "parallel")
+              return false;
+            let owner = candidate.branchId;
+            while (owner) {
+              if (owner === branch.id) return true;
+              owner = branches.get(owner)?.parentBranchId;
+            }
+            return false;
+          });
+          if (at >= 0) {
+            index = at;
+            boundary = byId.get(fullPath[at].itemId)!;
+          }
+        }
+        return [
+          {
+            index,
+            forkIndex,
+            rule: {
+              branchId: branch.id,
+              at: entrant.at,
+              itemId: boundary.id,
+              dayId: boundary.dayId,
+              arrivalMinutes: entrant.arrivalMinutes,
+              seedItemId,
+            } satisfies ParticipationStart,
+          },
+        ];
+      })
+      .sort((a, b) => a.index - b.index);
+    const admission = admissionCandidates[0];
+    let path = fullPath;
+    const ancestorBranches = new Set<string>();
+    if (admission) {
+      admissions.set(person, admission.rule);
+      let ancestor = branches.get(admission.rule.branchId)?.parentBranchId;
+      while (ancestor) {
+        ancestorBranches.add(ancestor);
+        ancestor = branches.get(ancestor)?.parentBranchId;
+      }
+      path = fullPath.slice(admission.index).map((step) => ({ ...step }));
+      if (
+        admission.rule.at === "departure" &&
+        admission.index > admission.forkIndex
+      )
+        path.unshift({
+          ...fullPath[admission.forkIndex],
+          reset: true,
+          admission: admission.rule,
+        });
+      else
+        path[0] = {
+          ...path[0],
+          reset: false,
+          admission: admission.rule,
+          ...(admission.rule.at === "meeting" && path[0].join
+            ? { join: { ...path[0].join, catchUpItemId: undefined } }
+            : {}),
+        };
+    }
+    const meetingEntries = new Set<string>();
+    // Joining at a meeting also applies to later sections after the first admission.
+    for (let i = 0; i < path.length; i++) {
+      const branch = path[i].fork;
+      const entrant = branch?.entrants?.find(
+        (entrant) =>
+          entrant.participantId === person && entrant.at === "meeting",
+      );
+      if (!branch || !entrant) continue;
+      const at = path.findIndex(
+        (step, index) => index > i && step.itemId === branch.joinId,
+      );
+      if (at < 0) throw new Error(`「${branch.title}」没有可加入的集合点`);
+      const join = byId.get(path[at].itemId)!;
+      const step = {
+        ...path[at],
+        reset: false,
+        admission: {
+          branchId: branch.id,
+          at: "meeting" as const,
+          itemId: join.id,
+          dayId: join.dayId,
+          arrivalMinutes: entrant.arrivalMinutes,
+        },
+        ...(path[at].join
+          ? { join: { ...path[at].join!, catchUpItemId: undefined } }
+          : {}),
+      };
+      for (const skipped of path.slice(i, at))
+        if (skipped.fork) meetingEntries.add(skipped.fork.id);
+      path.splice(i, at - i + 1, step);
+      meetingEntries.add(branch.id);
+    }
     const unique = new Set(path.map((step) => step.itemId));
     if (unique.size !== path.length)
       throw new Error("同一人的路径不能重复经过同一个事项");
     for (const branch of branches.values())
       if (
         branch.participantIds.includes(person) &&
-        !path.some((step) => step.fork?.id === branch.id)
+        !path.some((step) => step.fork?.id === branch.id) &&
+        branch.id !== admission?.rule.branchId &&
+        !ancestorBranches.has(branch.id) &&
+        !meetingEntries.has(branch.id) &&
+        !(
+          admission &&
+          ((fullPath.findIndex((step) => step.fork?.id === branch.id) >= 0 &&
+            fullPath.findIndex((step) => step.fork?.id === branch.id) <
+              admission.index) ||
+            dayIndex.get(branch.dayId)!.position <
+              dayIndex.get(admission.rule.dayId)!.position)
+        )
       ) {
         throw new Error(
           "同一人的分头行动段时间范围重叠，请调整集合点或使用嵌套分组",
@@ -242,10 +397,20 @@ export function compilePlan(days: PlanDay[]) {
       const item = byId.get(step.itemId)!;
       if (index) addEdge(path[index - 1].itemId, item.id);
       if (step.reset) physical = undefined;
+      if (step.admission?.seedItemId) {
+        physical = byId.get(step.admission.seedItemId);
+        if (physical && physical.id !== item.id) addEdge(physical.id, item.id);
+      }
       if (step.fork) {
-        const split = byId.get(step.fork.sectionId)!.parallelPlan!.splitItemId;
+        const section = byId.get(step.fork.sectionId)!;
+        const split =
+          step.fork.departureItemId === undefined
+            ? section.parallelPlan!.splitItemId
+            : null;
         if (split && physical?.id !== split)
-          throw new Error("分开点必须是该组实际出发前的地点");
+          throw new Error(
+            `「${section.title}」中「${step.fork.title}」的共同出发点「${byId.get(split)?.title ?? "未命名地点"}」与实际前一地点不一致；请为本组选择独立出发地点，或调整共同出发点`,
+          );
       }
       if (step.approach) {
         const target = byId.get(step.approach.targetId)!;
@@ -314,5 +479,6 @@ export function compilePlan(days: PlanDay[]) {
     order,
     connections,
     recoveries,
+    admissions,
   };
 }

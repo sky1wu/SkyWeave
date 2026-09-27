@@ -1,5 +1,5 @@
 export const TRIP_FILE_FORMAT = "skyweave-trip";
-export const TRIP_FILE_VERSION = 3;
+export const TRIP_FILE_VERSION = 4;
 export const MAX_TRIP_FILE_BYTES = 20 * 1024 * 1024;
 export const TRIP_FILE_SIZE_MESSAGE = "行程文件不能超过 20 MB";
 

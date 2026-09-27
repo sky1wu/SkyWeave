@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { participantDay, contextualDays } from "@/domain/parallel";
 import { calculateTripTimelines } from "@/domain/timeline";
-import { ParticipantFilter } from "./parallel-plan";
+import { ParticipantFilter, ParticipationNote } from "./parallel-plan";
 import type { DayPlan, TripSnapshot } from "@/domain/types";
 import { mapLocations } from "@/domain/map-locations";
 import type { MapFocus } from "./map";
@@ -51,12 +51,17 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
     () => itineraryDays(snapshot.days, snapshot.participants, participantId),
     [snapshot.days, snapshot.participants, participantId],
   );
-  const visibleDays = useMemo(() => {
-    const timelines = calculateTripTimelines(snapshot.days, participantId);
-    return contextualDays(snapshot.days).map((day) =>
-      participantDay(day, participantId, timelines.get(day.id)),
-    );
-  }, [snapshot.days, participantId]);
+  const timelines = useMemo(
+    () => calculateTripTimelines(snapshot.days, participantId),
+    [snapshot.days, participantId],
+  );
+  const visibleDays = useMemo(
+    () =>
+      contextualDays(snapshot.days).map((day) =>
+        participantDay(day, participantId, timelines.get(day.id)),
+      ),
+    [snapshot.days, participantId, timelines],
+  );
   const dates = itineraryDateRange(
     snapshot.trip.startDate,
     snapshot.trip.endDate,
@@ -73,12 +78,20 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
       mapDays={visibleDays}
       filter={
         snapshot.days.some((day) => day.items.some((i) => i.parallelPlan)) ? (
-          <ParticipantFilter
-            participants={snapshot.participants}
-            currentUserId={snapshot.currentUserId}
-            value={personFilter}
-            onChange={setPersonFilter}
-          />
+          <>
+            <ParticipantFilter
+              participants={snapshot.participants}
+              currentUserId={snapshot.currentUserId}
+              value={personFilter}
+              onChange={setPersonFilter}
+            />
+            {participantId && (
+              <ParticipationNote
+                days={snapshot.days}
+                start={timelines.get(snapshot.days[0]?.id)?.participationStart}
+              />
+            )}
+          </>
         ) : undefined
       }
       actions={

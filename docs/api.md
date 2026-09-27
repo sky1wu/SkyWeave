@@ -37,7 +37,7 @@
 
 `POST /api/trips/import`：登录用户发送行程文件的 JSON 内容（需要同源 Origin），成功返回 `{ id }`，创建由当前用户拥有的新行程。每次导入生成独立副本，不覆盖已有行程。
 
-文件结构为 `{ format: "skyweave-trip", version: 3, exportedAt, trip, days, poolPlaces, participants, expenses, settlements }`。每日内容嵌套 `items`、`legs`，路线包含候选与折线；数组顺序保存日期、事项、地点池及候选顺序。费用包含分摊明细，保留原始币种金额、换算金额及分摊尾差。导入重新生成全部实体 ID 并映射所有引用。
+文件结构为 `{ format: "skyweave-trip", version: 4, exportedAt, trip, days, poolPlaces, participants, expenses, settlements }`。每日内容嵌套 `items`、`legs`，路线包含候选与折线；数组顺序保存日期、事项、地点池及候选顺序。费用包含分摊明细，保留原始币种金额、换算金额及分摊尾差。导入重新生成全部实体 ID 并映射所有引用。
 
 文件字段采用白名单，不包含账号关联、成员权限、邀请令牌、公开分享链接、评论或活动日志。所有记账参与人以未关联账号的同行者导入。服务器验证版本、日期、坐标、标识唯一性、引用归属及账目一致性后，在单个事务中写入，失败时整体回滚。无效文件返回 `400 INVALID_TRIP_FILE`；文件大小以 UTF-8 字节计，上限 20 MiB，超限返回 `413 BODY_TOO_LARGE`。常规写入接口仍限制为 512 KiB。
 
@@ -208,4 +208,24 @@ Settlement 使用 `fromParticipantId`、`toParticipantId`、`amountMinor`、`cur
 
 原有单项创建、修改、排序、地点池 schedule 与 move 接口继续可用。没有任何锚点的行动段，编辑配置保持原位置。非空行动段不能直接删除；使用中的同行者不能直接删除，可以停用以保留历史。
 
-文件版本为 3，兼容导入版本 1、2。导入跨日引用时先创建所有日期和事项，再创建路线，所有分组、集合点、追赶点和同行者引用都会重新映射。
+文件版本为 4，兼容导入版本 1、2、3。导入跨日引用时先创建所有日期和事项，再创建路线，所有分组、集合点、追赶点和同行者引用都会重新映射。
+
+
+### 独立起点与成员中途加入
+
+分组可设置 `departureItemId`：省略时使用行动段的默认出发设置；`null` 表示独立出发、从组内首项开始；具体 ID 指向本组首个地点或交通事项。各组可覆盖共同起点，不再强制经过同一地点。更改起点不自动删除原有安排。
+
+`POST /api/trips/:id/parallel` 与 MCP `save_parallel_section` 接受 `departures`，每项为 `{ branchId, dayId?, source }`。`source` 可为 `{ kind: "pool", placeId }`、`{ kind: "item", itemId }` 或 `{ kind: "place", place: { title, address?, lat?, lng?, amapPoiId? } }`。同组已有事项会设为首项，其他已安排地点或地点池内容只复制位置为新起点，不移动原事项和账单。地点、组别、日期及参与范围在同一事务内保存；跨行程引用或无效日期全部回滚。
+
+分组的 `entrants` 数组按人指定中途加入，例如：
+
+```json
+[
+  { "participantId": "person-a", "at": "departure" },
+  { "participantId": "person-b", "at": "meeting", "arrivalMinutes": 660 }
+]
+```
+
+没有该成员记录时仍按全程同行处理。同组可混合全程成员和中途加入者。`departure` 从本组实际出发地开始参与，`meeting` 跳过本组集合前安排，在集合点直接加入；`arrivalMinutes` 相对集合点当天零点，留空使用集合点约定时间，无约定则保持未知。等待、迟到、地图和个人手册都以实际参与路径计算，不包含加入前的活动或接驳。
+
+`startMinutes` 仍相对行动段所属日零点；编辑器选择跨日的起点后，会把本地出发时间换算为对应偏移，支持在较长行程中途加入。起点与 `entrants` 会随行程文件导入、整段复制正确重映射。

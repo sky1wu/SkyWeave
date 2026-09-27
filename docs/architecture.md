@@ -64,4 +64,4 @@ src/app 页面和 Route Handler；src/components 界面；src/domain 纯函数�
 - `src/server/parallel-service.ts`：带日期版本检查的批量分组、整段预览、复制与移动事务。
 - `src/components/parallel-plan.tsx`：分组编辑器、批量归属、递归分组卡片和整段操作预览。
 
-`day_items.parallelPlan` 保存段内分组及集合规则，`day_items.branchId` 指向直接所属组。跨行引用由事务中的全程图校验保证。`travel_legs` 增加分组与路线角色，路线按到达日期存放；快照按天保存唯一数据，浏览器派生跨日上下文，避免重复传输。文件版本 3 兼容旧版本 1、2，并在导入时先创建所有事项、再恢复跨日路线。
+`day_items.parallelPlan` 保存段内分组及集合规则，`day_items.branchId` 指向直接所属组。跨行引用由事务中的全程图校验保证。`travel_legs` 增加分组与路线角色，路线按到达日期存放；快照按天保存唯一数据，浏览器派生跨日上下文，避免重复传输。文件版本 4 兼容旧版本 1、2、3，并在导入时先创建所有事项、再恢复跨日路线。

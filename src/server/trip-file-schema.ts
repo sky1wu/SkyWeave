@@ -95,7 +95,12 @@ export const fileSettlement = v.settlementInput.strip().extend({
 });
 export const tripFileSchema = z.object({
   format: z.literal(TRIP_FILE_FORMAT),
-  version: z.union([z.literal(1), z.literal(2), z.literal(TRIP_FILE_VERSION)]),
+  version: z.union([
+    z.literal(1),
+    z.literal(2),
+    z.literal(3),
+    z.literal(TRIP_FILE_VERSION),
+  ]),
   exportedAt: z.iso.datetime(),
   trip: fileTrip,
   days: z.array(fileDay).max(366),
@@ -123,6 +128,7 @@ export function parseTripFile(body: unknown): TripFile {
     ensure(
       body.version === 1 ||
         body.version === 2 ||
+        body.version === 3 ||
         body.version === TRIP_FILE_VERSION,
       "暂不支持此行程文件版本，请使用当前版本导出的文件",
     );
@@ -180,6 +186,9 @@ export function parseTripFile(body: unknown): TripFile {
   const planDays = file.days.map((day, position) => ({
     ...day,
     position,
+    participantIds: file.participants
+      .filter((person) => person.status === "active")
+      .map((person) => person.id),
     items: day.items.map(
       (item, index) => ({ ...item, dayId: day.id, position: index }) as Item,
     ),

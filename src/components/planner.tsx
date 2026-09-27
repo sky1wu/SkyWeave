@@ -15,6 +15,7 @@ import {
   ParallelEditor,
   ParallelTransferEditor,
   ParticipantFilter,
+  ParticipationNote,
   Rendezvous,
 } from "./parallel-plan";
 import { NativeSelect } from "./ui/native-select";
@@ -68,6 +69,7 @@ function DaySection({
   addParallel,
   billCount,
   dropTarget,
+  emptyMessage,
 }: {
   day: DayPlan;
   active: boolean;
@@ -78,6 +80,7 @@ function DaySection({
   addParallel?: () => void;
   billCount: number;
   dropTarget: DropTarget | null;
+  emptyMessage?: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `day:${day.id}`,
@@ -155,7 +158,9 @@ function DaySection({
         className={`day-drop-end ${dropTarget?.dayId === day.id && !dropTarget.beforeItemId ? "drop-indicator" : ""}`}
         data-day-end={day.id}
       >
-        {!day.items.length ? "从地点池拖入地点，或添加事项" : ""}
+        {!day.items.length
+          ? (emptyMessage ?? "从地点池拖入地点，或添加事项")
+          : ""}
       </div>
     </section>
   );
@@ -213,6 +218,13 @@ export function Planner({
   const timelines = useMemo(
     () => calculateTripTimelines(snapshot.days, participantId),
     [snapshot.days, participantId],
+  );
+  const readingDays = useMemo(
+    () =>
+      planDays.map((day) =>
+        participantDay(day, participantId, timelines.get(day.id), true),
+      ),
+    [planDays, participantId, timelines],
   );
   const visibleDays = useMemo(
     () =>
@@ -500,8 +512,29 @@ export function Planner({
                   onChange={(value) => {
                     setPersonFilter(value);
                     setSelected(null);
+                    const person =
+                      value === "me"
+                        ? snapshot.participants.find(
+                            (p) => p.userId === snapshot.currentUserId,
+                          )?.id
+                        : value;
+                    const start = person
+                      ? calculateTripTimelines(snapshot.days, person).get(
+                          snapshot.days[0]?.id,
+                        )?.participationStart
+                      : undefined;
+                    if (start && (day?.position ?? 0) < start.position)
+                      jumpToDay(start.dayId);
                     setFocus({ kind: "day", request: Date.now() });
                   }}
+                />
+              )}
+              {participantId && (
+                <ParticipationNote
+                  days={snapshot.days}
+                  start={
+                    timelines.get(snapshot.days[0]?.id)?.participationStart
+                  }
                 />
               )}
               <div
@@ -737,7 +770,7 @@ export function Planner({
                           });
                         }}
                         item={item}
-                        day={targetDay}
+                        day={readingDays.find((d) => d.id === targetDay.id)!}
                         participants={snapshot.participants}
                         pool={snapshot.poolPlaces}
                         participantId={participantId}
@@ -871,7 +904,16 @@ export function Planner({
                   return (
                     <DaySection
                       key={targetDay.id}
-                      day={targetDay}
+                      day={readingDays.find((d) => d.id === targetDay.id)!}
+                      emptyMessage={
+                        participantId
+                          ? timeline.participationStart &&
+                            targetDay.position <
+                              timeline.participationStart.position
+                            ? "该成员尚未加入行程"
+                            : "该成员在本日没有安排"
+                          : undefined
+                      }
                       active={day?.id === targetDay.id}
                       settings={() => setDayEditor(targetDay)}
                       addItem={
@@ -915,7 +957,9 @@ export function Planner({
                       dropTarget={dropTarget}
                     >
                       <div className="timeline-list">
-                        {dayRoots(targetDay).map(renderItem)}
+                        {dayRoots(
+                          readingDays.find((d) => d.id === targetDay.id)!,
+                        ).map(renderItem)}
                       </div>
                       {dayBills.length > 0 && (
                         <div className="day-bills">
@@ -1026,6 +1070,7 @@ export function Planner({
           initial={parallelEditor.initial}
           parentBranchId={parallelEditor.branchId}
           participants={snapshot.participants}
+          pool={snapshot.poolPlaces}
           close={() => setParallelEditor(null)}
           save={(data) =>
             mutate(`/trips/${snapshot.trip.id}/parallel`, "POST", {

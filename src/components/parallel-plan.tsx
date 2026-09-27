@@ -22,6 +22,11 @@ import { Checkbox } from "./ui/checkbox";
 import { NativeSelect } from "./ui/native-select";
 import { ErrorText, Modal } from "./ui";
 import { TimeField } from "./item-editor";
+import {
+  BranchDeparture,
+  departureDay,
+  type DepartureDraft,
+} from "./branch-departure";
 
 function newBranchId() {
   // getRandomValues also works on self-hosted HTTP origins.
@@ -63,6 +68,29 @@ export function ParticipantFilter({
   );
 }
 
+export function ParticipationNote({
+  days,
+  start,
+}: {
+  days: DayPlan[];
+  start?: { dayId: string; itemId: string; at: "departure" | "meeting" };
+}) {
+  if (!start) return null;
+  const day = days.find((day) => day.id === start.dayId),
+    item = days
+      .flatMap((day) => day.items)
+      .find((item) => item.id === start.itemId);
+  return (
+    <p className="participation-note">
+      {day?.title} ·{" "}
+      {start.at === "meeting"
+        ? `在「${item?.title ?? "集合点"}」加入`
+        : `从「${item?.title ?? "本组出发地"}」开始参与`}
+      ；此前安排不计入个人行程。
+    </p>
+  );
+}
+
 export function ParallelEditor({
   day,
   days = [day],
@@ -70,6 +98,7 @@ export function ParallelEditor({
   initial,
   parentBranchId,
   participants,
+  pool = [],
   close,
   save,
 }: {
@@ -78,6 +107,7 @@ export function ParallelEditor({
   item?: Item;
   initial?: { splitItemId: string | null; joinItemId: string | null };
   parentBranchId?: string | null;
+  pool?: PoolPlace[];
   participants: Participant[];
   close: () => void;
   save: (data: Record<string, unknown>) => Promise<unknown>;
@@ -112,6 +142,9 @@ export function ParallelEditor({
   );
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [departures, setDepartures] = useState<
+    Record<string, DepartureDraft | undefined>
+  >({});
   const [selected, setSelected] = useState<string[]>([]),
     [batchBranch, setBatchBranch] = useState(plan.branches[0].id),
     [assignments, setAssignments] = useState<Record<string, string | null>>({});
@@ -138,13 +171,33 @@ export function ParallelEditor({
   const unassigned = people.filter(
     (p) => !plan.branches.some((b) => b.participantIds.includes(p.id)),
   );
-  const updateBranch = (id: string, data: Partial<PlanBranch>) =>
+  const updateBranch = (id: string, data: Partial<PlanBranch>) => {
+    setError("");
     setPlan((current) => ({
       ...current,
-      branches: current.branches.map((b) =>
-        b.id === id ? { ...b, ...data } : b,
+      branches: current.branches.map((branch) =>
+        branch.id === id ? { ...branch, ...data } : branch,
       ),
     }));
+  };
+  function changeOrigin(
+    branch: PlanBranch,
+    draft: DepartureDraft | undefined,
+    itemId: string | null | undefined,
+    dayId: string,
+  ) {
+    const oldDay = departureDay(branch, departures[branch.id], day, days),
+      nextDay = days.find((d) => d.id === dayId)!;
+    const shift = (nextDay.position - oldDay.position) * 1440;
+    updateBranch(branch.id, {
+      departureItemId: itemId,
+      startMinutes:
+        branch.startMinutes == null
+          ? null
+          : Math.max(0, branch.startMinutes + shift),
+    });
+    setDepartures((current) => ({ ...current, [branch.id]: draft }));
+  }
   const locationOptions = options.map((i) => (
     <option key={i.id} value={i.id}>
       {label(i)}
@@ -168,6 +221,13 @@ export function ParallelEditor({
               parallelPlan: plan,
               branchId: parentId,
               ...(item ? { expectedVersion: item.version } : {}),
+              departures: Object.entries(departures).flatMap(
+                ([branchId, draft]) =>
+                  draft &&
+                  plan.branches.some((branch) => branch.id === branchId)
+                    ? [{ branchId, ...draft }]
+                    : [],
+              ),
               assignments: Object.entries(assignments).map(
                 ([itemId, branchId]) => ({
                   itemId,
@@ -194,20 +254,24 @@ export function ParallelEditor({
           行动段名称
           <Input
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => {
+              setError("");
+              setTitle(e.target.value);
+            }}
             required
             maxLength={200}
           />
         </Label>
         <div className="field-grid">
           <Label>
-            分开地点
+            默认出发地点
             <NativeSelect
               aria-label="分开地点"
               value={plan.splitItemId ?? ""}
-              onChange={(e) =>
-                setPlan({ ...plan, splitItemId: e.target.value || null })
-              }
+              onChange={(e) => {
+                setError("");
+                setPlan({ ...plan, splitItemId: e.target.value || null });
+              }}
             >
               <option value="">各自出发</option>
               {locationOptions}
@@ -218,9 +282,10 @@ export function ParallelEditor({
             <NativeSelect
               aria-label="集合地点"
               value={plan.joinItemId ?? ""}
-              onChange={(e) =>
-                setPlan({ ...plan, joinItemId: e.target.value || null })
-              }
+              onChange={(e) => {
+                setError("");
+                setPlan({ ...plan, joinItemId: e.target.value || null });
+              }}
             >
               <option value="">各自结束，不集合</option>
               {locationOptions}
@@ -228,7 +293,7 @@ export function ParallelEditor({
           </Label>
         </div>
         <p className="text-xs muted">
-          集合点可选后续日期。每组可以单独选择更早或更晚的集合点；中间已有事项可在下方批量分配。
+          每组可单独选择出发地点和集合地点。中途加入的成员可在组内设置参与起点；集合点也可选后续日期。
         </p>
         <Label>
           默认集合规则
@@ -254,6 +319,13 @@ export function ParallelEditor({
                 : branch.joinItemId;
             const joinIndex = options.findIndex((i) => i.id === joinId);
             const fixed = (branch.joinPolicy ?? plan.joinPolicy) === "fixed";
+            const originDay = departureDay(
+              branch,
+              departures[branch.id],
+              day,
+              days,
+            );
+            const originOffset = (originDay.position - day.position) * 1440;
             return (
               <fieldset
                 key={branch.id}
@@ -292,6 +364,12 @@ export function ParallelEditor({
                               : branch.participantIds.filter(
                                   (id) => id !== person.id,
                                 ),
+                            entrants: checked
+                              ? branch.entrants
+                              : branch.entrants?.filter(
+                                  (entrant) =>
+                                    entrant.participantId !== person.id,
+                                ),
                           })
                         }
                       />
@@ -302,18 +380,121 @@ export function ParallelEditor({
                 {!people.length && (
                   <p className="text-xs muted">请先在成员页添加同行者。</p>
                 )}
+                <BranchDeparture
+                  branch={branch}
+                  day={day}
+                  days={days}
+                  pool={pool}
+                  shared={all.find((item) => item.id === plan.splitItemId)}
+                  draft={departures[branch.id]}
+                  onChange={(draft, itemId, dayId) =>
+                    changeOrigin(branch, draft, itemId, dayId)
+                  }
+                />
                 <TimeField
                   name={`branch-${branch.id}`}
                   label={`${branch.title}出发时间`}
-                  value={branch.startMinutes}
+                  value={
+                    branch.startMinutes == null
+                      ? null
+                      : Math.max(0, branch.startMinutes - originOffset)
+                  }
                   onChange={(startMinutes) =>
-                    updateBranch(branch.id, { startMinutes })
+                    updateBranch(branch.id, {
+                      startMinutes:
+                        startMinutes == null
+                          ? null
+                          : startMinutes + originOffset,
+                    })
                   }
                 />
                 <p className="text-xs muted">
                   留空时使用
-                  {plan.splitItemId ? "分开地点的离开时间" : "当天开始时间"}。
+                  {branch.departureItemId === undefined &&
+                  !departures[branch.id] &&
+                  plan.splitItemId
+                    ? "共同出发地点的离开时间"
+                    : "所选起点当天的开始时间"}
+                  。
                 </p>
+                <details
+                  className="branch-entrants"
+                  open={!!branch.entrants?.length}
+                >
+                  <summary>成员加入时间 · 可设置中途参加</summary>
+                  <p className="text-xs muted">
+                    同组成员可在不同阶段加入；加入前的安排不会出现在其个人行程中。
+                  </p>
+                  {people
+                    .filter((person) =>
+                      branch.participantIds.includes(person.id),
+                    )
+                    .map((person) => {
+                      const entrant = branch.entrants?.find(
+                        (entry) => entry.participantId === person.id,
+                      );
+                      return (
+                        <div className="branch-entrant" key={person.id}>
+                          <Label>
+                            {person.name}
+                            <NativeSelect
+                              aria-label={`${branch.title} ${person.name}参与范围`}
+                              value={entrant?.at ?? "all"}
+                              onChange={(e) => {
+                                const remaining =
+                                  branch.entrants?.filter(
+                                    (entry) =>
+                                      entry.participantId !== person.id,
+                                  ) ?? [];
+                                updateBranch(branch.id, {
+                                  entrants:
+                                    e.target.value === "all"
+                                      ? remaining
+                                      : [
+                                          ...remaining,
+                                          {
+                                            participantId: person.id,
+                                            at: e.target.value as
+                                              "departure" | "meeting",
+                                          },
+                                        ],
+                                });
+                              }}
+                            >
+                              <option value="all">全程同行</option>
+                              <option value="departure">
+                                从本组出发地加入
+                              </option>
+                              <option value="meeting" disabled={!joinId}>
+                                直接在集合点加入
+                              </option>
+                            </NativeSelect>
+                          </Label>
+                          {entrant?.at === "meeting" && (
+                            <>
+                              <TimeField
+                                name={`arrival-${person.id}-${branch.id}`}
+                                label={`${person.name}到达集合点时间`}
+                                value={entrant.arrivalMinutes ?? null}
+                                onChange={(arrivalMinutes) =>
+                                  updateBranch(branch.id, {
+                                    entrants: branch.entrants!.map((entry) =>
+                                      entry.participantId === person.id
+                                        ? { ...entry, arrivalMinutes }
+                                        : entry,
+                                    ),
+                                  })
+                                }
+                              />
+                              <p className="text-xs muted">
+                                按集合点当天计算；留空使用约定集合时间，没有约定则为待定。
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                </details>
                 <Label>
                   本组集合地点
                   <NativeSelect
@@ -881,7 +1062,7 @@ export function ParallelBlock({
         )}
       </header>
       <p className="parallel-boundary">
-        {split ? `从「${split.title}」分开` : "各自出发"}
+        {split ? `默认从「${split.title}」分开` : "各自出发"}
         {join ? ` · 在「${join.title}」集合` : " · 各自结束"}
       </p>
       {!branches.length && (
@@ -899,6 +1080,31 @@ export function ParallelBlock({
           const catchUp = all.find((i) => i.id === branch.catchUpItemId);
           const children = displayItems(day).filter(
             (i) => i.branchId === branch.id,
+          );
+          const independent = branch.departureItemId !== undefined || !split;
+          const origin = independent
+            ? (all.find((i) => i.id === branch.departureItemId) ??
+              days
+                .flatMap((d) => d.items)
+                .find(
+                  (i) =>
+                    i.branchId === branch.id &&
+                    i.type !== "note" &&
+                    i.type !== "parallel",
+                ))
+            : split;
+          const ownerDay = days.find((d) => d.id === item.dayId) ?? day;
+          const originDate =
+            days.find((d) => d.id === origin?.dayId) ?? ownerDay;
+          const originTime =
+            branch.startMinutes == null
+              ? (origin?.startMinutes ?? originDate.startMinutes)
+              : branch.startMinutes -
+                (originDate.position - ownerDay.position) * 1440;
+          const joiningHere = branch.entrants?.find(
+            (entrant) =>
+              entrant.participantId === participantId &&
+              entrant.at === "meeting",
           );
           return (
             <BranchLane
@@ -924,12 +1130,26 @@ export function ParallelBlock({
                 addPlace(branch.id, placeId, targetDayId)
               }
             >
-              {!split && (
-                <p className="parallel-departure">
-                  {formatTime((branch.startMinutes ?? day.startMinutes) * 60)}{" "}
-                  出发
-                </p>
-              )}
+              <p className="parallel-departure">
+                {joiningHere
+                  ? `直接在「${destination?.title ?? "集合点"}」加入，不参与此前安排`
+                  : `${originDate.title} ${formatTime(originTime * 60)} · ${origin ? `从「${origin.title}」出发` : "出发地点待补充"}`}
+              </p>
+              {!participantId &&
+                branch.entrants?.map((entrant) => (
+                  <p
+                    className="parallel-entry-note"
+                    key={entrant.participantId}
+                  >
+                    {participants.find(
+                      (person) => person.id === entrant.participantId,
+                    )?.name ?? "同行者"}
+                    ：
+                    {entrant.at === "meeting"
+                      ? `在「${destination?.title ?? "集合点"}」加入`
+                      : "从本组出发地加入"}
+                  </p>
+                ))}
               {children.map(renderItem)}
               {!children.length && (
                 <p className="parallel-empty">

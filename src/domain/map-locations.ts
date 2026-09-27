@@ -78,7 +78,7 @@ export function mapLocations(
     result.push({
       id: origin.transport ? `${origin.id}:destination` : origin.id,
       itemId: origin.id,
-      title: `${origin.transport?.destination.name ?? origin.title}（跨日出发）`,
+      title: `${origin.transport?.destination.name ?? origin.title}（${origin.dayId === day?.id ? "出发点" : "跨日出发"}）`,
       category: origin.placeCategory,
       lat: point.lat!,
       lng: point.lng!,

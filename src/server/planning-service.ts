@@ -26,6 +26,7 @@ export function placeParallel(
   itemId: string,
   plan: Item["parallelPlan"],
   actor: Actor,
+  previousPlan?: Item["parallelPlan"],
 ) {
   if (!plan) return;
   const current = getDay(dayId).items;
@@ -39,6 +40,13 @@ export function placeParallel(
     .map((item, i) => (joins.includes(item.id) ? i : -1))
     .filter((i) => i >= 0);
   const split = items.findIndex((item) => item.id === plan.splitItemId);
+  // Editing origins or clearing a shared start must not relocate the section.
+  if (
+    previousPlan &&
+    (!plan.splitItemId || plan.splitItemId === previousPlan.splitItemId) &&
+    localJoins.every((index) => index >= originalIndex)
+  )
+    return;
   const at =
     split >= 0
       ? split + 1
@@ -185,7 +193,13 @@ export function editItem(itemId: string, actor: Actor, body: unknown) {
       updatedByUserId: actor.id,
     });
     if (data.parallelPlan)
-      placeParallel(day.id, itemId, data.parallelPlan, actor);
+      placeParallel(
+        day.id,
+        itemId,
+        data.parallelPlan,
+        actor,
+        item.parallelPlan,
+      );
     const endpointChanged = (side: "arrival" | "departure") => {
       const old = routeEndpoint(item, side),
         next = routeEndpoint({ ...item, ...data }, side);

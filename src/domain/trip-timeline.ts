@@ -48,6 +48,12 @@ export function calculateTripTimelines(
       entries: TimelineEntry[];
       departures: Record<string, number | null>;
       activeLegIds?: string[];
+      participationStart?: {
+        dayId: string;
+        position: number;
+        itemId: string;
+        at: "departure" | "meeting";
+      };
     }
   >();
   if (!days.some((day) => day.items.some((item) => item.parallelPlan))) {
@@ -199,7 +205,38 @@ export function calculateTripTimelines(
         skipped.push({ person, entry });
         continue;
       }
-      if (step.reset && !state.redirect) {
+      if (step.admission) {
+        const start = step.admission,
+          branch = graph.branches.get(start.branchId)!;
+        const startDay = byDay.get(start.dayId)!;
+        if (start.at === "meeting") {
+          const minutes = start.arrivalMinutes ?? item.startMinutes;
+          state = {
+            clock: minutes == null ? null : offset(item.dayId) + minutes * 60,
+            first: false,
+          };
+        } else {
+          const seed = start.seedItemId
+            ? graph.byId.get(start.seedItemId)
+            : undefined;
+          const planned = seed
+            ? (seed.endMinutes ??
+                (seed.startMinutes === null
+                  ? startDay.startMinutes
+                  : seed.startMinutes + seed.stayMinutes)) *
+                60 +
+              offset(seed.dayId)
+            : offset(start.dayId) + startDay.startMinutes * 60;
+          const clock =
+            branch.startMinutes == null
+              ? seed
+                ? (entries.get(seed.id)?.departure ?? planned)
+                : planned
+              : offset(branch.dayId) + branch.startMinutes * 60;
+          state = { clock, physical: seed, first: !seed };
+        }
+      }
+      if (step.reset && !state.redirect && !step.admission) {
         const anchor =
           offset(item.dayId) + (item.startMinutes ?? day.startMinutes) * 60;
         const delayed =
@@ -311,7 +348,10 @@ export function calculateTripTimelines(
       policies.get(id) ??
       arrivals.find((a) => a.joinPolicy)?.joinPolicy ??
       "wait_all";
-    const arrival = latest(arrivals.map((a) => a.entry.arrival));
+    const requiredArrivals = gather
+      ? arrivals.filter((a) => a.joinPolicy || !a.entry.isDayStart)
+      : arrivals;
+    const arrival = latest(requiredArrivals.map((a) => a.entry.arrival));
     if (gather && policy === "wait_all" && !item.parallelPlan) {
       const ready = calculateLinearTimeline(
         { ...day, items: [absolute(item)], legs: [] },
@@ -377,6 +417,7 @@ export function calculateTripTimelines(
     if (gather && item.type !== "note") {
       const groups = new Map<string, Arrival[]>();
       for (const row of arrivals) {
+        if (row.entry.isDayStart && !row.joinPolicy) continue;
         const key = row.joinBranch ?? row.step.scope;
         groups.set(key, [...(groups.get(key) ?? []), row]);
       }
@@ -465,16 +506,21 @@ export function calculateTripTimelines(
       value === null ? null : value - shift;
     const normalized: TimelineEntry[] = day.items.map((item) => {
       const entry = entries.get(item.id) ?? empty(item.id, null, false);
-      const people: PersonTiming[] = [...(personal.get(item.id) ?? [])].map(
-        ([participantId, person]) => ({
+      const people: PersonTiming[] = [...(personal.get(item.id) ?? [])]
+        .filter(
+          ([person]) =>
+            !graph.admissions.has(person) ||
+            byDay.get(graph.admissions.get(person)!.dayId)!.position <=
+              day.position,
+        )
+        .map(([participantId, person]) => ({
           participantId,
           ...person,
           arrival: relative(person.arrival),
           start: relative(person.start),
           departure: relative(person.departure),
           warnings: unique(person.warnings),
-        }),
-      );
+        }));
       const base = {
         ...entry,
         arrival: relative(entry.arrival),
@@ -507,6 +553,15 @@ export function calculateTripTimelines(
       : departures;
     result.set(day.id, {
       entries: normalized,
+      ...(selectedPerson && graph.admissions.has(selectedPerson)
+        ? {
+            participationStart: {
+              ...graph.admissions.get(selectedPerson)!,
+              position: byDay.get(graph.admissions.get(selectedPerson)!.dayId)!
+                .position,
+            },
+          }
+        : {}),
       activeLegIds: day.legs
         .filter((leg) =>
           selectedPerson

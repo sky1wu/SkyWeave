@@ -178,3 +178,6 @@ try {
 `get_day` 返回跨日上下文与个人时间；`get_itinerary` 返回全行程。集合项的 `rendezvous` 包含分组到达信息，`people` 包含每个人的预计时间和跳过状态。`recalculate_routes` 按整趟行程的依赖顺序处理各组与追赶路线。`move_item` / `schedule_place` 可指定跨日分组的 `branchId`。
 
 完整字段、版本兼容和事务语义见 [API 分头行动](api.md#分头行动)。
+
+
+分组独立起点使用 `departureItemId`，批量保存可通过 `departures` 引用已有安排、地点池或直接提供地点。`entrants: [{participantId, at: "departure" | "meeting", arrivalMinutes?}]` 设置各成员的加入边界。直接在集合点加入的成员不经过本组此前起点和路线；其到达时间按集合点当天计算。来源校验、起点排序和成员范围原子保存；参见 [独立起点与成员中途加入](api.md#独立起点与成员中途加入)。

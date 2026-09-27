@@ -1,6 +1,7 @@
 import { z } from "zod";
+import type { Item, PoolPlace } from "@/domain/types";
 import { parallelPlanInput, sectionDescendants } from "@/domain/parallel";
-import { insert, update, run } from "./db";
+import { one, insert, update, run } from "./db";
 import { AppError, requireValue } from "./errors";
 import {
   access,
@@ -20,6 +21,18 @@ const expectedDays = z
   .array(z.strictObject({ id: v.id, expectedVersion: v.version }))
   .min(1)
   .max(366);
+const departureInput = z.strictObject({
+  branchId: v.id,
+  dayId: v.id.optional(),
+  source: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("item"), itemId: v.id }),
+    z.strictObject({ kind: z.literal("pool"), placeId: v.id }),
+    z.strictObject({
+      kind: z.literal("place"),
+      place: v.poolInput.omit({ type: true }),
+    }),
+  ]),
+});
 export const parallelSaveInput = z.strictObject({
   dayId: v.id,
   sectionId: v.id.optional(),
@@ -28,6 +41,7 @@ export const parallelSaveInput = z.strictObject({
   title: z.string().trim().min(1).max(200),
   branchId: v.id.nullable().optional(),
   parallelPlan: parallelPlanInput,
+  departures: z.array(departureInput).max(8).default([]),
   assignments: z
     .array(
       z.strictObject({
@@ -128,7 +142,143 @@ export function saveParallel(tripId: string, actor: Actor, body: unknown) {
         updatedByUserId: actor.id,
       });
     }
-    placeParallel(day.id, id, data.parallelPlan, actor);
+    if (
+      new Set(data.departures.map((departure) => departure.branchId)).size !==
+      data.departures.length
+    )
+      throw new AppError(400, "VALIDATION", "每组只能设置一个出发地点");
+    for (const departure of data.departures) {
+      const branch = requireValue(
+        data.parallelPlan.branches.find((b) => b.id === departure.branchId),
+        "出发地点的分组不属于此行动段",
+      );
+      const target = requireValue(
+        days.find((d) => d.id === (departure.dayId ?? day.id)),
+        "出发日期不属于此行程",
+      );
+      let existing: Item | undefined;
+      let point: z.infer<typeof v.poolInput>;
+      let sourcePlaceId: string | null = null;
+      if (departure.source.kind === "item") {
+        existing = requireValue(
+          one<Item>(
+            "SELECT i.* FROM day_items i JOIN days d ON d.id=i.dayId WHERE i.id=? AND d.tripId=?",
+            departure.source.itemId,
+            tripId,
+          ),
+          "出发地点不属于此行程",
+        );
+        if (existing.type === "note" || existing.type === "parallel")
+          throw new AppError(
+            400,
+            "VALIDATION",
+            "请选择地点或交通的出发站作为起点",
+          );
+        if (existing.branchId === branch.id) {
+          if (departure.dayId && target.id !== existing.dayId)
+            throw new AppError(
+              400,
+              "VALIDATION",
+              "请选择出发地点当前所属日期，或先移动该事项",
+            );
+          branch.departureItemId = existing.id;
+          continue;
+        }
+        const location = existing.transport?.origin;
+        point = {
+          title: location?.name ?? existing.title,
+          address: location ? location.address : existing.address,
+          lat: location ? location.lat : existing.lat,
+          lng: location ? location.lng : existing.lng,
+          amapPoiId: location ? location.amapPoiId : existing.amapPoiId,
+          placeCategory: existing.placeCategory,
+        };
+        sourcePlaceId = location
+          ? location.sourcePlaceId
+          : existing.sourcePlaceId;
+      } else if (departure.source.kind === "pool") {
+        const place = requireValue(
+          one<PoolPlace>(
+            "SELECT * FROM trip_places WHERE id=? AND tripId=?",
+            departure.source.placeId,
+            tripId,
+          ),
+          "出发地点不属于此行程的地点池",
+        );
+        if (place.type === "note")
+          throw new AppError(400, "VALIDATION", "备注不能作为出发地点");
+        point = {
+          title: place.title,
+          address: place.address,
+          lat: place.lat,
+          lng: place.lng,
+          amapPoiId: place.amapPoiId,
+          placeCategory: place.placeCategory,
+          notes: place.notes,
+        };
+        sourcePlaceId = place.id;
+      } else point = departure.source.place;
+      if ((point.lat == null) !== (point.lng == null))
+        throw new AppError(400, "VALIDATION", "出发地点的经纬度必须成对填写");
+      const itemId = uid();
+      const next = one<{ position: number }>(
+        "SELECT COALESCE(MAX(position),-1)+1 AS position FROM day_items WHERE dayId=?",
+        target.id,
+      )!.position;
+      insert("day_items", {
+        id: itemId,
+        dayId: target.id,
+        position: next,
+        type: "place",
+        ...point,
+        sourcePlaceId,
+        branchId: branch.id,
+        ...revision(actor),
+      });
+      branch.departureItemId = itemId;
+    }
+    update("day_items", id, { parallelPlan: data.parallelPlan });
+    for (const branch of data.parallelPlan.branches)
+      if (branch.departureItemId) {
+        const current = getDays(tripId);
+        const origin = current
+          .flatMap((d) => d.items)
+          .find((i) => i.id === branch.departureItemId);
+        if (!origin || origin.branchId !== branch.id)
+          throw new AppError(
+            400,
+            "VALIDATION",
+            `「${branch.title}」的出发地点不属于本组`,
+          );
+        const target = current.find((d) => d.id === origin.dayId)!;
+        if (
+          current.some(
+            (d) =>
+              d.position < target.position &&
+              d.items.some((i) => i.branchId === branch.id),
+          )
+        )
+          throw new AppError(
+            400,
+            "VALIDATION",
+            `「${branch.title}」已有更早日期的安排，请先调整日期再设置起点`,
+          );
+        const ordered = target.items.filter((i) => i.id !== origin.id);
+        const first = ordered.findIndex((i) => i.branchId === branch.id);
+        const position =
+          first < 0 ? target.items.findIndex((i) => i.id === origin.id) : first;
+        ordered.splice(position, 0, origin);
+        ordered.forEach((item, position) => {
+          if (item.position !== position)
+            update("day_items", item.id, {
+              position,
+              version: item.version + 1,
+              updatedAt: Date.now(),
+              updatedByUserId: actor.id,
+            });
+        });
+      }
+    placeParallel(day.id, id, data.parallelPlan, actor, old?.parallelPlan);
     rebuildLegs(day.id, actor);
     run(
       "UPDATE days SET version=version+1, updatedAt=?, updatedByUserId=? WHERE id=?",
@@ -246,6 +396,7 @@ export function transferParallel(tripId: string, actor: Actor, body: unknown) {
               id: branchMap.get(b.id)!,
               joinItemId: ref(b.joinItemId),
               catchUpItemId: ref(b.catchUpItemId),
+              departureItemId: ref(b.departureItemId),
             })),
           }
         : null;
