@@ -77,11 +77,36 @@ try {
 
 ## 参与者与成员备注名
 
+| 工具 | 用途 |
+| --- | --- |
+| `get_participants` | 读取参与者及当前账号的个人备注名 |
+| `update_participant_alias` | 设置、修改或清空当前账号的个人备注名 |
+
 调用 `get_participants({ tripId })`，返回 `{ tripId, participants, participantAliases }`。`participants` 包含已注册成员和未注册同行者，保留原有姓名与 ID；`participantAliases` 为当前令牌所属账号在此行程设置的个人备注名，每条包含 `{ participantId, name, version }`。
 
 通过 `participantAliases[].participantId` 关联 `participants[].id`。备注不存在或 `name` 为空字符串时使用参与者原名；备注名可能重复，写入费用或结算前需确认对应的参与者 ID。`get_expenses` 及返回费用明细的写入工具也会携带同样的 `participantAliases`。
 
-只读令牌和 viewer 成员也能读取自己的备注名。结果不会包含其他账号设置的备注名或成员邮箱，并遵守令牌行程范围和当前成员访问权限。备注名仍在应用成员页设置或清空。
+只读令牌和 viewer 成员也能读取自己的备注名。结果不会包含其他账号设置的备注名或成员邮箱，并遵守令牌行程范围和当前成员访问权限。
+
+通过 `update_participant_alias` 设置、修改或清空备注名，需要**读写令牌**。所有当前成员角色（含 viewer）均可修改自己的备注名，也可以创建限定单个行程的读写令牌；日程与费用的编辑权限仍由成员角色决定。
+
+首次设置示例：
+
+```json
+{
+  "name": "update_participant_alias",
+  "arguments": {
+    "tripId": "<行程 ID>",
+    "participantId": "<参与者 ID>",
+    "name": "小王",
+    "expectedVersion": 0
+  }
+}
+```
+
+`name` 去除首尾空白后最多 100 字符，传 `""` 清空。`expectedVersion` 使用 `participantAliases` 中当前账号的备注版本，**不是参与者版本**；从未设置时传 `0`，清空后的备注仍保留版本，再次设置时必须使用最新版本。成功返回 `{ tripId, participantId, name, version }`；遇到 `CONFLICT` 先重新读取，再核对修改意图。
+
+修改与网页成员页共用存储和版本检查。个人备注不会改变参与者原名、其他账号的备注、共享活动记录或 SSE 通知；网页成员页重新获得焦点时会刷新备注名。
 
 ## 费用工具
 
@@ -132,12 +157,12 @@ try {
 
 ## 权限与并发
 
-- 令牌绑定账号，可限定单个行程；只读/读写同时覆盖日程与费用。读写令牌不能提升角色：viewer 仍不可写，编辑行程设置仍需 owner。
+- 令牌绑定账号，可限定单个行程；只读/读写同时覆盖日程、费用与个人备注名。只读令牌不能修改备注名；读写令牌不能提升角色：viewer 可修改自己的备注名，不能编辑共享日程或费用，编辑行程设置仍需 owner。
 - 服务端仅保存令牌 SHA-256 摘要、前缀和元数据，完整令牌只在创建时返回。每个账号最多 20 个未过期令牌。撤销后下个请求即失效；删除限定行程会同时删除令牌。
 - 移除成员或降低角色后，下一次工具调用立即受新权限约束。登录 Cookie 不能访问 MCP；MCP 令牌也不能用于账号设置、令牌管理或其他 REST 接口。
 - 更新/删除携带目标实体的 `expectedVersion`；事项新增带 `expectedDayVersion`，跨日移动还带源/目标 Day 版本，安排收藏地点带地点与目标 Day 版本。校验和写入在事务内完成。
 - 参数或业务错误通过 MCP `isError: true` 返回；业务错误含 `structuredContent.error.{code,message,status}`。`CONFLICT` 表示内容已变化，重新读取并核对修改意图后再提交。
-- 写入复用现有事务、活动记录和 SSE 通知，浏览器会同步变化。工具不会管理账号、成员、邀请或删除整个行程。
+- 共享日程与费用写入复用现有事务、活动记录和 SSE 通知，浏览器会同步变化；个人备注写入不发布共享活动或通知。工具不会管理账号、成员角色、邀请或删除整个行程。
 
 令牌管理 REST 接口为 `GET/POST /api/mcp-tokens` 和 `DELETE /api/mcp-tokens/:id`，需要网页登录会话；写入还需同源 Origin 和 JSON。创建参数：`{ name, permission: "read" | "edit", tripId: string | null, expiresInDays: 1..365 }`；删除请求体为 `{}`。
 

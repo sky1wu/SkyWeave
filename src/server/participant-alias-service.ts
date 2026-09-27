@@ -1,8 +1,8 @@
-import { z } from "zod";
 import type { ParticipantAlias } from "@/domain/types";
 import { insert, many, one, run } from "./db";
 import { AppError, requireValue } from "./errors";
 import { access, readTx, tx, type Actor } from "./service-core";
+import { participantAliasInput } from "./validation";
 
 export function listParticipantAliases(tripId: string, actor: Actor) {
   return readTx(() => {
@@ -21,12 +21,7 @@ export function saveParticipantAlias(
   actor: Actor,
   body: unknown,
 ): ParticipantAlias {
-  const data = z
-    .strictObject({
-      name: z.string().trim().max(100),
-      expectedVersion: z.number().int().nonnegative(),
-    })
-    .parse(body);
+  const data = participantAliasInput.parse(body);
   return tx(() => {
     // A personal alias is available to every active member, including viewers.
     access(tripId, actor);

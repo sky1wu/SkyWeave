@@ -21,6 +21,10 @@ export const tripInput = z.strictObject({
     .default("Asia/Shanghai"),
   baseCurrency: z.enum(currencies).default("CNY"),
 });
+export const participantAliasInput = z.strictObject({
+  name: z.string().trim().max(100),
+  expectedVersion: z.number().int().nonnegative(),
+});
 export const dayInput = z.strictObject({
   startMinutes: minutes.default(480),
 });

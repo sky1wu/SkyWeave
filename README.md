@@ -67,7 +67,7 @@ npm start
 
 owner 管理成员、邀请及 Trip 设置；owner/editor 可编辑行程、费用和结算；viewer 只读并可评论。成员移出后撤销访问，历史账目仍保留。
 
-Agent 接入：在「用户设置 → Agent 访问 · MCP」创建令牌，选择行程范围和只读/读写权限。Agent 通过 Streamable HTTP 连接 `/api/mcp`，使用 Bearer Token 认证，即可读写日程、费用与结算记录，并通过 `get_participants` 或 `get_expenses` 读取当前账号的成员备注名。完整配置、工具列表和调用示例见 [MCP 接口](docs/mcp.md)。
+Agent 接入：在「用户设置 → Agent 访问 · MCP」创建令牌，选择行程范围和只读/读写权限。Agent 通过 Streamable HTTP 连接 `/api/mcp`，使用 Bearer Token 认证，即可读写日程、费用与结算记录，并通过 `get_participants` 或 `get_expenses` 读取当前账号的成员备注名，使用 `update_participant_alias` 设置、修改或清空备注名（需读写令牌）。完整配置、工具列表和调用示例见 [MCP 接口](docs/mcp.md)。
 
 ## 验证与文档
 

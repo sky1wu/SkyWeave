@@ -96,7 +96,7 @@ export function McpSettings({
       </h2>
       <p className="settings-description">
         让 Agent
-        读取或编辑旅行日程、费用与结算记录。访问权限始终受你的行程成员角色限制。
+        读取或编辑旅行日程、费用、结算记录和你的成员备注名。日程与费用编辑受成员角色限制；个人备注名支持所有成员角色。
       </p>
       <Label className="mt-5">
         MCP 地址
@@ -144,8 +144,8 @@ export function McpSettings({
                 aria-label="访问权限"
                 defaultValue="read"
               >
-                <option value="read">只读日程与费用</option>
-                <option value="edit">读写日程与费用</option>
+                <option value="read">只读</option>
+                <option value="edit">读写</option>
               </NativeSelect>
             </Label>
             <Label>

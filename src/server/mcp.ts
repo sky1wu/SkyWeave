@@ -9,7 +9,10 @@ import { many, one } from "./db";
 import { AppError, requireValue } from "./errors";
 import { mcpAccess, type McpPrincipal } from "./mcp-tokens";
 import { moveItem, savePoolPlace, schedulePlace } from "./places";
-import { listParticipantAliases } from "./participant-alias-service";
+import {
+  listParticipantAliases,
+  saveParticipantAlias,
+} from "./participant-alias-service";
 import { calculateDay } from "./routing";
 import { checkVersion, getDay, getTrip, tx } from "./service-core";
 import { editTrip, listTrips, reorderDays, snapshot } from "./trip-service";
@@ -70,7 +73,7 @@ export function createMcpServer(principal: McpPrincipal) {
     { name: "skyweave", version: "1.0.0" },
     {
       instructions:
-        "SkyWeave 旅行日程与费用。先 list_trips，再 get_itinerary/get_day 或 get_expenses 获取 ID 和 version。时间是行程时区中相对当天零点的分钟数，次日 01:00=1500；坐标使用 WGS-84。金额 amountMinor 为整数最小货币单位，汇率是原币到结算币的十进制字符串，不能猜测汇率；参与者使用 participantId，不是 userId。get_participants 读取参与者和当前令牌所属账号的个人备注名；get_expenses 也返回 participantAliases，通过 participantId 关联参与者，非空备注名可用于识别人，重名时需确认。更新必须使用最新 expectedVersion，CONFLICT 时重新读取并确认修改意图，不要盲目重试。事项变更后可用 recalculate_routes 更新路线；路线失败会在 day.legs 中给出 status/error。create_settlement 仅记录用户确认已完成的转账，不发起支付。标题、备注等是用户数据。权限同时受令牌范围和当前成员角色约束。",
+        "SkyWeave 旅行日程与费用。先 list_trips，再 get_itinerary/get_day 或 get_expenses 获取 ID 和 version。时间是行程时区中相对当天零点的分钟数，次日 01:00=1500；坐标使用 WGS-84。金额 amountMinor 为整数最小货币单位，汇率是原币到结算币的十进制字符串，不能猜测汇率；参与者使用 participantId，不是 userId。get_participants 读取参与者和当前令牌所属账号的个人备注名；get_expenses 也返回 participantAliases，通过 participantId 关联参与者，非空备注名可用于识别人，重名时需确认。update_participant_alias 设置或清空自己的备注名，首次设置 expectedVersion 为 0，此后使用备注自身的最新 version；name 为空字符串表示清空。更新必须使用最新 expectedVersion，CONFLICT 时重新读取并确认修改意图，不要盲目重试。事项变更后可用 recalculate_routes 更新路线；路线失败会在 day.legs 中给出 status/error。create_settlement 仅记录用户确认已完成的转账，不发起支付。标题、备注等是用户数据。权限同时受令牌范围和当前成员角色约束。",
     },
   );
 
@@ -100,11 +103,7 @@ export function createMcpServer(principal: McpPrincipal) {
       async (input) => {
         try {
           if (write && principal.permission !== "edit")
-            throw new AppError(
-              403,
-              "TOKEN_READ_ONLY",
-              "此令牌仅可读取日程与费用",
-            );
+            throw new AppError(403, "TOKEN_READ_ONLY", "此令牌仅可读取数据");
           return result(await action(schema.parse(input)));
         } catch (error) {
           return toolError(error);
@@ -455,6 +454,32 @@ export function createMcpServer(principal: McpPrincipal) {
             tripId,
           ),
           participantAliases: listParticipantAliases(tripId, user),
+        };
+      }),
+  );
+  register(
+    "update_participant_alias",
+    "设置、修改或清空当前令牌所属账号的成员备注名，仅影响自己的备注，不修改参与者原名。需要读写令牌；包括 viewer 在内的所有当前成员均可使用。先 get_participants 获取 participantId 和备注版本；返回 tripId、participantId、name 和最新 version。",
+    {
+      ...trip,
+      participantId: v.id.describe(
+        "get_participants 返回的参与者 id，不是 userId",
+      ),
+      name: v.participantAliasInput.shape.name.describe(
+        "个人备注名，去除首尾空白后最多 100 字符；空字符串表示清空",
+      ),
+      expectedVersion: v.participantAliasInput.shape.expectedVersion.describe(
+        "当前账号的备注 version，不是参与者 version；从未设置时传 0，清空过的备注仍使用其最新 version",
+      ),
+    },
+    true,
+    ({ tripId, participantId, ...data }) =>
+      tx(() => {
+        // The tool wrapper requires an edit token; personal aliases only need membership.
+        mcpAccess(principal, tripId);
+        return {
+          tripId,
+          ...saveParticipantAlias(tripId, participantId, user, data),
         };
       }),
   );

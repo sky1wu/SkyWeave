@@ -28,7 +28,8 @@ export function listMcpTokens(actor: Actor): McpToken[] {
 export function createMcpToken(actor: Actor, body: unknown) {
   const data = tokenInput.parse(body);
   return tx(() => {
-    if (data.tripId) access(data.tripId, actor, data.permission);
+    // Viewers can edit personal aliases; each tool enforces its own role requirements.
+    if (data.tripId) access(data.tripId, actor);
     const count = one<{ n: number }>(
       "SELECT count(*) n FROM mcp_tokens WHERE userId=? AND expiresAt>?",
       actor.id,
@@ -118,6 +119,6 @@ export function mcpAccess(
   if (principal.tripId && principal.tripId !== tripId)
     throw new AppError(403, "TOKEN_SCOPE", "此令牌不能访问该行程");
   if (write && principal.permission !== "edit")
-    throw new AppError(403, "TOKEN_READ_ONLY", "此令牌仅可读取日程与费用");
+    throw new AppError(403, "TOKEN_READ_ONLY", "此令牌仅可读取数据");
   return access(tripId, principal.actor, write ? "edit" : "read");
 }

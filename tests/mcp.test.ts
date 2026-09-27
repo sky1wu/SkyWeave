@@ -210,6 +210,10 @@ describe("MCP authentication and transport", () => {
           annotations: expect.objectContaining({ readOnlyHint: true }),
         }),
         expect.objectContaining({
+          name: "update_participant_alias",
+          annotations: expect.objectContaining({ readOnlyHint: false }),
+        }),
+        expect.objectContaining({
           name: "delete_expense",
           annotations: expect.objectContaining({ destructiveHint: true }),
         }),
@@ -601,6 +605,235 @@ describe("MCP personal participant aliases", () => {
     });
     for (const tool of tools)
       await error(reader, tool, { tripId: trip.id }, "NOT_FOUND");
+  });
+});
+
+describe("MCP personal participant alias writes", () => {
+  const tool = "update_participant_alias";
+
+  it("sets, updates and clears guest aliases using their own versions, including concurrent browser edits", async () => {
+    const { trip, access } = fixture();
+    const guest = s.createParticipant(trip.id, owner, { name: "同行者原名" });
+    const before = s.snapshot(trip.id, owner);
+    const client = await connect(access.token);
+    const target = { tripId: trip.id, participantId: guest.id };
+    const created = await call<ParticipantAlias>(client, tool, {
+      ...target,
+      name: "  我的称呼  ",
+      expectedVersion: 0,
+    });
+    expect(created).toEqual({ ...target, name: "我的称呼", version: 1 });
+    const updated = await call<ParticipantAlias>(client, tool, {
+      ...target,
+      name: "新的称呼",
+      expectedVersion: created.version,
+    });
+    expect(updated).toEqual({ ...target, name: "新的称呼", version: 2 });
+    await error(
+      client,
+      tool,
+      {
+        ...target,
+        name: "过期写入",
+        expectedVersion: created.version,
+      },
+      "CONFLICT",
+    );
+    const browser = saveParticipantAlias(trip.id, guest.id, owner, {
+      name: "网页中的称呼",
+      expectedVersion: updated.version,
+    });
+    await error(
+      client,
+      tool,
+      {
+        ...target,
+        name: "覆盖网页修改",
+        expectedVersion: updated.version,
+      },
+      "CONFLICT",
+    );
+    const latest = await call<Participants>(client, "get_participants", {
+      tripId: trip.id,
+    });
+    expect(latest.participantAliases).toEqual([browser]);
+    const cleared = await call<ParticipantAlias>(client, tool, {
+      ...target,
+      name: "",
+      expectedVersion: latest.participantAliases[0].version,
+    });
+    expect(cleared).toEqual({ ...target, name: "", version: 4 });
+    for (const expectedVersion of [0, browser.version])
+      await error(
+        client,
+        tool,
+        {
+          ...target,
+          name: "清空前的版本",
+          expectedVersion,
+        },
+        "CONFLICT",
+      );
+    const restored = await call<ParticipantAlias>(client, tool, {
+      ...target,
+      name: "重新设置",
+      expectedVersion: cleared.version,
+    });
+    expect(restored).toEqual({ ...target, name: "重新设置", version: 5 });
+    for (const readTool of ["get_participants", "get_expenses"]) {
+      const data = await call<Participants>(client, readTool, {
+        tripId: trip.id,
+      });
+      expect(data.participantAliases).toEqual([
+        { participantId: guest.id, name: "重新设置", version: 5 },
+      ]);
+      expect(data.participants).toEqual(before.participants);
+    }
+    expect(s.snapshot(trip.id, owner)).toEqual(before);
+  });
+
+  it("allows a viewer's scoped edit token to change only personal aliases and rejects read-only tokens and removed members", async () => {
+    const { trip, access, days } = fixture();
+    s.joinInvite(
+      s.createInvite(trip.id, owner, { role: "viewer" }).token,
+      viewer,
+    );
+    const before = s.snapshot(trip.id, owner);
+    const participant = before.participants.find((p) => p.userId === owner.id)!;
+    const target = { tripId: trip.id, participantId: participant.id };
+    const ownerClient = await connect(access.token);
+    await call(ownerClient, tool, {
+      ...target,
+      name: "owner 的私有备注",
+      expectedVersion: 0,
+    });
+    const edit = tokens.createMcpToken(viewer, {
+      name: "Viewer personal edits",
+      tripId: trip.id,
+      permission: "edit",
+    });
+    const client = await connect(edit.token);
+    expect(
+      await call(client, tool, {
+        ...target,
+        name: "viewer 的私有备注",
+        expectedVersion: 0,
+      }),
+    ).toEqual({ ...target, name: "viewer 的私有备注", version: 1 });
+    const read = tokens.createMcpToken(viewer, {
+      name: "Read-only aliases",
+      tripId: trip.id,
+      permission: "read",
+    });
+    const reader = await connect(read.token);
+    await error(
+      reader,
+      tool,
+      {
+        ...target,
+        name: "只读令牌覆盖",
+        expectedVersion: 1,
+      },
+      "TOKEN_READ_ONLY",
+    );
+    await error(
+      client,
+      "update_day",
+      {
+        tripId: trip.id,
+        dayId: days[0].id,
+        expectedVersion: days[0].version,
+        startMinutes: 600,
+      },
+      "FORBIDDEN",
+    );
+    for (const [actor, tokenClient] of [
+      [owner, ownerClient],
+      [viewer, reader],
+    ] as const) {
+      const data = await call<Participants>(tokenClient, "get_participants", {
+        tripId: trip.id,
+      });
+      expect(data.participantAliases).toEqual([
+        {
+          participantId: participant.id,
+          name: `${actor === owner ? "owner" : "viewer"} 的私有备注`,
+          version: 1,
+        },
+      ]);
+    }
+    expect(s.snapshot(trip.id, owner)).toEqual(before);
+    s.editMember(trip.id, viewer.id, owner, {
+      status: "inactive",
+      expectedVersion: 1,
+    });
+    await error(
+      client,
+      tool,
+      {
+        ...target,
+        name: "移出后修改",
+        expectedVersion: 1,
+      },
+      "NOT_FOUND",
+    );
+    expect(() =>
+      tokens.createMcpToken(viewer, {
+        name: "Removed member",
+        tripId: trip.id,
+        permission: "edit",
+      }),
+    ).toThrow();
+  });
+
+  it("rejects foreign trips and participants, caller overrides and invalid inputs without changing aliases", async () => {
+    const { trip, access } = fixture();
+    const other = s.createTrip(owner, { title: "Other alias writes" });
+    const participant = s.snapshot(trip.id, owner).participants[0];
+    const foreign = s.snapshot(other.id, owner).participants[0];
+    const existing = saveParticipantAlias(trip.id, participant.id, owner, {
+      name: "保留备注",
+      expectedVersion: 0,
+    });
+    const client = await connect(access.token);
+    const args = {
+      tripId: trip.id,
+      participantId: participant.id,
+      name: "不应保存",
+      expectedVersion: existing.version,
+    };
+    await error(client, tool, { ...args, tripId: other.id }, "TOKEN_SCOPE");
+    for (const participantId of [foreign.id, "missing"])
+      await error(client, tool, { ...args, participantId }, "NOT_FOUND");
+    for (const invalid of [
+      { ...args, userId: viewer.id },
+      { ...args, name: null },
+      { ...args, name: "x".repeat(101) },
+      { ...args, name: undefined },
+      { ...args, expectedVersion: -1 },
+      { ...args, expectedVersion: 0.5 },
+      { ...args, expectedVersion: undefined },
+    ])
+      await error(client, tool, invalid);
+    expect(
+      (
+        await call<Participants>(client, "get_participants", {
+          tripId: trip.id,
+        })
+      ).participantAliases,
+    ).toEqual([existing]);
+    const outsider = tokens.createMcpToken(editor, {
+      name: "No trip access",
+      permission: "edit",
+    });
+    await error(await connect(outsider.token), tool, args, "NOT_FOUND");
+    expect(() =>
+      tokens.createMcpToken(editor, {
+        name: "No membership",
+        tripId: trip.id,
+        permission: "edit",
+      }),
+    ).toThrow();
   });
 });
 
