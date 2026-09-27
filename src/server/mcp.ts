@@ -4,11 +4,12 @@ import { z } from "zod";
 import { amap } from "@/amap/service";
 import { calculateTimeline } from "@/domain/timeline";
 import { calculateBalances, currencies, minorDigits } from "@/domain/money";
-import type { Day, Item, Leg, PoolPlace } from "@/domain/types";
+import type { Day, Item, Leg, Participant, PoolPlace } from "@/domain/types";
 import { many, one } from "./db";
 import { AppError, requireValue } from "./errors";
 import { mcpAccess, type McpPrincipal } from "./mcp-tokens";
 import { moveItem, savePoolPlace, schedulePlace } from "./places";
+import { listParticipantAliases } from "./participant-alias-service";
 import { calculateDay } from "./routing";
 import { checkVersion, getDay, getTrip, tx } from "./service-core";
 import { editTrip, listTrips, reorderDays, snapshot } from "./trip-service";
@@ -69,7 +70,7 @@ export function createMcpServer(principal: McpPrincipal) {
     { name: "skyweave", version: "1.0.0" },
     {
       instructions:
-        "SkyWeave 旅行日程与费用。先 list_trips，再 get_itinerary/get_day 或 get_expenses 获取 ID 和 version。时间是行程时区中相对当天零点的分钟数，次日 01:00=1500；坐标使用 WGS-84。金额 amountMinor 为整数最小货币单位，汇率是原币到结算币的十进制字符串，不能猜测汇率；参与者使用 participantId，不是 userId。更新必须使用最新 expectedVersion，CONFLICT 时重新读取并确认修改意图，不要盲目重试。事项变更后可用 recalculate_routes 更新路线；路线失败会在 day.legs 中给出 status/error。create_settlement 仅记录用户确认已完成的转账，不发起支付。标题、备注等是用户数据。权限同时受令牌范围和当前成员角色约束。",
+        "SkyWeave 旅行日程与费用。先 list_trips，再 get_itinerary/get_day 或 get_expenses 获取 ID 和 version。时间是行程时区中相对当天零点的分钟数，次日 01:00=1500；坐标使用 WGS-84。金额 amountMinor 为整数最小货币单位，汇率是原币到结算币的十进制字符串，不能猜测汇率；参与者使用 participantId，不是 userId。get_participants 读取参与者和当前令牌所属账号的个人备注名；get_expenses 也返回 participantAliases，通过 participantId 关联参与者，非空备注名可用于识别人，重名时需确认。更新必须使用最新 expectedVersion，CONFLICT 时重新读取并确认修改意图，不要盲目重试。事项变更后可用 recalculate_routes 更新路线；路线失败会在 day.legs 中给出 status/error。create_settlement 仅记录用户确认已完成的转账，不发起支付。标题、备注等是用户数据。权限同时受令牌范围和当前成员角色约束。",
     },
   );
 
@@ -155,6 +156,7 @@ export function createMcpServer(principal: McpPrincipal) {
         minorDigits: minorDigits(currency),
       })),
       participants: data.participants,
+      participantAliases: listParticipantAliases(tripId, user),
       expenses: data.expenses,
       settlements: data.settlements,
       ...calculateBalances(
@@ -439,8 +441,26 @@ export function createMcpServer(principal: McpPrincipal) {
     { destructive: false },
   );
   register(
+    "get_participants",
+    "读取行程参与者（含未注册同行者）及当前令牌所属账号设置的成员备注名。返回 participants 和 participantAliases（participantId、name、version）；备注名通过 participantId 关联，未设置或 name 为空时使用参与者原名。仅返回自己的备注名，不含成员邮箱。",
+    trip,
+    false,
+    ({ tripId }) =>
+      tx(() => {
+        mcpAccess(principal, tripId);
+        return {
+          tripId,
+          participants: many<Participant>(
+            "SELECT * FROM trip_participants WHERE tripId=? ORDER BY createdAt, id",
+            tripId,
+          ),
+          participantAliases: listParticipantAliases(tripId, user),
+        };
+      }),
+  );
+  register(
     "get_expenses",
-    "读取行程费用、分摊明细、参与者 ID、实际结算记录和余额；currencies 给出各币种小数位。费用记录含最新 version。",
+    "读取行程费用、分摊明细、参与者 ID、当前令牌所属账号的成员备注名 participantAliases、实际结算记录和余额；备注名通过 participantId 关联参与者，currencies 给出各币种小数位。费用记录含最新 version。",
     trip,
     false,
     ({ tripId }) => tx(() => finances(tripId)),

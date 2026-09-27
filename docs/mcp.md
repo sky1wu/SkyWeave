@@ -7,7 +7,7 @@
 1. 登录应用，进入「用户设置 → Agent 访问 · MCP」。
 2. 创建令牌，选择单个行程或所有可访问行程、只读或读写、有效期（默认 30 天，最多 365 天）。
 3. 保存只显示一次的令牌。在 Agent 的 MCP 连接中填写页面显示的地址，例如 `https://trip.example.com/api/mcp`，传输选择 **Streamable HTTP**，认证使用 **Bearer Token**。
-4. 先调用 `list_trips`，再读取日程或费用。写入后使用响应中的新版本继续操作。
+4. 先调用 `list_trips`，再读取日程、参与者或费用。成员备注名可通过 `get_participants` 或 `get_expenses` 读取。写入后使用响应中的新版本继续操作。
 
 支持 `url` 和 `headers` 配置的客户端可使用以下形式；具体字段以客户端为准：
 
@@ -75,11 +75,19 @@ try {
 
 `get_itinerary.days` 中每个元素为 `{ day, timeline }`，其中 `day` 包含事项、路线和各实体版本。日程读取不返回成员邮箱、邀请、费用或评论；费用通过专用工具读取。
 
+## 参与者与成员备注名
+
+调用 `get_participants({ tripId })`，返回 `{ tripId, participants, participantAliases }`。`participants` 包含已注册成员和未注册同行者，保留原有姓名与 ID；`participantAliases` 为当前令牌所属账号在此行程设置的个人备注名，每条包含 `{ participantId, name, version }`。
+
+通过 `participantAliases[].participantId` 关联 `participants[].id`。备注不存在或 `name` 为空字符串时使用参与者原名；备注名可能重复，写入费用或结算前需确认对应的参与者 ID。`get_expenses` 及返回费用明细的写入工具也会携带同样的 `participantAliases`。
+
+只读令牌和 viewer 成员也能读取自己的备注名。结果不会包含其他账号设置的备注名或成员邮箱，并遵守令牌行程范围和当前成员访问权限。备注名仍在应用成员页设置或清空。
+
 ## 费用工具
 
 | 工具                | 用途                                                         |
 | ------------------- | ------------------------------------------------------------ |
-| `get_expenses`      | 费用与分摊明细、参与者、结算记录、余额、建议转账及币种小数位 |
+| `get_expenses`      | 费用与分摊明细、参与者及个人备注名、结算记录、余额、建议转账及币种小数位 |
 | `get_balances`      | 读取结算币种、每人余额和建议转账                             |
 | `create_expense`    | 通过 `expense` 创建费用并计算分摊                            |
 | `update_expense`    | 通过 `expenseId`、`expectedVersion` 和 `expense` 更新费用    |
@@ -87,7 +95,7 @@ try {
 | `create_settlement` | 通过 `settlement` 登记已完成的实际转账                       |
 | `delete_settlement` | 撤销结算记录并恢复余额                                       |
 
-先读取 `get_expenses`，使用返回的 **participantId** 作为付款人、分摊人和结算双方，不能使用用户 ID。参与者仍在应用成员页管理。
+先读取 `get_expenses` 或 `get_participants`，使用参与者的 `id`（**participantId**）作为付款人、分摊人和结算双方，不能使用用户 ID。参与者仍在应用成员页管理。
 
 `amountMinor` 为整数最小货币单位，CNY 12.34 元填 1234，JPY 123 日元填 123；`currencies[].minorDigits` 提供小数位。`exchangeRateToBase` 是原币兑换行程结算币的十进制字符串，同币种为 `"1"`。`incurredAt`、`settledAt` 使用 Unix 毫秒。
 

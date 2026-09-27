@@ -16,6 +16,7 @@ import type {
   DayPlan,
   TripSnapshot,
   Participant,
+  ParticipantAlias,
   Settlement,
   Trip,
 } from "@/domain/types";
@@ -26,6 +27,8 @@ process.env.AMAP_TEST_MODE = "1";
 process.env.BETTER_AUTH_URL = "http://localhost:3000";
 const s = await import("@/server/service");
 const tokens = await import("@/server/mcp-tokens");
+const { saveParticipantAlias } =
+  await import("@/server/participant-alias-service");
 const { insert, one, sqlite } = await import("@/server/db");
 const { POST: handle } = await import("@/app/api/mcp/route");
 const url = "http://localhost:3000/api/mcp";
@@ -200,6 +203,10 @@ describe("MCP authentication and transport", () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: "get_itinerary",
+          annotations: expect.objectContaining({ readOnlyHint: true }),
+        }),
+        expect.objectContaining({
+          name: "get_participants",
           annotations: expect.objectContaining({ readOnlyHint: true }),
         }),
         expect.objectContaining({
@@ -482,6 +489,118 @@ describe("MCP itinerary permissions and edits", () => {
       dayIds: [days[1].id, days[0].id],
     });
     expect(s.snapshot(trip.id, owner).days[0].id).toBe(days[1].id);
+  });
+});
+
+type Participants = {
+  tripId: string;
+  participants: Participant[];
+  participantAliases: ParticipantAlias[];
+};
+describe("MCP personal participant aliases", () => {
+  const tools = ["get_participants", "get_expenses"];
+
+  it("reads only the token owner's aliases for members and guests, including read-only viewers", async () => {
+    const { trip, access } = fixture();
+    s.joinInvite(
+      s.createInvite(trip.id, owner, { role: "viewer" }).token,
+      viewer,
+    );
+    const guestId = s.createParticipant(trip.id, owner, { name: "Guest" }).id;
+    const before = s.snapshot(trip.id, owner);
+    const member = before.participants.find((p) => p.userId === viewer.id)!;
+    const guest = before.participants.find((p) => p.id === guestId)!;
+    const ownerClient = await connect(access.token);
+    const viewerAccess = tokens.createMcpToken(viewer, {
+      name: "Read personal aliases",
+      tripId: trip.id,
+      permission: "read",
+    });
+    const viewerClient = await connect(viewerAccess.token);
+    for (const tool of tools) {
+      const data = await call<Participants>(viewerClient, tool, {
+        tripId: trip.id,
+      });
+      expect(data.participantAliases).toEqual([]);
+    }
+    for (const actor of [owner, viewer]) {
+      const aliases = [member, guest].map((participant) =>
+        saveParticipantAlias(trip.id, participant.id, actor, {
+          name: `${actor.id}-private-${participant.name}`,
+          expectedVersion: 0,
+        }),
+      );
+      const client = actor === owner ? ownerClient : viewerClient;
+      for (const tool of tools) {
+        const data = await call<Participants>(client, tool, {
+          tripId: trip.id,
+        });
+        expect(data.tripId).toBe(trip.id);
+        expect(data.participants).toEqual(before.participants);
+        expect(data.participantAliases).toHaveLength(2);
+        expect(data.participantAliases).toEqual(
+          expect.arrayContaining(aliases),
+        );
+        expect(JSON.stringify(data)).not.toContain("email");
+      }
+    }
+    const cleared = saveParticipantAlias(trip.id, member.id, owner, {
+      name: "",
+      expectedVersion: 1,
+    });
+    for (const tool of tools) {
+      const own = await call<Participants>(ownerClient, tool, {
+        tripId: trip.id,
+      });
+      expect(own.participantAliases).toContainEqual(cleared);
+      expect(JSON.stringify(own)).not.toContain("mcp-viewer-private-");
+      const other = await call<Participants>(viewerClient, tool, {
+        tripId: trip.id,
+      });
+      expect(other.participantAliases).toContainEqual({
+        participantId: member.id,
+        name: "mcp-viewer-private-Viewer",
+        version: 1,
+      });
+      expect(JSON.stringify(other)).not.toContain("mcp-owner-private-");
+    }
+    expect(s.snapshot(trip.id, owner)).toEqual(before);
+  });
+
+  it("enforces trip scope, rejects caller identity overrides and checks membership on every read", async () => {
+    const { trip, access } = fixture();
+    const other = s.createTrip(owner, { title: "Other alias trip" });
+    const foreignParticipant = s.snapshot(other.id, owner).participants[0];
+    saveParticipantAlias(other.id, foreignParticipant.id, owner, {
+      name: "Other trip private alias",
+      expectedVersion: 0,
+    });
+    const scoped = await connect(access.token);
+    s.joinInvite(
+      s.createInvite(trip.id, owner, { role: "viewer" }).token,
+      viewer,
+    );
+    const allTrips = tokens.createMcpToken(viewer, {
+      name: "Read accessible aliases",
+      permission: "read",
+    });
+    const reader = await connect(allTrips.token);
+    for (const tool of tools) {
+      await error(scoped, tool, { tripId: other.id }, "TOKEN_SCOPE");
+      await error(reader, tool, { tripId: other.id }, "NOT_FOUND");
+      await error(scoped, tool, { tripId: trip.id, userId: viewer.id });
+      const data = await call<Participants>(scoped, tool, {
+        tripId: trip.id,
+      });
+      expect(data.participantAliases).toEqual([]);
+      await call(reader, tool, { tripId: trip.id });
+    }
+    s.editMember(trip.id, viewer.id, owner, {
+      status: "inactive",
+      expectedVersion: 1,
+    });
+    for (const tool of tools)
+      await error(reader, tool, { tripId: trip.id }, "NOT_FOUND");
   });
 });
 
