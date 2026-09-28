@@ -70,7 +70,7 @@ export function MemberAliasEditor({
           />
         </Label>
         <p id="member-alias-help" className="text-sm muted">
-          仅你可见，用于此行程的成员列表。清空后恢复显示原姓名。
+          仅你可见，用于此行程的所有页面。清空后恢复显示原姓名。
         </p>
         <ErrorText error={error} />
         <div className="flex flex-wrap justify-end gap-2">

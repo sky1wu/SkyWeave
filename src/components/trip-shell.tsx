@@ -5,9 +5,9 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { useTripData } from "./trip-data";
+import { useTripData, useTripParticipantAliases } from "./trip-data";
 import Link from "next/link";
 import {
   CalendarDays,
@@ -22,6 +22,7 @@ import {
 import { api } from "@/lib/client";
 import type { Expense, Item, TripSection } from "@/domain/types";
 import { currencies } from "@/domain/money";
+import { withParticipantAliases } from "@/domain/participant-aliases";
 import { Brand, ErrorText, Modal } from "./ui";
 import { TripDateFields } from "./trip-date-fields";
 import { SettingsLink } from "./settings-link";
@@ -59,7 +60,17 @@ export function TripShell({
 }) {
   const { confirm, confirmation } = useConfirmation();
   const router = useRouter();
-  const { data, error: loadError, refresh } = useTripData(section);
+  const {
+    data: sourceSnapshot,
+    error: loadError,
+    refresh,
+  } = useTripData(section);
+  const aliases = useTripParticipantAliases();
+  const data = useMemo(
+    () =>
+      sourceSnapshot && withParticipantAliases(sourceSnapshot, aliases.aliases),
+    [sourceSnapshot, aliases.aliases],
+  );
   const [actionError, setError] = useState(""),
     [settings, setSettings] = useState(false),
     [expense, setExpense] = useState<Expense | "new" | null>(null),
@@ -74,7 +85,7 @@ export function TripShell({
     },
     [refresh],
   );
-  if (!data)
+  if (!data || !sourceSnapshot)
     return (
       <>
         <header className="site-header">
@@ -167,6 +178,18 @@ export function TripShell({
         </nav>
       </div>
       <div className="workspace-content">
+        {aliases.error && section !== "members" && (
+          <div className="px-6 pt-3">
+            <ErrorText error={aliases.error} />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void aliases.refresh()}
+            >
+              重试加载备注名
+            </Button>
+          </div>
+        )}
         {error && (
           <div className="px-6 pt-3">
             <ErrorText error={error} />
@@ -199,7 +222,13 @@ export function TripShell({
             }
           />
         )}{" "}
-        {section === "members" && <Members snapshot={data} mutate={mutate} />}{" "}
+        {section === "members" && (
+          <Members
+            snapshot={data}
+            sourceSnapshot={sourceSnapshot}
+            mutate={mutate}
+          />
+        )}{" "}
         {section === "activity" && (
           <ActivityPage snapshot={data} mutate={mutate} />
         )}{" "}

@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { withParticipantAliases } from "@/domain/participant-aliases";
+import { tripSections } from "@/domain/types";
 
 const directory = mkdtempSync(`${tmpdir()}/participant-aliases-`);
 process.env.DATABASE_PATH = `${directory}/test.sqlite`;
@@ -43,6 +45,75 @@ function fixture() {
 }
 
 describe("personal participant aliases", () => {
+  it("resolves names by identity across every section without mutating shared data", () => {
+    const { tripId, participantId } = fixture();
+    const guest = s.createParticipant(tripId, owner, { name: editor.name });
+    const untouched = s.createParticipant(tripId, owner, { name: editor.name });
+    s.addComment(tripId, editor, {
+      targetType: "trip",
+      targetId: tripId,
+      content: "Editor 的评论内容保留原文",
+    });
+    save(tripId, participantId, owner, { name: "小林", expectedVersion: 0 });
+    save(tripId, guest.id, owner, { name: "小陈", expectedVersion: 0 });
+    s.editMember(tripId, editor.id, owner, {
+      status: "inactive",
+      expectedVersion: 1,
+    });
+    const aliases = list(tripId, owner);
+    for (const section of tripSections) {
+      const source = s.snapshot(tripId, owner, section);
+      const before = structuredClone(source);
+      const display = withParticipantAliases(source, aliases);
+      expect(
+        display.participants.find((p) => p.id === participantId)?.name,
+      ).toBe("小林");
+      expect(display.participants.find((p) => p.id === guest.id)?.name).toBe(
+        "小陈",
+      );
+      expect(
+        display.participants.find((p) => p.id === untouched.id)?.name,
+      ).toBe(editor.name);
+      expect(display.members.find((m) => m.userId === editor.id)?.name).toBe(
+        "小林",
+      );
+      expect(
+        display.comments
+          .filter((c) => c.authorUserId === editor.id)
+          .map((c) => c.authorName),
+      ).toEqual(
+        source.comments
+          .filter((c) => c.authorUserId === editor.id)
+          .map(() => "小林"),
+      );
+      expect(
+        display.activity
+          .filter((a) => a.actorUserId === editor.id)
+          .map((a) => a.actorName),
+      ).toEqual(
+        source.activity
+          .filter((a) => a.actorUserId === editor.id)
+          .map(() => "小林"),
+      );
+      expect(display.comments.map((c) => c.content)).toEqual(
+        source.comments.map((c) => c.content),
+      );
+      expect(display.activity.map((a) => a.summary)).toEqual(
+        source.activity.map((a) => a.summary),
+      );
+      expect(source).toEqual(before);
+      expect(withParticipantAliases(source, null)).toBe(source);
+      expect(withParticipantAliases(source, list(tripId, viewer))).toBe(source);
+    }
+    for (const alias of aliases)
+      save(tripId, alias.participantId, owner, {
+        name: "",
+        expectedVersion: alias.version,
+      });
+    const source = s.snapshot(tripId, owner);
+    expect(withParticipantAliases(source, list(tripId, owner))).toBe(source);
+  });
+
   it("isolates every member's aliases, including viewers, without changing shared data or exports", () => {
     const { tripId, participantId } = fixture();
     const share = createItineraryShare(tripId, owner).share;

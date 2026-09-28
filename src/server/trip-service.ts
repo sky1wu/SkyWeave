@@ -83,12 +83,11 @@ export function snapshot(
             ? "summary"
             : "none",
       }),
-      participants: includes("plan", "view", "expenses", "members")
-        ? many<Participant>(
-            "SELECT * FROM trip_participants WHERE tripId = ? ORDER BY createdAt, id",
-            tripId,
-          )
-        : [],
+      // Every section needs participant IDs to resolve the viewer's private aliases.
+      participants: many<Participant>(
+        "SELECT * FROM trip_participants WHERE tripId = ? ORDER BY createdAt, id",
+        tripId,
+      ),
       members: many<Member>(
         "SELECT m.*, u.name, u.email FROM trip_members m JOIN users u ON u.id = m.userId WHERE m.tripId = ? ORDER BY m.joinedAt",
         tripId,

@@ -10,8 +10,12 @@ import {
 } from "react";
 import type { DayGeometry, DayPlan, TripSection } from "@/domain/types";
 import { TripStore } from "@/lib/trip-store";
+import { useParticipantAliases } from "@/hooks/use-participant-aliases";
 
 const TripData = createContext<TripStore | null>(null);
+const TripAliases = createContext<ReturnType<
+  typeof useParticipantAliases
+> | null>(null);
 export function TripDataProvider({
   tripId,
   children,
@@ -20,6 +24,7 @@ export function TripDataProvider({
   children: React.ReactNode;
 }) {
   const [store] = useState(() => new TripStore(tripId));
+  const aliases = useParticipantAliases(tripId);
   useEffect(() => {
     const events = new EventSource(`/api/trips/${tripId}/events`);
     const unsubscribe = store.subscribe(() => {
@@ -49,7 +54,17 @@ export function TripDataProvider({
       store.cancel();
     };
   }, [store, tripId]);
-  return <TripData.Provider value={store}>{children}</TripData.Provider>;
+  return (
+    <TripData.Provider value={store}>
+      <TripAliases.Provider value={aliases}>{children}</TripAliases.Provider>
+    </TripData.Provider>
+  );
+}
+
+export function useTripParticipantAliases() {
+  const aliases = useContext(TripAliases);
+  if (!aliases) throw new Error("TripDataProvider is required");
+  return aliases;
 }
 
 function useStore() {

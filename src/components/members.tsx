@@ -10,20 +10,22 @@ import type {
   Participant,
   ParticipantAlias,
 } from "@/domain/types";
-import { useParticipantAliases } from "@/hooks/use-participant-aliases";
+import { useTripParticipantAliases } from "./trip-data";
 import { MemberAliasEditor } from "./member-alias-editor";
 import type { Mutate } from "./planner";
 import { ErrorText, Modal } from "./ui";
 import { useConfirmation } from "./confirmation";
 export function Members({
   snapshot,
+  sourceSnapshot,
   mutate,
 }: {
   snapshot: TripSnapshot;
+  sourceSnapshot: TripSnapshot;
   mutate: Mutate;
 }) {
   const { confirm, confirmation } = useConfirmation();
-  const aliases = useParticipantAliases(snapshot.trip.id);
+  const aliases = useTripParticipantAliases();
   const [aliasTarget, setAliasTarget] = useState<{
     originalName: string;
     alias: ParticipantAlias;
@@ -120,11 +122,16 @@ export function Members({
       <div className="member-grid">
         {snapshot.participants.map((p) => {
           const m = snapshot.members.find((m) => m.userId === p.userId);
-          const originalName = m?.name ?? p.name;
+          const originalPerson = sourceSnapshot.participants.find(
+            (person) => person.id === p.id,
+          )!;
+          const originalName =
+            sourceSnapshot.members.find((member) => member.userId === p.userId)
+              ?.name ?? originalPerson.name;
           const alias = aliases.aliases?.find(
             (entry) => entry.participantId === p.id,
           );
-          const name = alias?.name || originalName;
+          const name = m?.name ?? p.name;
           return (
             <section className="member-card" key={p.id}>
               <div className="member-identity">
@@ -243,7 +250,7 @@ export function Members({
                       variant="outline"
                       type="button"
                       className="btn"
-                      onClick={() => setRename(p)}
+                      onClick={() => setRename(originalPerson)}
                     >
                       修改姓名
                     </Button>
