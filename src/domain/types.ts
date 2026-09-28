@@ -4,9 +4,22 @@ export type Day = typeof s.days.$inferSelect;
 type StoredItem = typeof s.items.$inferSelect;
 export type Item = Omit<
   StoredItem,
-  "branchId" | "parallelPlan" | "participantIds"
+  | "branchId"
+  | "parallelPlan"
+  | "participantIds"
+  | "joinParticipantIds"
+  | "leaveParticipantIds"
 > &
-  Partial<Pick<StoredItem, "branchId" | "parallelPlan" | "participantIds">>;
+  Partial<
+    Pick<
+      StoredItem,
+      | "branchId"
+      | "parallelPlan"
+      | "participantIds"
+      | "joinParticipantIds"
+      | "leaveParticipantIds"
+    >
+  >;
 export type PoolPlace = typeof s.poolPlaces.$inferSelect;
 type StoredLeg = typeof s.legs.$inferSelect;
 export type Leg = Omit<StoredLeg, "branchId" | "routeRole"> &

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { setParticipation } from "../participation-service";
 import { contextualDays } from "@/domain/parallel";
 import {
   saveParallel,
@@ -42,6 +43,13 @@ export const dispatchPlanning: ApiDispatcher = async ({
   user,
   data,
 }) => {
+  if (
+    root === "trips" &&
+    action === "participation" &&
+    path.length === 3 &&
+    method === "POST"
+  )
+    return setParticipation(id, user, data);
   if (root === "trips" && action === "parallel") {
     if (method === "POST" && !subId) return saveParallel(id, user, data);
     if (method === "POST" && subId === "transfer")

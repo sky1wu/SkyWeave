@@ -97,7 +97,13 @@ export function getDays(
     (leg) => leg.dayId,
   );
   const participantIds = [...items.values()].some((rows) =>
-    rows.some((item) => item.parallelPlan || item.participantIds != null),
+    rows.some(
+      (item) =>
+        item.parallelPlan ||
+        item.participantIds != null ||
+        item.joinParticipantIds?.length ||
+        item.leaveParticipantIds?.length,
+    ),
   )
     ? many<{ id: string }>(
         "SELECT id FROM trip_participants WHERE tripId=? AND status='active'",
@@ -294,7 +300,11 @@ export function rebuildLegs(dayId: string, actor: Actor) {
   if (
     days.some((day) =>
       day.items.some(
-        (item) => item.parallelPlan || item.participantIds != null,
+        (item) =>
+          item.parallelPlan ||
+          item.participantIds != null ||
+          item.joinParticipantIds?.length ||
+          item.leaveParticipantIds?.length,
       ),
     )
   )
@@ -304,7 +314,7 @@ export function touchRelatedDays(dayId: string, actor: Actor) {
   const day = requireValue(one<Day>("SELECT * FROM days WHERE id=?", dayId));
   if (
     one(
-      "SELECT i.id FROM day_items i JOIN days d ON d.id=i.dayId WHERE d.tripId=? AND (i.parallelPlan IS NOT NULL OR i.participantIds IS NOT NULL) LIMIT 1",
+      "SELECT i.id FROM day_items i JOIN days d ON d.id=i.dayId WHERE d.tripId=? AND (i.parallelPlan IS NOT NULL OR i.participantIds IS NOT NULL OR i.joinParticipantIds IS NOT NULL OR i.leaveParticipantIds IS NOT NULL) LIMIT 1",
       day.tripId,
     )
   )

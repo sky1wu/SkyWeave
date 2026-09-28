@@ -171,6 +171,8 @@ try {
 
 普通事项或独立交通可通过 `create_item` / `update_item` 的 `participantIds` 指定参加人员；非空数组仅安排所选同行者，`null` 恢复全部同行者（组内为本组全部成员）。先用 `get_participants` 获取 ID。个人时间与路线会跳过未参加的事项，费用分摊保持原样。
 
+`set_participation` 设置某人的全行程加入／离开节点，字段为 `participantId`、`joinItemId?`、`leaveItemId?`、`expectedDays`。省略保留、`null` 清除，两个节点均包含当前事项；需最新完整日期版本。设置新加入点会替换此人的旧分组加入设置。返回更新后的行程，个人路径、时间和路线同步生效，费用不变。
+
 ### 分头行动
 
 `create_item` / `update_item` 支持 `type: "parallel"`、`parallelPlan` 与 `branchId`。可嵌套分组、跨日设置集合点、按组指定 `joinItemId` / `joinPolicy`，并通过 `catchUpItemId` 设置迟到后改赴的后续会合点。先用 `get_participants` 获取同行者 ID；嵌套成员只能来自上一级分组，分组 ID 推荐 UUID。

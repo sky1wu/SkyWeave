@@ -28,6 +28,8 @@ const jsonFields = new Set([
   "transport",
   "parallelPlan",
   "participantIds",
+  "joinParticipantIds",
+  "leaveParticipantIds",
 ]);
 const booleanFields = new Set([
   "fixedTime",

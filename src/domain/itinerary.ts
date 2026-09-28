@@ -136,7 +136,13 @@ export function itineraryDays(
 ): ItineraryDay[] {
   const timelines = calculateTripTimelines(days, participantId);
   const fullGraph = days.some((day) =>
-    day.items.some((item) => item.parallelPlan || item.participantIds != null),
+    day.items.some(
+      (item) =>
+        item.parallelPlan ||
+        item.participantIds != null ||
+        item.joinParticipantIds?.length ||
+        item.leaveParticipantIds?.length,
+    ),
   )
     ? compilePlan(days)
     : null;
@@ -272,6 +278,15 @@ export function itineraryDays(
                 "info",
               );
             }
+            for (const [person, end] of graph.exits)
+              if (
+                end.itemId === item.id &&
+                (!participantId || participantId === person)
+              )
+                add(
+                  `${participants.find((p) => p.id === person)?.name ?? "同行者"}在此项结束后离开行程`,
+                  "info",
+                );
             if (entry.rendezvous) {
               if (item.startMinutes !== null)
                 add(

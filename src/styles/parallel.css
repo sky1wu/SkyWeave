@@ -428,3 +428,27 @@ button.item-participant-summary:focus-visible {
 .item-participants-field label {
   overflow-wrap: anywhere;
 }
+
+.participant-boundaries {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.participant-boundaries > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--primary);
+}
+.participant-boundaries > :not(summary) {
+  margin-top: 14px;
+}
+.participation-boundary-current {
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.participation-boundary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

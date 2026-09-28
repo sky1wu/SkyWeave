@@ -402,7 +402,9 @@ test("第三天加入的两组人员不会出现在前两天的谁参加摘要�
   const dialog = page.getByRole("dialog", { name: "谁参加", exact: true });
   await expect(dialog.getByLabel("参加人员")).toHaveValue("all");
   await expect(dialog).toContainText("实际参加：全程成员");
-  await expect(dialog).not.toContainText("第二组成员");
+  await expect(dialog.locator(".item-participants-field")).not.toContainText(
+    "第二组成员",
+  );
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   await page.getByTestId(`item-${first.id}`).screenshot({
     path: testInfo.outputPath("actual-attendees-before-joining.png"),

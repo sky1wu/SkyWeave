@@ -24,6 +24,7 @@ export interface ParticipationStart {
   dayId: string;
   arrivalMinutes?: number | null;
   seedItemId?: string;
+  direct?: boolean;
 }
 export interface PlanStep {
   itemId: string;
@@ -86,22 +87,32 @@ export function compilePlan(days: PlanDay[]) {
       });
     }
   const hasItemParticipants = all.some((item) => item.participantIds != null);
+  const hasBoundaries = all.some(
+    (item) =>
+      item.joinParticipantIds?.length || item.leaveParticipantIds?.length,
+  );
   const people = [
     ...new Set(
       [...branches.values()]
         .flatMap((b) => b.participantIds)
         .concat(
           hasItemParticipants ||
+            hasBoundaries ||
             [...branches.values()].some((branch) => branch.entrants?.length)
             ? orderedDays.flatMap((day) => day.participantIds ?? [])
             : [],
-          all.flatMap((item) => item.participantIds ?? []),
+          all.flatMap((item) => [
+            ...(item.participantIds ?? []),
+            ...(item.joinParticipantIds ?? []),
+            ...(item.leaveParticipantIds ?? []),
+          ]),
         ),
     ),
   ];
   if (!people.length) people.push("__all__");
   const paths = new Map<string, PlanStep[]>();
   const admissions = new Map<string, ParticipationStart>();
+  const exits = new Map<string, { itemId: string; dayId: string }>();
   for (const person of people) {
     const visiting = new Set<string>();
     function walk(scope: string): PlanStep[] {
@@ -366,6 +377,65 @@ export function compilePlan(days: PlanDay[]) {
           "同一人的分头行动段时间范围重叠，请调整集合点或使用嵌套分组",
         );
       }
+    const directJoins = all.filter((item) =>
+      item.joinParticipantIds?.includes(person),
+    );
+    const directLeaves = all.filter((item) =>
+      item.leaveParticipantIds?.includes(person),
+    );
+    if (directJoins.length > 1 || directLeaves.length > 1)
+      throw new Error("同一人只能设置一个加入点和一个离开点");
+    const directJoin = directJoins[0],
+      directLeave = directLeaves[0];
+    if (
+      directJoin &&
+      [...branches.values()].some((branch) =>
+        branch.entrants?.some((entry) => entry.participantId === person),
+      )
+    )
+      throw new Error("事项加入点与分组加入设置冲突，请重新设置参与范围");
+    const startIndex = directJoin
+      ? path.findIndex((step) => step.itemId === directJoin.id)
+      : 0;
+    const endIndex = directLeave
+      ? path.findIndex((step) => step.itemId === directLeave.id)
+      : path.length - 1;
+    if (directJoin && startIndex < 0)
+      throw new Error("加入点必须是此人的行程安排，请检查所属分组和参与者");
+    if (directLeave && endIndex < 0)
+      throw new Error("离开点必须是此人的行程安排，且不能早于加入点");
+    if (directLeave && endIndex < startIndex)
+      throw new Error("离开点不能早于加入点");
+    if (directJoin || directLeave)
+      path = path.slice(startIndex, endIndex + 1).map((step) => ({ ...step }));
+    if (directJoin) {
+      const rule: ParticipationStart = {
+        branchId: directJoin.branchId ?? "",
+        at: "departure",
+        itemId: directJoin.id,
+        dayId: directJoin.dayId,
+        direct: true,
+      };
+      admissions.set(person, rule);
+      path[0] = {
+        ...path[0],
+        reset: true,
+        disconnected: false,
+        admission: rule,
+        ...(path[0].join
+          ? { join: { ...path[0].join, catchUpItemId: undefined } }
+          : {}),
+      };
+    }
+    if (directLeave)
+      exits.set(person, { itemId: directLeave.id, dayId: directLeave.dayId });
+    const included = new Set(path.map((step) => step.itemId));
+    for (const step of path) {
+      if (step.join?.catchUpItemId && !included.has(step.join.catchUpItemId))
+        step.join = { ...step.join, catchUpItemId: undefined };
+      if (step.approach && !included.has(step.approach.targetId))
+        step.approach = undefined;
+    }
     paths.set(person, path);
   }
   const edges = new Map<string, Set<string>>();
@@ -492,5 +562,6 @@ export function compilePlan(days: PlanDay[]) {
     connections,
     recoveries,
     admissions,
+    exits,
   };
 }

@@ -16,7 +16,11 @@ export const fileTrip = v.tripInput.strip().extend({
   baseCurrencyLocked: z.boolean(),
 });
 export const filePlace = v.poolInput.strip().extend({ id: v.id });
-export const fileItem = v.itemInput.strip().extend({ id: v.id });
+export const fileItem = v.itemInput.strip().extend({
+  id: v.id,
+  joinParticipantIds: z.array(v.id).max(100).nullable().optional(),
+  leaveParticipantIds: z.array(v.id).max(100).nullable().optional(),
+});
 export const fileAlternative = z.object({
   id: v.id,
   provider: z.string().max(100),
@@ -100,6 +104,7 @@ export const tripFileSchema = z.object({
     z.literal(2),
     z.literal(3),
     z.literal(4),
+    z.literal(5),
     z.literal(TRIP_FILE_VERSION),
   ]),
   exportedAt: z.iso.datetime(),
@@ -131,6 +136,7 @@ export function parseTripFile(body: unknown): TripFile {
         body.version === 2 ||
         body.version === 3 ||
         body.version === 4 ||
+        body.version === 5 ||
         body.version === TRIP_FILE_VERSION,
       "暂不支持此行程文件版本，请使用当前版本导出的文件",
     );

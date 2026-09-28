@@ -48,6 +48,7 @@ export function calculateTripTimelines(
       entries: TimelineEntry[];
       departures: Record<string, number | null>;
       activeLegIds?: string[];
+      participationEnd?: { dayId: string; itemId: string; position: number };
       participationStart?: {
         dayId: string;
         position: number;
@@ -59,7 +60,11 @@ export function calculateTripTimelines(
   if (
     !days.some((day) =>
       day.items.some(
-        (item) => item.parallelPlan || item.participantIds != null,
+        (item) =>
+          item.parallelPlan ||
+          item.participantIds != null ||
+          item.joinParticipantIds?.length ||
+          item.leaveParticipantIds?.length,
       ),
     )
   ) {
@@ -215,7 +220,14 @@ export function calculateTripTimelines(
         const start = step.admission,
           branch = graph.branches.get(start.branchId)!;
         const startDay = byDay.get(start.dayId)!;
-        if (start.at === "meeting") {
+        if (start.direct) {
+          state = {
+            clock:
+              offset(item.dayId) +
+              (item.startMinutes ?? startDay.startMinutes) * 60,
+            first: !step.join,
+          };
+        } else if (start.at === "meeting") {
           const minutes = start.arrivalMinutes ?? item.startMinutes;
           state = {
             clock: minutes == null ? null : offset(item.dayId) + minutes * 60,
@@ -348,6 +360,19 @@ export function calculateTripTimelines(
           ? (policies.get(id) ?? "wait_all")
           : (step.join?.policy ?? step.approach?.join.policy),
       });
+    }
+    // Joining at a flexible shared stop follows that stop's existing schedule,
+    // rather than resetting the newcomer to the beginning of the day.
+    if (item.startMinutes === null && !item.transport) {
+      const existing = arrivals.filter((row) => !row.step.admission?.direct);
+      if (existing.length) {
+        const start = earliest(existing.map((row) => row.entry.start));
+        for (const row of arrivals.filter((row) => row.step.admission?.direct))
+          row.entry = calculateLinearTimeline(
+            { ...day, items: [absolute(item)], legs: [] },
+            { clock: start, hasArrival: true },
+          ).entries[0];
+      }
     }
     const gather = arrivals.some((a) => a.joinPolicy) || policies.has(id);
     const policy =
@@ -559,6 +584,15 @@ export function calculateTripTimelines(
       : departures;
     result.set(day.id, {
       entries: normalized,
+      ...(selectedPerson && graph.exits.has(selectedPerson)
+        ? {
+            participationEnd: {
+              ...graph.exits.get(selectedPerson)!,
+              position: byDay.get(graph.exits.get(selectedPerson)!.dayId)!
+                .position,
+            },
+          }
+        : {}),
       ...(selectedPerson && graph.admissions.has(selectedPerson)
         ? {
             participationStart: {

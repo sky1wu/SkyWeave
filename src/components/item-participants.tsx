@@ -5,7 +5,11 @@ import { Users, ChevronRight } from "lucide-react";
 import type { PlanBranch } from "@/domain/parallel";
 import { Button } from "./ui/button";
 import { Modal, ErrorText } from "./ui";
-import type { Item, Participant } from "@/domain/types";
+import {
+  ParticipantBoundaries,
+  type ParticipationChange,
+} from "./participant-boundaries";
+import type { DayPlan, Item, Participant } from "@/domain/types";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
 import { NativeSelect } from "./ui/native-select";
@@ -54,7 +58,7 @@ export function ItemParticipants({
         <p className="text-xs muted">
           {automaticParticipantIds !== undefined
             ? `实际参加：${automaticParticipantIds.length ? automaticParticipantIds.map((id) => participants.find((p) => p.id === id)?.name ?? "同行者").join("、") : "暂无参与者"}。`
-            : "自动按成员加入时间和所属路线确定参加人员。"}
+            : "自动按成员的加入、离开节点和所属路线确定参加人员。"}
         </p>
       )}
       {value !== null && (
@@ -81,7 +85,7 @@ export function ItemParticipants({
         </div>
       )}
       <p className="text-xs muted">
-        实际参加人员还会按加入时间和路线确定；设置只作用于这条安排，费用分摊保持原样。
+        实际参加人员还会按加入、离开节点和路线确定；此处只调整当前事项，费用分摊保持原样。
       </p>
     </fieldset>
   );
@@ -119,7 +123,7 @@ export function ItemParticipantSummary({
         ? "本组全部成员"
         : "全部同行者";
   const inheritance = restricted
-    ? "按加入时间与路线计算"
+    ? "按参与范围与路线计算"
     : branch
       ? item.participantIds
         ? branch.participantIds.some((id) => !item.participantIds!.includes(id))
@@ -134,6 +138,26 @@ export function ItemParticipantSummary({
       <span className="item-participant-value">
         {summary}
         {inheritance && <small>{inheritance}</small>}
+        {!!item.joinParticipantIds?.length && (
+          <small>
+            {item.joinParticipantIds
+              .map(
+                (id) => participants.find((p) => p.id === id)?.name ?? "同行者",
+              )
+              .join("、")}
+            从此处加入
+          </small>
+        )}
+        {!!item.leaveParticipantIds?.length && (
+          <small>
+            {item.leaveParticipantIds
+              .map(
+                (id) => participants.find((p) => p.id === id)?.name ?? "同行者",
+              )
+              .join("、")}
+            此项结束后离开
+          </small>
+        )}
       </span>
       {edit && <ChevronRight size={14} aria-hidden="true" />}
     </>
@@ -158,6 +182,8 @@ export function ItemParticipantSummary({
 
 export function ItemParticipantsEditor({
   item,
+  days,
+  saveParticipation,
   automaticParticipantIds,
   participants,
   branch,
@@ -165,6 +191,12 @@ export function ItemParticipantsEditor({
   save,
 }: {
   item: Item;
+  days: DayPlan[];
+  saveParticipation: (
+    data: ParticipationChange & {
+      expectedDays: { id: string; expectedVersion: number }[];
+    },
+  ) => Promise<unknown>;
   participants: Participant[];
   branch?: Pick<PlanBranch, "title" | "participantIds">;
   automaticParticipantIds?: string[];
@@ -175,14 +207,23 @@ export function ItemParticipantsEditor({
   }) => Promise<unknown>;
 }) {
   const [value, setValue] = useState(item.participantIds ?? null);
+  const [boundaryVersions] = useState(() =>
+    days.map((day) => ({ id: day.id, expectedVersion: day.version })),
+  );
+  const [rangeBusy, setRangeBusy] = useState(false);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
-    <Modal title="谁参加" close={close}>
+    <Modal
+      title="谁参加"
+      close={() => {
+        if (!busy && !rangeBusy) close();
+      }}
+    >
       <form
         onSubmit={async (event) => {
           event.preventDefault();
-          if (busy) return;
+          if (busy || rangeBusy) return;
           setError("");
           if (value?.length === 0) {
             setError("请至少选择一位参与者");
@@ -208,7 +249,7 @@ export function ItemParticipantsEditor({
             所属路线：{branch.title}。默认跟随本组成员，也可只选择本组部分成员。
           </p>
         )}
-        <fieldset disabled={busy}>
+        <fieldset disabled={busy || rangeBusy}>
           <ItemParticipants
             automaticParticipantIds={automaticParticipantIds}
             participants={participants.filter(
@@ -228,16 +269,32 @@ export function ItemParticipantsEditor({
           <Button
             type="button"
             variant="outline"
-            disabled={busy}
+            disabled={busy || rangeBusy}
             onClick={close}
           >
             取消
           </Button>
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy || rangeBusy}>
             {busy ? "保存中…" : "保存参与者"}
           </Button>
         </div>
       </form>
+      <ParticipantBoundaries
+        item={item}
+        days={days}
+        participants={participants.filter(
+          (person) => !branch || branch.participantIds.includes(person.id),
+        )}
+        disabled={
+          busy ||
+          JSON.stringify(value) !== JSON.stringify(item.participantIds ?? null)
+        }
+        save={(data) =>
+          saveParticipation({ ...data, expectedDays: boundaryVersions })
+        }
+        onBusyChange={setRangeBusy}
+        close={close}
+      />
     </Modal>
   );
 }

@@ -214,7 +214,7 @@ describe("item participants", () => {
         ?.participantIds,
     ).toEqual(f.people.slice(0, 2));
     const file = files.exportTripFile(f.tripId, actor);
-    expect(file.version).toBe(5);
+    expect(file.version).toBe(6);
     const imported = files.importTripFile(actor, file),
       restored = s.snapshot(imported.id, actor);
     const restoredFlight = restored.days[0].items.find(

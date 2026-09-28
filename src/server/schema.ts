@@ -242,6 +242,8 @@ export const items = sqliteTable(
     position: integer().notNull(),
     branchId: text(),
     participantIds: text({ mode: "json" }).$type<string[]>(),
+    joinParticipantIds: text({ mode: "json" }).$type<string[]>(),
+    leaveParticipantIds: text({ mode: "json" }).$type<string[]>(),
     parallelPlan: text({ mode: "json" }).$type<ParallelPlan>(),
     title: text().notNull(),
     description: text(),

@@ -1113,3 +1113,49 @@ it("supports atomic group planning and section copying through MCP and enforces 
   });
   expect(denied.isError).toBe(true);
 });
+
+it("MCP sets inclusive personal participation boundaries and enforces token write permission", async () => {
+  const f = fixture(),
+    client = await connect(f.access.token);
+  const person = s.createParticipant(f.trip.id, owner, {
+    name: "中途同行者",
+  }).id;
+  const start = s.createItem(f.days[0].id, owner, { title: "加入点" });
+  const end = s.createItem(f.days[1].id, owner, { title: "离开点" });
+  const expectedDays = () =>
+    s
+      .snapshot(f.trip.id, owner)
+      .days.map((day) => ({ id: day.id, expectedVersion: day.version }));
+  await call(client, "set_participation", {
+    tripId: f.trip.id,
+    participantId: person,
+    joinItemId: start.id,
+    leaveItemId: end.id,
+    expectedDays: expectedDays(),
+  });
+  expect(
+    s.getDay(f.days[0].id).items.find((i) => i.id === start.id)
+      ?.joinParticipantIds,
+  ).toEqual([person]);
+  expect(
+    s.getDay(f.days[1].id).items.find((i) => i.id === end.id)
+      ?.leaveParticipantIds,
+  ).toEqual([person]);
+  tokens.revokeMcpToken(owner, f.access.id);
+  const read = tokens.createMcpToken(owner, {
+    name: "Read-only boundaries",
+    tripId: f.trip.id,
+    permission: "read",
+  });
+  const readClient = await connect(read.token);
+  const response = await readClient.callTool({
+    name: "set_participation",
+    arguments: {
+      tripId: f.trip.id,
+      participantId: person,
+      leaveItemId: null,
+      expectedDays: expectedDays(),
+    },
+  });
+  expect(response.isError).toBe(true);
+});

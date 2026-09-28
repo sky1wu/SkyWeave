@@ -78,7 +78,13 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
       mapDays={visibleDays}
       filter={
         snapshot.days.some((day) =>
-          day.items.some((i) => i.parallelPlan || i.participantIds != null),
+          day.items.some(
+            (i) =>
+              i.parallelPlan ||
+              i.participantIds != null ||
+              i.joinParticipantIds?.length ||
+              i.leaveParticipantIds?.length,
+          ),
         ) ? (
           <>
             <ParticipantFilter
@@ -89,6 +95,7 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
             />
             {participantId && (
               <ParticipationNote
+                end={timelines.get(snapshot.days[0]?.id)?.participationEnd}
                 days={snapshot.days}
                 start={timelines.get(snapshot.days[0]?.id)?.participationStart}
               />

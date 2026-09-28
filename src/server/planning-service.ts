@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { syncGroupAdmissions } from "./participation-service";
 import { itemSourcePlaceIds } from "@/domain/planning";
 import { routeEndpoint } from "@/domain/transport";
 import type { Item, Leg } from "@/domain/types";
@@ -14,6 +15,7 @@ import {
   access,
   checkVersion,
   getDay,
+  getDays,
   log,
   rebuildLegs,
   revision,
@@ -140,6 +142,13 @@ export function createItem(dayId: string, actor: Actor, body: unknown) {
         ),
         "地点不属于此行程",
       );
+    if (data.parallelPlan)
+      syncGroupAdmissions(
+        getDays(day.tripId),
+        undefined,
+        data.parallelPlan,
+        actor,
+      );
     const id = uid();
     insert("day_items", {
       id,
@@ -191,6 +200,13 @@ export function editItem(itemId: string, actor: Actor, body: unknown) {
         "地点不属于此行程",
       );
     validItem({ ...item, ...data });
+    if (data.parallelPlan)
+      syncGroupAdmissions(
+        getDays(day.tripId),
+        item.parallelPlan,
+        data.parallelPlan,
+        actor,
+      );
     update("day_items", itemId, {
       ...data,
       version: item.version + 1,
@@ -261,6 +277,12 @@ export function deleteItem(itemId: string, actor: Actor, expected: number) {
     const day = getDay(item.dayId);
     access(day.tripId, actor, "edit");
     checkVersion(item, expected);
+    if (item.joinParticipantIds?.length || item.leaveParticipantIds?.length)
+      throw new AppError(
+        400,
+        "PARTICIPATION_BOUNDARY",
+        "此事项是成员的加入或离开点，请先在“谁参加”中清除或调整参与范围",
+      );
     if (
       item.parallelPlan &&
       day.items.some((child) =>

@@ -214,6 +214,29 @@ export function parallelTripError(
     return "分组标识不能重复或使用已有事项、同行者的标识";
   const joinPolicies = new Map<string, string>();
   for (const item of items) {
+    const boundaryPeople = [
+      ...(item.joinParticipantIds ?? []),
+      ...(item.leaveParticipantIds ?? []),
+    ];
+    if (boundaryPeople.length) {
+      if (item.type === "parallel") return "请在具体事项上设置加入或离开点";
+      for (const list of [item.joinParticipantIds, item.leaveParticipantIds])
+        if (list && (list.length > 100 || new Set(list).size !== list.length))
+          return "加入或离开人员不能重复";
+      if (people && boundaryPeople.some((id) => !people.has(id)))
+        return "加入或离开人员不属于此行程";
+      if (
+        item.participantIds &&
+        boundaryPeople.some((id) => !item.participantIds!.includes(id))
+      )
+        return "请先清除此人的加入或离开点，再取消其参加当前事项";
+      const parent = item.branchId ? byBranch.get(item.branchId) : undefined;
+      if (
+        parent &&
+        boundaryPeople.some((id) => !parent.participantIds.includes(id))
+      )
+        return "加入或离开人员必须属于当前分组";
+    }
     if (item.participantIds != null) {
       if (item.type === "parallel") return "分头行动段请通过分组设置成员";
       if (
@@ -395,6 +418,7 @@ export function participantDay(
     departures: Record<string, number | null>;
     activeLegIds?: string[];
     participationStart?: { position: number };
+    participationEnd?: { position: number };
   },
   includeSkipped = false,
 ): DayPlan {
@@ -408,8 +432,10 @@ export function participantDay(
         }
       : day;
   if (
-    timeline?.participationStart &&
-    day.position < timeline.participationStart.position
+    (timeline?.participationStart &&
+      day.position < timeline.participationStart.position) ||
+    (timeline?.participationEnd &&
+      day.position > timeline.participationEnd.position)
   )
     return {
       ...day,
@@ -429,7 +455,12 @@ export function participantDay(
       (!item.branchId || allowed.has(item.branchId)) &&
       (!timeline ||
         (!allowed.size &&
-          !planningItems(day).some((item) => item.participantIds != null)) ||
+          !planningItems(day).some(
+            (item) =>
+              item.participantIds != null ||
+              item.joinParticipantIds?.length ||
+              item.leaveParticipantIds?.length,
+          )) ||
         timeline.entries
           .find((entry) => entry.itemId === item.id)
           ?.people?.some(

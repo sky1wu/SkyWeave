@@ -72,23 +72,32 @@ export function ParticipantFilter({
 export function ParticipationNote({
   days,
   start,
+  end,
 }: {
   days: DayPlan[];
   start?: { dayId: string; itemId: string; at: "departure" | "meeting" };
+  end?: { dayId: string; itemId: string };
 }) {
-  if (!start) return null;
-  const day = days.find((day) => day.id === start.dayId),
-    item = days
-      .flatMap((day) => day.items)
-      .find((item) => item.id === start.itemId);
+  if (!start && !end) return null;
+  const all = days.flatMap((day) => day.items);
   return (
-    <p className="participation-note">
-      {day?.title} ·{" "}
-      {start.at === "meeting"
-        ? `在「${item?.title ?? "集合点"}」加入`
-        : `从「${item?.title ?? "本组出发地"}」开始参与`}
-      ；此前安排不计入个人行程。
-    </p>
+    <div className="participation-note">
+      {start && (
+        <p>
+          {days.find((day) => day.id === start.dayId)?.title} ·{" "}
+          {start.at === "meeting" ? "在" : "从"}「
+          {all.find((item) => item.id === start.itemId)?.title ?? "加入点"}
+          」开始参与；此前安排不计入个人行程。
+        </p>
+      )}
+      {end && (
+        <p>
+          {days.find((day) => day.id === end.dayId)?.title} ·「
+          {all.find((item) => item.id === end.itemId)?.title ?? "离开点"}
+          」结束后离开；之后安排不计入个人行程。
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -465,7 +474,13 @@ export function ParallelEditor({
                                 });
                               }}
                             >
-                              <option value="all">全程同行</option>
+                              <option value="all">
+                                {all.find((item) =>
+                                  item.joinParticipantIds?.includes(person.id),
+                                )
+                                  ? `从「${all.find((item) => item.joinParticipantIds?.includes(person.id))!.title}」加入（事项设置）`
+                                  : "全程同行"}
+                              </option>
                               <option value="departure">
                                 从本组出发地加入
                               </option>
@@ -474,6 +489,19 @@ export function ParallelEditor({
                               </option>
                             </NativeSelect>
                           </Label>
+                          {all.find((item) =>
+                            item.leaveParticipantIds?.includes(person.id),
+                          ) && (
+                            <p className="text-xs muted">
+                              在「
+                              {
+                                all.find((item) =>
+                                  item.leaveParticipantIds?.includes(person.id),
+                                )!.title
+                              }
+                              」结束后离开。
+                            </p>
+                          )}
                           {entrant?.at === "meeting" && (
                             <>
                               <TimeField

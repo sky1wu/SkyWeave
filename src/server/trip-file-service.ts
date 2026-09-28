@@ -137,6 +137,8 @@ export function importTripFile(actor: Actor, body: unknown) {
           sourcePlaceId: optionalRef(item.sourcePlaceId),
           branchId: optionalRef(item.branchId),
           participantIds: item.participantIds?.map(ref) ?? null,
+          joinParticipantIds: item.joinParticipantIds?.map(ref) ?? null,
+          leaveParticipantIds: item.leaveParticipantIds?.map(ref) ?? null,
           parallelPlan: item.parallelPlan
             ? {
                 ...item.parallelPlan,

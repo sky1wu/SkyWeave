@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { syncGroupAdmissions } from "./participation-service";
 import type { Item, PoolPlace } from "@/domain/types";
 import { parallelPlanInput, sectionDescendants } from "@/domain/parallel";
 import { one, insert, update, run } from "./db";
@@ -105,6 +106,7 @@ export function saveParallel(tripId: string, actor: Actor, body: unknown) {
       data.assignments.length
     )
       throw new AppError(400, "VALIDATION", "批量分组的事项不能重复");
+    syncGroupAdmissions(days, old?.parallelPlan, data.parallelPlan, actor);
     const id = old?.id ?? uid();
     const fields = {
       title: data.title,

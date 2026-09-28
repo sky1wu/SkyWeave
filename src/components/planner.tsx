@@ -265,7 +265,12 @@ export function Planner({
     day.items.some((item) => item.parallelPlan),
   );
   const hasPersonalItems = snapshot.days.some((day) =>
-    day.items.some((item) => item.participantIds != null),
+    day.items.some(
+      (item) =>
+        item.participantIds != null ||
+        item.joinParticipantIds?.length ||
+        item.leaveParticipantIds?.length,
+    ),
   );
   const editingBranch = snapshot.days
     .flatMap((day) => day.items)
@@ -576,6 +581,7 @@ export function Planner({
               )}
               {participantId && (
                 <ParticipationNote
+                  end={timelines.get(snapshot.days[0]?.id)?.participationEnd}
                   days={snapshot.days}
                   start={
                     timelines.get(snapshot.days[0]?.id)?.participationStart
@@ -908,7 +914,11 @@ export function Planner({
                             targetDay.position <
                               timeline.participationStart.position
                             ? "该成员尚未加入行程"
-                            : "该成员在本日没有安排"
+                            : timeline.participationEnd &&
+                                targetDay.position >
+                                  timeline.participationEnd.position
+                              ? "该成员已结束行程"
+                              : "该成员在本日没有安排"
                           : undefined
                       }
                       active={day?.id === targetDay.id}
@@ -1093,6 +1103,10 @@ export function Planner({
       )}
       {participantEditor && (
         <ItemParticipantsEditor
+          days={snapshot.days}
+          saveParticipation={(data) =>
+            mutate(`/trips/${snapshot.trip.id}/participation`, "POST", data)
+          }
           automaticParticipantIds={automaticParticipants}
           key={participantEditor.id}
           item={participantEditor}

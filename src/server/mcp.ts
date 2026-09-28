@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import { participationInput, setParticipation } from "./participation-service";
 import {
   saveParallel,
   transferParallel,
@@ -249,6 +250,18 @@ export function createMcpServer(principal: McpPrincipal) {
         dayInTrip(tripId, dayId);
         editDay(dayId, user, data);
         return dayResult(dayId);
+      }),
+  );
+  register(
+    "set_participation",
+    "设置某人的加入和离开事项；两个边界均包含当前事项。省略字段保留，null 清除对应限制；设置加入点会替换旧分组加入设置。expectedDays 必须是完整行程最新日期版本。",
+    { ...trip, ...participationInput.shape },
+    true,
+    ({ tripId, ...data }) =>
+      tx(() => {
+        mcpAccess(principal, tripId, true);
+        setParticipation(tripId, user, data);
+        return itinerary(tripId);
       }),
   );
   register(

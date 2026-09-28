@@ -18,7 +18,7 @@ import {
 
 function refreshParticipantRoutes(tripId: string, actor: Actor) {
   const first = one<{ id: string }>(
-    "SELECT d.id FROM days d JOIN day_items i ON i.dayId=d.id WHERE d.tripId=? AND i.participantIds IS NOT NULL LIMIT 1",
+    "SELECT d.id FROM days d JOIN day_items i ON i.dayId=d.id WHERE d.tripId=? AND (i.participantIds IS NOT NULL OR i.joinParticipantIds IS NOT NULL OR i.leaveParticipantIds IS NOT NULL) LIMIT 1",
     tripId,
   );
   if (first) {
@@ -139,6 +139,19 @@ export function deleteParticipant(
         400,
         "PARTICIPANT_HAS_PLANS",
         "此同行者已有事项安排，请先调整参与者，或改用停用以保留历史行程",
+      );
+    if (
+      one(
+        "SELECT i.id FROM day_items i JOIN days d ON d.id=i.dayId WHERE d.tripId=? AND (EXISTS (SELECT 1 FROM json_each(i.joinParticipantIds) WHERE value=?) OR EXISTS (SELECT 1 FROM json_each(i.leaveParticipantIds) WHERE value=?)) LIMIT 1",
+        tripId,
+        p.id,
+        p.id,
+      )
+    )
+      throw new AppError(
+        400,
+        "PARTICIPANT_HAS_PLANS",
+        "此同行者已有加入或离开节点，请先清除参与范围，或改用停用",
       );
     if (
       one("SELECT id FROM expenses WHERE payerParticipantId=? LIMIT 1", p.id) ||

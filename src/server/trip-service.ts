@@ -316,7 +316,16 @@ export function reorderDays(tripId: string, actor: Actor, body: unknown) {
       updatedByUserId: actor.id,
     });
     const planned = getDays(tripId, { items: true, routes: "none" });
-    if (planned.some((day) => day.items.some((item) => item.parallelPlan))) {
+    if (
+      planned.some((day) =>
+        day.items.some(
+          (item) =>
+            item.parallelPlan ||
+            item.joinParticipantIds?.length ||
+            item.leaveParticipantIds?.length,
+        ),
+      )
+    ) {
       const error = parallelTripError(planned);
       if (error)
         throw new AppError(
