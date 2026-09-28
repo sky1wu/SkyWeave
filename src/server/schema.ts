@@ -16,6 +16,13 @@ const revision = () => ({
   updatedAt: integer().notNull(),
   updatedByUserId: text().notNull(),
 });
+const routeModes = [
+  "walking",
+  "driving",
+  "cycling",
+  "transit",
+  "manual",
+] as const;
 export const users = sqliteTable("users", {
   id: text().primaryKey(),
   name: text().notNull(),
@@ -273,9 +280,7 @@ export const legs = sqliteTable(
     toItemId: text()
       .notNull()
       .references(() => items.id, { onDelete: "cascade" }),
-    mode: text({ enum: ["walking", "driving", "cycling", "transit", "manual"] })
-      .notNull()
-      .default("transit"),
+    mode: text({ enum: routeModes }).notNull().default("transit"),
     provider: text().notNull().default("amap"),
     selectedAlternativeId: text(),
     selectionSource: text().notNull().default("recommended"),
@@ -298,6 +303,37 @@ export const legs = sqliteTable(
       t.branchId,
       t.routeRole,
     ),
+  ],
+);
+export const tripRoutePreferences = sqliteTable("trip_route_preferences", {
+  tripId: text()
+    .primaryKey()
+    .references(() => trips.id, { onDelete: "cascade" }),
+  mode: text({ enum: routeModes }).notNull(),
+});
+export const legPreferences = sqliteTable(
+  "travel_leg_preferences",
+  {
+    fromItemId: text()
+      .notNull()
+      .references(() => items.id, { onDelete: "cascade" }),
+    toItemId: text()
+      .notNull()
+      .references(() => items.id, { onDelete: "cascade" }),
+    branchId: text().notNull().default(""),
+    routeRole: text({ enum: ["main", "catch_up"] })
+      .notNull()
+      .default("main"),
+    mode: text({ enum: routeModes }).notNull(),
+    manualDurationMinutes: integer(),
+    manualDistanceMeters: integer(),
+    manualDescription: text(),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.fromItemId, t.toItemId, t.branchId, t.routeRole],
+    }),
+    index("leg_preferences_to_item").on(t.toItemId),
   ],
 );
 export const alternatives = sqliteTable(

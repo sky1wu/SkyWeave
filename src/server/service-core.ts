@@ -15,6 +15,11 @@ import type {
 } from "@/domain/types";
 import { sqlite, one, many, run, insert } from "./db";
 import { AppError, conflict, requireValue } from "./errors";
+import {
+  defaultRouteMode,
+  rememberedLegSettings,
+  rememberLegSettings,
+} from "./route-preferences";
 
 export interface Actor {
   id: string;
@@ -225,6 +230,7 @@ export function rebuildLegs(dayId: string, actor: Actor) {
   if (error) throw new AppError(400, "VALIDATION", error);
   const pairs = tripRouteConnections(days);
   const old = days.flatMap((day) => day.legs);
+  const defaultMode = defaultRouteMode(owner.tripId);
   for (const leg of old)
     if (
       !pairs.some(
@@ -234,8 +240,10 @@ export function rebuildLegs(dayId: string, actor: Actor) {
           branchId === (leg.branchId ?? "") &&
           routeRole === (leg.routeRole ?? "main"),
       )
-    )
+    ) {
+      rememberLegSettings(leg);
       run("DELETE FROM travel_legs WHERE id=?", leg.id);
+    }
   for (const { from: a, to: b, branchId, routeRole } of pairs) {
     const existing = old.find(
       (leg) =>
@@ -257,6 +265,8 @@ export function rebuildLegs(dayId: string, actor: Actor) {
     }
     const from = routeEndpoint(a, "departure"),
       to = routeEndpoint(b, "arrival");
+    const settings = rememberedLegSettings(a.id, b.id, branchId, routeRole);
+    const mode = settings?.mode ?? defaultMode;
     insert("travel_legs", {
       id: uid(),
       dayId: b.dayId,
@@ -264,7 +274,11 @@ export function rebuildLegs(dayId: string, actor: Actor) {
       routeRole,
       fromItemId: a.id,
       toItemId: b.id,
-      ...(from.lat === to.lat && from.lng === to.lng
+      ...settings,
+      mode,
+      provider: mode === "manual" ? "manual" : "amap",
+      status: mode === "manual" ? "ready" : "pending",
+      ...(!settings && from.lat === to.lat && from.lng === to.lng
         ? {
             mode: "manual",
             provider: "manual",

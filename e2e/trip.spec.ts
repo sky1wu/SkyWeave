@@ -82,6 +82,74 @@ async function ready(page: Page, tripId: string) {
   await expect(page.getByText("算路中", { exact: true })).not.toBeVisible();
 }
 
+test("交通方式：插入删除后恢复原设置，连续新增和刷新后沿用上次选择", async ({
+  page,
+}) => {
+  await register(page, "RouteMemory");
+  const id = await createTrip(page, "交通方式记忆");
+  await searchAdd(page, "西安酒店");
+  await searchAdd(page, "西安SKP");
+  await ready(page, id);
+  const legs = page.locator(".leg-card");
+  await legs.first().getByRole("button").first().click();
+  await legs.first().getByLabel("交通方式").selectOption("walking");
+  await ready(page, id);
+  const original = (await call<TripSnapshot>(page, `/trips/${id}`)).days[0]
+    .legs[0];
+
+  await searchAdd(page, "大雁塔");
+  await ready(page, id);
+  await page.getByRole("button", { name: "拖动 大雁塔", exact: true }).focus();
+  await page.keyboard.press("Alt+ArrowUp");
+  await expect
+    .poll(
+      async () =>
+        (await call<TripSnapshot>(page, `/trips/${id}`)).days[0].items[1].title,
+    )
+    .toBe("大雁塔");
+  await ready(page, id);
+  await expect(legs).toHaveCount(2);
+  await expect(legs.locator(".leg-summary")).toContainText(["步行", "步行"]);
+  await legs.first().getByRole("button").first().click();
+  await legs.first().getByLabel("交通方式").selectOption("driving");
+  await ready(page, id);
+  await page.reload();
+  await page
+    .getByRole("button", { name: "大雁塔 更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "删除事项", exact: true }).click();
+  await page
+    .getByRole("alertdialog", { name: "确认删除", exact: true })
+    .getByRole("button", { name: "删除", exact: true })
+    .click();
+  await expect(legs).toHaveCount(1);
+  await expect(legs.first().locator(".leg-summary")).toContainText("步行");
+  await ready(page, id);
+  const restored = (await call<TripSnapshot>(page, `/trips/${id}`)).days[0]
+    .legs[0];
+  expect(restored).toMatchObject({
+    fromItemId: original.fromItemId,
+    toItemId: original.toItemId,
+    mode: "walking",
+  });
+
+  await page.reload();
+  await searchAdd(page, "钟楼");
+  await searchAdd(page, "大唐不夜城");
+  await ready(page, id);
+  await expect(legs.locator(".leg-summary")).toContainText([
+    "步行",
+    "驾车",
+    "驾车",
+  ]);
+  await page.reload();
+  await expect(legs.locator(".leg-summary")).toContainText([
+    "步行",
+    "驾车",
+    "驾车",
+  ]);
+});
+
 test("西安：搜索、四种交通、候选切换、键盘排序、手机视口与刷新", async ({
   page,
 }) => {

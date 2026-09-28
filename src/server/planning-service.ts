@@ -6,6 +6,11 @@ import { one, run, insert, update } from "./db";
 import { AppError, requireValue } from "./errors";
 import * as v from "./validation";
 import {
+  defaultRouteMode,
+  isAutomaticSamePlaceLeg,
+  rememberRouteMode,
+} from "./route-preferences";
+import {
   access,
   checkVersion,
   getDay,
@@ -210,6 +215,7 @@ export function editItem(itemId: string, actor: Actor, body: unknown) {
       );
     };
     if (endpointChanged("arrival") || endpointChanged("departure")) {
+      const defaultMode = defaultRouteMode(day.tripId);
       for (const leg of day.legs.filter(
         (l) =>
           (l.fromItemId === itemId && endpointChanged("departure")) ||
@@ -221,12 +227,13 @@ export function editItem(itemId: string, actor: Actor, body: unknown) {
           requestKey: null,
           status: "pending",
           version: leg.version + 1,
-          ...(leg.mode === "manual" &&
-          leg.manualDescription === "同一地点，无需移动"
+          ...(isAutomaticSamePlaceLeg(leg)
             ? {
-                mode: "transit",
-                provider: "amap",
+                mode: defaultMode,
+                provider: defaultMode === "manual" ? "manual" : "amap",
+                status: defaultMode === "manual" ? "ready" : "pending",
                 manualDurationMinutes: null,
+                manualDistanceMeters: null,
                 manualDescription: null,
               }
             : {}),
@@ -365,6 +372,7 @@ export function editLeg(legId: string, actor: Actor, body: unknown) {
       updatedAt: Date.now(),
       updatedByUserId: actor.id,
     });
+    if (data.mode) rememberRouteMode(day.tripId, data.mode);
     touchDay(day.id, actor);
     touchRelatedDays(day.id, actor);
     log(
