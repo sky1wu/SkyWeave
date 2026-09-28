@@ -373,3 +373,58 @@
   background: var(--muted);
   border-bottom: 1px solid var(--border);
 }
+
+/* People belong to an item; routes belong to a split-action section. */
+.item-participant-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 36px;
+  margin-top: 5px;
+  padding: 7px 0;
+  color: var(--muted-foreground);
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.6;
+  border-radius: 4px;
+}
+.item-participant-summary > svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.item-participant-label {
+  flex-shrink: 0;
+}
+.item-participant-value {
+  min-width: 0;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+.item-participant-value small {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+button.item-participant-summary .item-participant-value {
+  color: var(--primary);
+}
+button.item-participant-summary:hover .item-participant-value {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+button.item-participant-summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.item-participant-subject {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.item-participants-field {
+  min-width: 0;
+}
+.item-participants-field label {
+  overflow-wrap: anywhere;
+}

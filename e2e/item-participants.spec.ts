@@ -80,18 +80,39 @@ test("单条航班指定两人，其他人的时间、地图和导出不包含�
   );
   await page.goto(`/trips/${trip.id}/plan`);
   await page.getByRole("button", { name: "广州飞西安 更多操作" }).click();
-  await page.getByRole("menuitem", { name: "设置参与者", exact: true }).click();
+  await expect(
+    page.getByRole("menuitem", {
+      name: /设置参与者|从这里分头行动|在这里集合|移入某组路线/,
+    }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("button", {
+      name: "广州飞西安：谁参加，全部同行者",
+      exact: true,
+    })
+    .click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("参与范围").selectOption("selected");
-  await dialog.getByRole("button", { name: "保存交通", exact: true }).click();
+  await expect(dialog).toHaveAccessibleName("谁参加");
+  await expect(dialog.getByLabel("出发时间", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByLabel("行动段名称")).toHaveCount(0);
+  await dialog.getByLabel("参加人员").selectOption("selected");
+  await dialog.getByRole("button", { name: "保存参与者", exact: true }).click();
   await expect(dialog).toContainText("请至少选择一位参与者");
   await dialog.getByRole("checkbox", { name: "甲", exact: true }).check();
   await dialog.getByRole("checkbox", { name: "乙", exact: true }).check();
-  await dialog.getByRole("button", { name: "保存交通", exact: true }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(page.getByTestId(`item-${flight.id}`)).toContainText(
-    "参与者：甲、乙",
+  const saveRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "PATCH" &&
+      request.url().endsWith(`/api/items/${flight.id}`),
   );
+  await dialog.getByRole("button", { name: "保存参与者", exact: true }).click();
+  expect(Object.keys((await saveRequest).postDataJSON()).sort()).toEqual([
+    "expectedVersion",
+    "participantIds",
+  ]);
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByTestId(`item-${flight.id}`)).toContainText("甲、乙");
   const saved = await call<TripSnapshot>(page, `/trips/${trip.id}`);
   expect(
     saved.days[0].items.find((item) => item.id === flight.id)?.participantIds,
@@ -104,6 +125,9 @@ test("单条航班指定两人，其他人的时间、地图和导出不包含�
       manualDurationMinutes: 15,
     });
   await page.reload();
+  await page
+    .getByTestId(`item-${flight.id}`)
+    .screenshot({ path: testInfo.outputPath("participants-card.png") });
   await page.getByLabel("查看谁的行程").selectOption(other.id);
   await expect(page.getByTestId(`item-${flight.id}`)).toHaveCount(0);
   await expect(
@@ -121,7 +145,7 @@ test("单条航班指定两人，其他人的时间、地图和导出不包含�
   ).toHaveText("09:10");
   await page
     .getByTestId(`item-${flight.id}`)
-    .getByRole("button", { name: "编辑", exact: true })
+    .getByRole("button", { name: /广州飞西安：谁参加/ })
     .click();
   await expect(
     dialog.getByRole("checkbox", { name: "甲", exact: true }),
@@ -136,13 +160,13 @@ test("单条航班指定两人，其他人的时间、地图和导出不包含�
     )
     .toBe(true);
   await dialog
-    .getByRole("group", { name: "参与者", exact: true })
+    .getByRole("group", { name: "谁参加", exact: true })
     .scrollIntoViewIfNeeded();
   await page.screenshot({
     path: testInfo.outputPath("participants-mobile.png"),
     fullPage: true,
   });
-  await dialog.getByRole("button", { name: "保存交通", exact: true }).click();
+  await dialog.getByRole("button", { name: "保存参与者", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await page.setViewportSize({ width: 1440, height: 1000 });
   // Ordinary activities use the same selection without changing groups.
@@ -150,12 +174,12 @@ test("单条航班指定两人，其他人的时间、地图和导出不包含�
     .getByTestId(`item-${end.id}`)
     .getByRole("button", { name: "编辑", exact: true })
     .click();
-  await dialog.getByLabel("参与范围").selectOption("selected");
+  await dialog.getByLabel("参加人员").selectOption("selected");
   await dialog.getByRole("checkbox", { name: "丙", exact: true }).check();
   await dialog.getByRole("button", { name: "保存事项", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await page.getByLabel("查看谁的行程").selectOption(other.id);
-  await expect(page.getByTestId(`item-${end.id}`)).toContainText("参与者：丙");
+  await expect(page.getByTestId(`item-${end.id}`)).toContainText("丙");
   await page.getByRole("link", { name: "查看", exact: true }).click();
   await expect(page.locator(".itinerary-days")).toBeVisible();
   await page.getByLabel("查看谁的行程").selectOption(other.id);
@@ -168,4 +192,120 @@ test("单条航班指定两人，其他人的时间、地图和导出不包含�
     .click();
   const bytes = await readFile((await (await download).path())!);
   expect(bytes.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+});
+
+test("组内事项清楚显示继承与部分成员，人员弹窗支持取消和冲突恢复", async ({
+  page,
+}, testInfo) => {
+  await registerViaApi(page, {
+    name: "甲",
+    email: `group-people-${crypto.randomUUID()}@example.test`,
+    password: "Trip-test-password-2026",
+  });
+  const trip = await call<{ id: string }>(page, "/trips", "POST", {
+    title: "组内谁参加",
+    startDate: "2026-10-07",
+  });
+  const initial = await call<TripSnapshot>(page, `/trips/${trip.id}`),
+    dayId = initial.days[0].id;
+  const other = await call<{ id: string }>(
+    page,
+    `/trips/${trip.id}/participants`,
+    "POST",
+    { name: "乙" },
+  );
+  const third = await call<{ id: string }>(
+    page,
+    `/trips/${trip.id}/participants`,
+    "POST",
+    { name: "丙" },
+  );
+  const branches = [
+    {
+      id: crypto.randomUUID(),
+      title: "家人组",
+      participantIds: [initial.participants[0].id, other.id],
+      startMinutes: null,
+    },
+    {
+      id: crypto.randomUUID(),
+      title: "独行组",
+      participantIds: [third.id],
+      startMinutes: null,
+    },
+  ];
+  await call(page, `/days/${dayId}/items`, "POST", {
+    title: "下午分头",
+    type: "parallel",
+    parallelPlan: {
+      splitItemId: null,
+      joinItemId: null,
+      joinPolicy: "wait_all",
+      branches,
+    },
+  });
+  const item = await call<{ id: string }>(
+    page,
+    `/days/${dayId}/items`,
+    "POST",
+    { title: "参观博物馆", branchId: branches[0].id, notes: "原有说明" },
+  );
+  await page.goto(`/trips/${trip.id}/plan`);
+  const card = page.getByTestId(`item-${item.id}`),
+    picker = card.getByRole("button", { name: /参观博物馆：谁参加/ }),
+    dialog = page.getByRole("dialog", { name: "谁参加", exact: true });
+  await expect(picker).toContainText("本组全部成员");
+  await expect(picker).toContainText("跟随「家人组」");
+  await picker.focus();
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("参加人员").selectOption("selected");
+  await expect(
+    dialog.getByRole("checkbox", { name: "丙", exact: true }),
+  ).toHaveCount(0);
+  await dialog.getByRole("checkbox", { name: "甲", exact: true }).check();
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(picker).toBeFocused();
+  await expect(picker).toContainText("本组全部成员");
+  await picker.click();
+  await dialog.getByLabel("参加人员").selectOption("selected");
+  await dialog.getByRole("checkbox", { name: "甲", exact: true }).check();
+  await dialog.getByRole("button", { name: "保存参与者", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(picker).toContainText("本组部分成员");
+  await card.screenshot({
+    path: testInfo.outputPath("group-partial-members.png"),
+  });
+  const saved = await call<TripSnapshot>(page, `/trips/${trip.id}`);
+  expect(saved.days[0].items.find((i) => i.id === item.id)?.notes).toBe(
+    "原有说明",
+  );
+  expect(
+    saved.days[0].items.find((i) => i.parallelPlan)?.parallelPlan?.branches,
+  ).toEqual(branches);
+  await picker.click();
+  await dialog.getByLabel("参加人员").selectOption("all");
+  await dialog.getByRole("button", { name: "保存参与者", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(picker).toContainText("跟随「家人组」");
+  const restored = await call<TripSnapshot>(page, `/trips/${trip.id}`),
+    current = restored.days[0].items.find((i) => i.id === item.id)!;
+  expect(current.participantIds).toBeNull();
+  await picker.click();
+  await dialog.getByLabel("参加人员").selectOption("selected");
+  await dialog.getByRole("checkbox", { name: "乙", exact: true }).check();
+  await call(page, `/items/${item.id}`, "PATCH", {
+    expectedVersion: current.version,
+    notes: "协作者的新说明",
+  });
+  await dialog.getByRole("button", { name: "保存参与者", exact: true }).click();
+  await expect(dialog).toContainText("此内容已被其他成员修改");
+  await expect(
+    dialog.getByRole("checkbox", { name: "乙", exact: true }),
+  ).toBeChecked();
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await page.reload();
+  await expect(card).toContainText("协作者的新说明");
+  await expect(picker).toContainText("本组全部成员");
 });

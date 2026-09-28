@@ -213,8 +213,10 @@ test("在分组表单搜索或手动添加出发地，改动后清除旧保存�
     },
   );
   await page.goto(`/trips/${trip.id}/plan`);
-  await page.getByRole("button", { name: "下午集合 更多操作" }).click();
-  await page.getByRole("menuitem", { name: "在这里集合", exact: true }).click();
+  await page
+    .getByRole("button", { name: "向第 1 天添加分头行动", exact: true })
+    .click();
+  await page.getByLabel("集合地点", { exact: true }).selectOption(meet.id);
   const dialog = page.getByRole("dialog"),
     first = dialog.getByRole("group", { name: "1 组", exact: true });
   await first.getByLabel("1 组出发地点", { exact: true }).selectOption("new");

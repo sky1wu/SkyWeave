@@ -16,7 +16,6 @@ import {
   Clock3,
   AlertTriangle,
   ReceiptText,
-  Users,
 } from "lucide-react";
 import type { Item, Expense, Participant } from "@/domain/types";
 import { typeLabels } from "@/domain/types";
@@ -26,6 +25,8 @@ import { formatMoney } from "@/domain/money";
 import { FixedArrival } from "./fixed-arrival";
 import { cardDragListeners } from "./card-drag";
 import { PlaceCategory } from "./place-category";
+import type { PlanBranch } from "@/domain/parallel";
+import { ItemParticipantSummary } from "./item-participants";
 import { transportLabels } from "@/domain/transport";
 function formatStayDuration(minutes: number) {
   if (minutes <= 60) return `${minutes} 分钟`;
@@ -54,8 +55,8 @@ export function TimelineItem({
   hasPrevious,
   hasNext,
   compact = false,
-  split,
-  meet,
+  branch,
+  editParticipants,
   assign,
 }: {
   item: Item;
@@ -78,8 +79,8 @@ export function TimelineItem({
   hasPrevious: boolean;
   hasNext: boolean;
   compact?: boolean;
-  split?: () => void;
-  meet?: () => void;
+  branch?: Pick<PlanBranch, "title" | "participantIds">;
+  editParticipants: () => void;
   assign?: () => void;
 }) {
   const {
@@ -174,20 +175,9 @@ export function TimelineItem({
                   className="sw-item-menu w-44"
                   aria-label={`${item.title}操作`}
                 >
-                  <DropdownMenuItem onClick={edit}>设置参与者</DropdownMenuItem>
-                  {split && (
-                    <DropdownMenuItem onClick={split}>
-                      从这里分头行动
-                    </DropdownMenuItem>
-                  )}
-                  {meet && (
-                    <DropdownMenuItem onClick={meet}>
-                      在这里集合
-                    </DropdownMenuItem>
-                  )}
                   {assign && (
                     <DropdownMenuItem onClick={assign}>
-                      调整分组
+                      移入某组路线
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={copy}>复制事项</DropdownMenuItem>
@@ -223,6 +213,12 @@ export function TimelineItem({
             )}
           </div>
         </div>
+        <ItemParticipantSummary
+          item={item}
+          participants={participants}
+          branch={branch}
+          edit={editable ? editParticipants : undefined}
+        />
         {item.transport ? (
           <div className="transport-card-endpoints">
             <div>
@@ -251,18 +247,6 @@ export function TimelineItem({
           item.address && <p className="item-address">{item.address}</p>
         )}
         <div className="item-meta">
-          {item.participantIds && (
-            <span>
-              <Users size={12} />
-              参与者：
-              {item.participantIds
-                .map(
-                  (id) =>
-                    participants.find((p) => p.id === id)?.name ?? "同行者",
-                )
-                .join("、")}
-            </span>
-          )}
           <PlaceCategory
             name={
               item.transport

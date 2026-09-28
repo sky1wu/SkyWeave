@@ -43,11 +43,11 @@ test("批量拆分现有安排、组内再分开、跨日复制与整段移动",
     coffee = await create("咖啡馆"),
     meet = await create("次日会合", 1);
   await page.goto(`/trips/${trip.id}/plan`);
-  await page.getByRole("button", { name: "出发酒店 更多操作" }).click();
   await page
-    .getByRole("menuitem", { name: "从这里分头行动", exact: true })
+    .getByRole("button", { name: "向第 1 天添加分头行动", exact: true })
     .click();
   const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("分开地点", { exact: true }).selectOption(hotel.id);
   await dialog.getByLabel("行动段名称").fill("两日分头");
   await dialog.getByLabel("第 1 组名称").fill("家人组");
   await dialog.getByLabel("第 2 组名称").fill("独行组");

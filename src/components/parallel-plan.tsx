@@ -245,6 +245,9 @@ export function ParallelEditor({
           }
         }}
       >
+        <p className="text-sm muted">
+          为同一段行程安排多组路线，并设置各自出发和集合地点。只有一条安排需要选人时，可直接点击事项卡片上的“谁参加”。
+        </p>
         <ErrorText error={error} />
         {parent && (
           <p className="parallel-boundary">

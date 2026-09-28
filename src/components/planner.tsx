@@ -7,7 +7,6 @@ import {
   contextualDays,
   dayRoots,
   displayItems,
-  mainItems,
   participantDay,
 } from "@/domain/parallel";
 import {
@@ -46,6 +45,7 @@ import { placeCategories } from "@/domain/planning";
 import { ItemEditor, itemPayload, TimeField, readTime } from "./item-editor";
 import { TripMap, type MapFocus } from "./map";
 import { LegCard } from "./leg-card";
+import { ItemParticipantsEditor } from "./item-participants";
 import { TimelineItem } from "./timeline-item";
 import { DayTabs } from "./day-tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -205,6 +205,7 @@ export function Planner({
     branchId?: string | null;
     initial?: { splitItemId: string | null; joinItemId: string | null };
   } | null>(null);
+  const [participantEditor, setParticipantEditor] = useState<Item | null>(null);
   const [assignment, setAssignment] = useState<Item | null>(null);
   const [personFilter, setPersonFilter] = useState("");
   const participantId =
@@ -647,66 +648,15 @@ export function Planner({
                         />
                         <TimelineItem
                           participants={snapshot.participants}
-                          assign={() => setAssignment(item)}
-                          split={
-                            item.type !== "note"
+                          branch={branchesOf(targetDay).find(
+                            (branch) => branch.id === item.branchId,
+                          )}
+                          editParticipants={() => setParticipantEditor(item)}
+                          assign={
+                            branchesOf(targetDay).length
                               ? () => {
-                                  const common = snapshot.days
-                                    .flatMap((d) => d.items)
-                                    .filter(
-                                      (i) =>
-                                        (i.branchId ?? null) ===
-                                          (item.branchId ?? null) &&
-                                        i.type !== "note",
-                                    );
-                                  const next =
-                                    common[
-                                      common.findIndex(
-                                        (i) => i.id === item.id,
-                                      ) + 1
-                                    ];
-                                  setParallelEditor({
-                                    dayId: item.dayId,
-                                    branchId: item.branchId ?? null,
-                                    initial: {
-                                      splitItemId: item.id,
-                                      joinItemId:
-                                        next?.type !== "parallel"
-                                          ? (next?.id ?? null)
-                                          : null,
-                                    },
-                                  });
-                                }
-                              : undefined
-                          }
-                          meet={
-                            item.type !== "note"
-                              ? () => {
-                                  const common = snapshot.days
-                                    .flatMap((d) => d.items)
-                                    .filter(
-                                      (i) =>
-                                        (i.branchId ?? null) ===
-                                          (item.branchId ?? null) &&
-                                        i.type !== "note",
-                                    );
-                                  const previous =
-                                    common[
-                                      common.findIndex(
-                                        (i) => i.id === item.id,
-                                      ) - 1
-                                    ];
-                                  setParallelEditor({
-                                    dayId: item.dayId,
-                                    branchId: item.branchId ?? null,
-                                    initial: {
-                                      splitItemId:
-                                        previous?.type !== "parallel"
-                                          ? (previous?.id ?? null)
-                                          : null,
-                                      joinItemId: item.id,
-                                    },
-                                  });
+                                  setError("");
+                                  setAssignment(item);
                                 }
                               : undefined
                           }
@@ -956,21 +906,7 @@ export function Planner({
                       }
                       addParallel={
                         editable
-                          ? () => {
-                              const last = mainItems(targetDay)
-                                .filter((i) => i.type !== "note")
-                                .at(-1);
-                              setParallelEditor({
-                                dayId: targetDay.id,
-                                initial: {
-                                  splitItemId:
-                                    last?.type !== "parallel"
-                                      ? (last?.id ?? null)
-                                      : null,
-                                  joinItemId: null,
-                                },
-                              });
-                            }
+                          ? () => setParallelEditor({ dayId: targetDay.id })
                           : undefined
                       }
                       billCount={
@@ -1130,9 +1066,23 @@ export function Planner({
           }
         />
       )}
+      {participantEditor && (
+        <ItemParticipantsEditor
+          key={participantEditor.id}
+          item={participantEditor}
+          participants={snapshot.participants}
+          branch={branchesOf(
+            planDays.find((day) => day.id === participantEditor.dayId)!,
+          ).find((branch) => branch.id === participantEditor.branchId)}
+          close={() => setParticipantEditor(null)}
+          save={(data) =>
+            mutate(`/items/${participantEditor.id}`, "PATCH", data)
+          }
+        />
+      )}
       {assignment && (
         <Modal
-          title={`调整「${assignment.title}」的分组`}
+          title={`将「${assignment.title}」移入路线`}
           close={() => setAssignment(null)}
         >
           <form
@@ -1149,14 +1099,17 @@ export function Planner({
               });
             }}
           >
+            <p className="text-sm muted">
+              移入某组后，默认由本组成员参加；单独指定的参与者会保留，且需属于目标组。
+            </p>
             <ErrorText error={error} />
             <Label>
-              所属安排
+              目标路线
               <NativeSelect
                 name="branchId"
                 defaultValue={assignment.branchId ?? ""}
               >
-                <option value="">共同时间线</option>
+                <option value="">共同安排</option>
                 {branchesOf(
                   planDays.find((d) => d.id === assignment.dayId)!,
                 ).map((b) => (
@@ -1172,7 +1125,7 @@ export function Planner({
               </NativeSelect>
             </Label>
             <Button type="submit" className="btn primary">
-              保存分组
+              移入路线
             </Button>
           </form>
         </Modal>

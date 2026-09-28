@@ -66,9 +66,11 @@ test("分头出发、集合等待、个人筛选、手机布局与导出", async
     { title: "萧山机场", lat: 30.23, lng: 120.43 },
   );
   await page.goto(`/trips/${trip.id}/plan`);
-  await page.getByRole("button", { name: "湖畔餐厅 更多操作" }).click();
-  await page.getByRole("menuitem", { name: "在这里集合", exact: true }).click();
+  await page
+    .getByRole("button", { name: "向第 1 天添加分头行动", exact: true })
+    .click();
   const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("集合地点", { exact: true }).selectOption(meeting.id);
   await dialog.getByLabel("行动段名称").fill("上午各自出发");
   await dialog.getByLabel("第 1 组名称").fill("铁路组");
   await dialog.getByLabel("第 2 组名称").fill("航空组");
@@ -181,10 +183,12 @@ test("从共同起点分开，拖动事项到另一组并保存", async ({ page 
     lng: 120.1,
   });
   await page.goto(`/trips/${trip.id}/plan`);
-  await page.getByRole("button", { name: "共同酒店 更多操作" }).click();
   await page
-    .getByRole("menuitem", { name: "从这里分头行动", exact: true })
+    .getByRole("button", { name: "向第 1 天添加分头行动", exact: true })
     .click();
+  await page
+    .getByLabel("分开地点", { exact: true })
+    .selectOption({ label: "第 1 天 · 共同酒店" });
   await page.getByRole("button", { name: "保存分头行动" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const section = (await call<DayPlan>(page, `/days/${dayId}`)).items.find(
@@ -233,8 +237,10 @@ test("从共同起点分开，拖动事项到另一组并保存", async ({ page 
   await expect(firstLane.locator(".timeline-item")).toHaveCount(0);
   await expect(secondLane.locator(".timeline-item")).toHaveCount(2);
   await secondLane.getByRole("button", { name: "博物馆 更多操作" }).click();
-  await page.getByRole("menuitem", { name: "调整分组", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "移入某组路线", exact: true })
+    .click();
   await page.getByRole("dialog").getByRole("combobox").selectOption(a.id);
-  await page.getByRole("button", { name: "保存分组", exact: true }).click();
+  await page.getByRole("button", { name: "移入路线", exact: true }).click();
   await expect(firstLane.locator(".item-title")).toHaveText("博物馆");
 });
