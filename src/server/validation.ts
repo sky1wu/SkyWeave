@@ -33,6 +33,7 @@ export const itemInput = z.strictObject({
   title,
   branchId: id.nullable().optional(),
   parallelPlan: parallelPlanInput.nullable().optional(),
+  participantIds: z.array(id).min(1).max(100).nullable().optional(),
   transport: transportInput.nullable().optional(),
   sourcePlaceId: id.nullable().optional(),
   placeCategory: z.string().trim().min(1).max(40).optional(),

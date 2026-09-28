@@ -27,6 +27,7 @@ const jsonFields = new Set([
   "splitMeta",
   "transport",
   "parallelPlan",
+  "participantIds",
 ]);
 const booleanFields = new Set([
   "fixedTime",

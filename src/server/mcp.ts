@@ -277,7 +277,7 @@ export function createMcpServer(principal: McpPrincipal) {
   );
   register(
     "create_item",
-    "新增事项。分头行动使用 type=parallel 和 parallelPlan：splitItemId/joinItemId 为相邻共同事项或 null，branches 至少两组且人员不重叠。组内事项填写 branchId；同行者用 participantId。行动段按锚点插入，其余事项追加。lat/lng 必须同时提供。",
+    "新增事项。普通事项可用 participantIds 指定参与者；省略或 null 表示所属组或全行程的全部人员。分头行动使用 type=parallel 和 parallelPlan：splitItemId/joinItemId 为相邻共同事项或 null，branches 至少两组且人员不重叠。组内事项填写 branchId；同行者用 participantId。行动段按锚点插入，其余事项追加。lat/lng 必须同时提供。",
     {
       ...day,
       expectedDayVersion: v.version,
@@ -295,7 +295,7 @@ export function createMcpServer(principal: McpPrincipal) {
   );
   register(
     "update_item",
-    "局部修改事项；省略的字段保持原值，支持固定时间、停留时长、备注和独立交通。expectedVersion 使用 Item 的 version。",
+    "局部修改事项；省略的字段保持原值，支持固定时间、停留时长、备注、独立交通和 participantIds（非空参与者 ID 数组；null 恢复全部人员）。expectedVersion 使用 Item 的 version。",
     {
       ...item,
       ...expected,

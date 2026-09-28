@@ -214,6 +214,23 @@ export function parallelTripError(
     return "分组标识不能重复或使用已有事项、同行者的标识";
   const joinPolicies = new Map<string, string>();
   for (const item of items) {
+    if (item.participantIds != null) {
+      if (item.type === "parallel") return "分头行动段请通过分组设置成员";
+      if (
+        !item.participantIds.length ||
+        item.participantIds.length > 100 ||
+        new Set(item.participantIds).size !== item.participantIds.length
+      )
+        return "事项参与者至少选择一人且不能重复";
+      if (people && item.participantIds.some((id) => !people.has(id)))
+        return "事项参与者不属于此行程";
+      const parent = item.branchId ? byBranch.get(item.branchId) : undefined;
+      if (
+        parent &&
+        item.participantIds.some((id) => !parent.participantIds.includes(id))
+      )
+        return "组内事项的参与者只能选择本组成员";
+    }
     if (item.branchId && !byBranch.has(item.branchId))
       return "事项所属分组不存在或不属于此行程";
     if (
@@ -269,6 +286,21 @@ export function parallelTripError(
     )
       return "分开点必须在行动段之前";
     for (const b of plan.branches) {
+      const requiredPoints = [
+        b.departureItemId === undefined ? plan.splitItemId : b.departureItemId,
+        b.joinItemId === undefined ? plan.joinItemId : b.joinItemId,
+        b.catchUpItemId,
+      ];
+      for (const id of requiredPoints) {
+        const point = id ? byId.get(id) : undefined;
+        if (
+          point?.participantIds &&
+          b.participantIds.some(
+            (person) => !point.participantIds!.includes(person),
+          )
+        )
+          return `「${point.title}」是「${b.title}」的出发或集合点，参与者必须包含该组全部成员`;
+      }
       if (b.departureItemId) {
         const departure = byId.get(b.departureItemId);
         if (
@@ -393,9 +425,11 @@ export function participantDay(
   );
   const items = day.items.filter(
     (item) =>
+      (!item.participantIds || item.participantIds.includes(participantId)) &&
       (!item.branchId || allowed.has(item.branchId)) &&
       (!timeline ||
-        !allowed.size ||
+        (!allowed.size &&
+          !planningItems(day).some((item) => item.participantIds != null)) ||
         timeline.entries
           .find((entry) => entry.itemId === item.id)
           ?.people?.some(
@@ -416,6 +450,7 @@ export function participantDay(
     ],
     legs: day.legs.filter(
       (leg) =>
+        items.some((item) => item.id === leg.toItemId) &&
         (!leg.branchId || allowed.has(leg.branchId)) &&
         (!timeline || Object.hasOwn(timeline.departures, leg.id)),
     ),

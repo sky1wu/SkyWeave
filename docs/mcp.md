@@ -169,6 +169,8 @@ try {
 远程使用时配置正确的 `BETTER_AUTH_URL`，通过 HTTPS 连接，并让反向代理保留 Authorization 请求头。带 Origin 的 MCP 请求仅接受该配置地址的 Origin；普通 Agent 请求可不带 Origin。
 
 
+普通事项或独立交通可通过 `create_item` / `update_item` 的 `participantIds` 指定参加人员；非空数组仅安排所选同行者，`null` 恢复全部同行者（组内为本组全部成员）。先用 `get_participants` 获取 ID。个人时间与路线会跳过未参加的事项，费用分摊保持原样。
+
 ### 分头行动
 
 `create_item` / `update_item` 支持 `type: "parallel"`、`parallelPlan` 与 `branchId`。可嵌套分组、跨日设置集合点、按组指定 `joinItemId` / `joinPolicy`，并通过 `catchUpItemId` 设置迟到后改赴的后续会合点。先用 `get_participants` 获取同行者 ID；嵌套成员只能来自上一级分组，分组 ID 推荐 UUID。

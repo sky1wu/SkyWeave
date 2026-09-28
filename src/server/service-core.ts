@@ -92,7 +92,7 @@ export function getDays(
     (leg) => leg.dayId,
   );
   const participantIds = [...items.values()].some((rows) =>
-    rows.some((item) => item.parallelPlan),
+    rows.some((item) => item.parallelPlan || item.participantIds != null),
   )
     ? many<{ id: string }>(
         "SELECT id FROM trip_participants WHERE tripId=? AND status='active'",
@@ -277,14 +277,20 @@ export function rebuildLegs(dayId: string, actor: Actor) {
       ...revision(actor),
     });
   }
-  if (days.some((day) => day.items.some((item) => item.parallelPlan)))
+  if (
+    days.some((day) =>
+      day.items.some(
+        (item) => item.parallelPlan || item.participantIds != null,
+      ),
+    )
+  )
     for (const day of days) if (day.id !== dayId) touchDay(day.id, actor);
 }
 export function touchRelatedDays(dayId: string, actor: Actor) {
   const day = requireValue(one<Day>("SELECT * FROM days WHERE id=?", dayId));
   if (
     one(
-      "SELECT i.id FROM day_items i JOIN days d ON d.id=i.dayId WHERE d.tripId=? AND i.parallelPlan IS NOT NULL LIMIT 1",
+      "SELECT i.id FROM day_items i JOIN days d ON d.id=i.dayId WHERE d.tripId=? AND (i.parallelPlan IS NOT NULL OR i.participantIds IS NOT NULL) LIMIT 1",
       day.tripId,
     )
   )

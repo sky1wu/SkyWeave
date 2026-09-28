@@ -56,7 +56,13 @@ export function calculateTripTimelines(
       };
     }
   >();
-  if (!days.some((day) => day.items.some((item) => item.parallelPlan))) {
+  if (
+    !days.some((day) =>
+      day.items.some(
+        (item) => item.parallelPlan || item.participantIds != null,
+      ),
+    )
+  ) {
     for (const day of days) result.set(day.id, calculateLinearTimeline(day));
     return result;
   }

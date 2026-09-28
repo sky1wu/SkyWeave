@@ -136,7 +136,7 @@ export function itineraryDays(
 ): ItineraryDay[] {
   const timelines = calculateTripTimelines(days, participantId);
   const fullGraph = days.some((day) =>
-    day.items.some((item) => item.parallelPlan),
+    day.items.some((item) => item.parallelPlan || item.participantIds != null),
   )
     ? compilePlan(days)
     : null;
@@ -224,6 +224,11 @@ export function itineraryDays(
                 "info",
               );
             }
+            if (item.participantIds)
+              add(
+                `参与者：${item.participantIds.map((id) => participants.find((p) => p.id === id)?.name ?? "同行者").join("、")}`,
+                "info",
+              );
             add(item.description, "note");
             add(item.notes, "note");
             const branch = branches.find((b) => b.id === item.branchId);

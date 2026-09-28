@@ -478,7 +478,7 @@ describe("parallel editing and portable projections", () => {
   it("round-trips groups, people, shared anchors and per-branch routes with fresh IDs", () => {
     const f = fixture({ split: true });
     const file = files.exportTripFile(f.tripId, actor);
-    expect(file.version).toBe(4);
+    expect(file.version).toBe(5);
     const imported = files.importTripFile(actor, file);
     const restored = s.snapshot(imported.id, actor);
     const marker = restored.days[0].items.find((i) => i.parallelPlan)!;

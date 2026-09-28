@@ -393,7 +393,7 @@ it("remaps explicit origins and mid-trip participants in portable files and sect
     },
   );
   const file = files.exportTripFile(f.id, actor);
-  expect(file.version).toBe(4);
+  expect(file.version).toBe(5);
   const imported = files.importTripFile(actor, file),
     restored = core.getDays(imported.id);
   const section = restored[0].items.find((i) => i.parallelPlan)!;

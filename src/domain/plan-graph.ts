@@ -85,14 +85,17 @@ export function compilePlan(days: PlanDay[]) {
         policy: branch.joinPolicy ?? item.parallelPlan!.joinPolicy,
       });
     }
+  const hasItemParticipants = all.some((item) => item.participantIds != null);
   const people = [
     ...new Set(
       [...branches.values()]
         .flatMap((b) => b.participantIds)
         .concat(
-          [...branches.values()].some((branch) => branch.entrants?.length)
+          hasItemParticipants ||
+            [...branches.values()].some((branch) => branch.entrants?.length)
             ? orderedDays.flatMap((day) => day.participantIds ?? [])
             : [],
+          all.flatMap((item) => item.participantIds ?? []),
         ),
     ),
   ];
@@ -113,6 +116,10 @@ export function compilePlan(days: PlanDay[]) {
       while (index < list.length) {
         const item = list[index];
         if (!item.parallelPlan) {
+          if (item.participantIds && !item.participantIds.includes(person)) {
+            index++;
+            continue;
+          }
           const previous = result.at(-1);
           const newDay =
             !scope &&
@@ -175,7 +182,12 @@ export function compilePlan(days: PlanDay[]) {
           };
           const notes = list
             .slice(index + 1, at)
-            .filter((candidate) => candidate.type === "note");
+            .filter(
+              (candidate) =>
+                candidate.type === "note" &&
+                (!candidate.participantIds ||
+                  candidate.participantIds.includes(person)),
+            );
           for (const [noteIndex, note] of notes.entries())
             result.push({
               itemId: note.id,

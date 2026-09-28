@@ -241,6 +241,19 @@ export function Planner({
   const hasParallel = snapshot.days.some((day) =>
     day.items.some((item) => item.parallelPlan),
   );
+  const hasPersonalItems = snapshot.days.some((day) =>
+    day.items.some((item) => item.participantIds != null),
+  );
+  const editingBranch = snapshot.days
+    .flatMap((day) => day.items)
+    .flatMap((item) => item.parallelPlan?.branches ?? [])
+    .find(
+      (branch) => branch.id === (editing?.item?.branchId ?? editing?.branchId),
+    );
+  const editingParticipants = snapshot.participants.filter(
+    (person) =>
+      !editingBranch || editingBranch.participantIds.includes(person.id),
+  );
   const [poolCollapsed, setPoolCollapsed] = useState(false),
     [timelineCollapsed, setTimelineCollapsed] = useState(false);
   const workspaceRef = useRef<HTMLDivElement>(null);
@@ -513,7 +526,7 @@ export function Planner({
                 </div>
               </div>
 
-              {hasParallel && (
+              {(hasParallel || hasPersonalItems) && (
                 <ParticipantFilter
                   participants={snapshot.participants}
                   currentUserId={snapshot.currentUserId}
@@ -633,6 +646,7 @@ export function Planner({
                           participants={snapshot.participants}
                         />
                         <TimelineItem
+                          participants={snapshot.participants}
                           assign={() => setAssignment(item)}
                           split={
                             item.type !== "note"
@@ -1037,6 +1051,8 @@ export function Planner({
       {editing &&
         (editing.transport || editing.item?.transport ? (
           <TransportEditor
+            participants={editingParticipants}
+            inBranch={!!editingBranch}
             item={editing.item}
             places={snapshot.poolPlaces}
             close={() => setEditing(null)}
@@ -1057,6 +1073,8 @@ export function Planner({
           />
         ) : (
           <ItemEditor
+            participants={editingParticipants}
+            inBranch={!!editingBranch}
             item={editing.item}
             categories={categories}
             close={() => setEditing(null)}

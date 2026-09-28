@@ -16,8 +16,9 @@ import {
   Clock3,
   AlertTriangle,
   ReceiptText,
+  Users,
 } from "lucide-react";
-import type { Item, Expense } from "@/domain/types";
+import type { Item, Expense, Participant } from "@/domain/types";
 import { typeLabels } from "@/domain/types";
 import type { TimelineEntry } from "@/domain/timeline";
 import { formatTime } from "@/domain/timeline";
@@ -34,6 +35,7 @@ function formatStayDuration(minutes: number) {
 }
 export function TimelineItem({
   item,
+  participants,
   index,
   entry,
   selected,
@@ -57,6 +59,7 @@ export function TimelineItem({
   assign,
 }: {
   item: Item;
+  participants: Participant[];
   index: number;
   entry: TimelineEntry;
   selected: boolean;
@@ -171,6 +174,7 @@ export function TimelineItem({
                   className="sw-item-menu w-44"
                   aria-label={`${item.title}操作`}
                 >
+                  <DropdownMenuItem onClick={edit}>设置参与者</DropdownMenuItem>
                   {split && (
                     <DropdownMenuItem onClick={split}>
                       从这里分头行动
@@ -247,6 +251,18 @@ export function TimelineItem({
           item.address && <p className="item-address">{item.address}</p>
         )}
         <div className="item-meta">
+          {item.participantIds && (
+            <span>
+              <Users size={12} />
+              参与者：
+              {item.participantIds
+                .map(
+                  (id) =>
+                    participants.find((p) => p.id === id)?.name ?? "同行者",
+                )
+                .join("、")}
+            </span>
+          )}
           <PlaceCategory
             name={
               item.transport

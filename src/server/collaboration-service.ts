@@ -9,10 +9,23 @@ import {
   checkVersion,
   log,
   revision,
+  rebuildLegs,
+  touchDay,
   tx,
   uid,
   type Actor,
 } from "./service-core";
+
+function refreshParticipantRoutes(tripId: string, actor: Actor) {
+  const first = one<{ id: string }>(
+    "SELECT d.id FROM days d JOIN day_items i ON i.dayId=d.id WHERE d.tripId=? AND i.participantIds IS NOT NULL LIMIT 1",
+    tripId,
+  );
+  if (first) {
+    rebuildLegs(first.id, actor);
+    touchDay(first.id, actor);
+  }
+}
 
 export function createParticipant(tripId: string, actor: Actor, body: unknown) {
   const data = z
@@ -22,6 +35,7 @@ export function createParticipant(tripId: string, actor: Actor, body: unknown) {
     access(tripId, actor, "edit");
     const id = uid();
     insert("trip_participants", { id, tripId, ...data, ...revision(actor) });
+    refreshParticipantRoutes(tripId, actor);
     log(
       tripId,
       actor,
@@ -68,6 +82,7 @@ export function editParticipant(
       updatedAt: Date.now(),
       updatedByUserId: actor.id,
     });
+    if (data.status) refreshParticipantRoutes(tripId, actor);
     log(
       tripId,
       actor,
@@ -114,6 +129,18 @@ export function deleteParticipant(
         "此同行者已有分组安排，请先调整分组，或改用停用以保留历史行程",
       );
     if (
+      one(
+        "SELECT i.id FROM day_items i JOIN days d ON d.id=i.dayId, json_each(i.participantIds) p WHERE d.tripId=? AND p.value=? LIMIT 1",
+        tripId,
+        p.id,
+      )
+    )
+      throw new AppError(
+        400,
+        "PARTICIPANT_HAS_PLANS",
+        "此同行者已有事项安排，请先调整参与者，或改用停用以保留历史行程",
+      );
+    if (
       one("SELECT id FROM expenses WHERE payerParticipantId=? LIMIT 1", p.id) ||
       one(
         "SELECT id FROM expense_splits WHERE participantId=? LIMIT 1",
@@ -132,6 +159,7 @@ export function deleteParticipant(
       );
     run("DELETE FROM trip_invites WHERE participantId=?", p.id);
     run("DELETE FROM trip_participants WHERE id=?", p.id);
+    refreshParticipantRoutes(tripId, actor);
     log(
       tripId,
       actor,
@@ -184,6 +212,7 @@ export function editMember(
         tripId,
         userId,
       );
+    if (data.status) refreshParticipantRoutes(tripId, actor);
     log(
       tripId,
       actor,
@@ -347,6 +376,7 @@ export function joinInvite(token: string, actor: Actor) {
       "UPDATE trip_invites SET usedCount=usedCount+1, version=version+1 WHERE id=?",
       invite.id,
     );
+    refreshParticipantRoutes(invite.tripId, actor);
     log(
       invite.tripId,
       actor,

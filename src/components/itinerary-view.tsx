@@ -77,7 +77,9 @@ export function ItineraryView({ snapshot }: { snapshot: TripSnapshot }) {
       canEdit={snapshot.role !== "viewer"}
       mapDays={visibleDays}
       filter={
-        snapshot.days.some((day) => day.items.some((i) => i.parallelPlan)) ? (
+        snapshot.days.some((day) =>
+          day.items.some((i) => i.parallelPlan || i.participantIds != null),
+        ) ? (
           <>
             <ParticipantFilter
               participants={snapshot.participants}

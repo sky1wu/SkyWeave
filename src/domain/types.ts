@@ -2,8 +2,11 @@ import type * as s from "@/server/schema";
 export type Trip = typeof s.trips.$inferSelect;
 export type Day = typeof s.days.$inferSelect;
 type StoredItem = typeof s.items.$inferSelect;
-export type Item = Omit<StoredItem, "branchId" | "parallelPlan"> &
-  Partial<Pick<StoredItem, "branchId" | "parallelPlan">>;
+export type Item = Omit<
+  StoredItem,
+  "branchId" | "parallelPlan" | "participantIds"
+> &
+  Partial<Pick<StoredItem, "branchId" | "parallelPlan" | "participantIds">>;
 export type PoolPlace = typeof s.poolPlaces.$inferSelect;
 type StoredLeg = typeof s.legs.$inferSelect;
 export type Leg = Omit<StoredLeg, "branchId" | "routeRole"> &

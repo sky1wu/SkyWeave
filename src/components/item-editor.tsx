@@ -6,15 +6,17 @@ import { NativeSelect } from "./ui/native-select";
 import { Label } from "./ui/label";
 import { useState } from "react";
 import { Checkbox } from "./ui/checkbox";
-import type { Item } from "@/domain/types";
+import type { Item, Participant } from "@/domain/types";
 import { typeLabels } from "@/domain/types";
 import { placeCategories } from "@/domain/planning";
 import { ErrorText, Modal } from "./ui";
+import { ItemParticipants } from "./item-participants";
 import { SearchableSelect } from "./searchable-select";
 export function itemPayload(item: Item) {
   return {
     title: item.title,
     branchId: item.branchId ?? null,
+    participantIds: item.participantIds ?? null,
     type: item.type,
     description: item.description,
     amapPoiId: item.amapPoiId,
@@ -101,17 +103,24 @@ export function readTime(form: FormData, key: string): number | null {
 }
 export function ItemEditor({
   item,
+  participants = [],
+  inBranch = false,
   point,
   close,
   save,
   categories = placeCategories,
 }: {
   item?: Item;
+  participants?: Participant[];
+  inBranch?: boolean;
   point?: { lat: number; lng: number };
   close: () => void;
   save: (data: Record<string, unknown>) => Promise<unknown>;
   categories?: string[];
 }) {
+  const [participantIds, setParticipantIds] = useState<string[] | null>(
+    item?.participantIds ?? null,
+  );
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const [startMinutes, setStartMinutes] = useState(item?.startMinutes ?? null);
@@ -173,7 +182,9 @@ export function ItemEditor({
     const lat = num("lat"),
       lng = num("lng");
     try {
+      if (participantIds?.length === 0) throw new Error("请至少选择一位参与者");
       await save({
+        participantIds,
         title: f.get("title"),
         type: f.get("type"),
         placeCategory: f.get("placeCategory") || "未分类",
@@ -303,6 +314,15 @@ export function ItemEditor({
           说明
           <Input name="description" defaultValue={item?.description ?? ""} />
         </Label>
+        <ItemParticipants
+          participants={participants}
+          value={participantIds}
+          inBranch={inBranch}
+          onChange={(value) => {
+            setParticipantIds(value);
+            setError("");
+          }}
+        />
         <Label>
           备注
           <Textarea name="notes" rows={2} defaultValue={item?.notes ?? ""} />

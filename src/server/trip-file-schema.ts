@@ -99,6 +99,7 @@ export const tripFileSchema = z.object({
     z.literal(1),
     z.literal(2),
     z.literal(3),
+    z.literal(4),
     z.literal(TRIP_FILE_VERSION),
   ]),
   exportedAt: z.iso.datetime(),
@@ -129,6 +130,7 @@ export function parseTripFile(body: unknown): TripFile {
       body.version === 1 ||
         body.version === 2 ||
         body.version === 3 ||
+        body.version === 4 ||
         body.version === TRIP_FILE_VERSION,
       "暂不支持此行程文件版本，请使用当前版本导出的文件",
     );

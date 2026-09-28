@@ -78,6 +78,13 @@
       "when": 1790524563060,
       "tag": "0010_advanced_parallel_routes",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1790564937086,
+      "tag": "0011_item_participants",
+      "breakpoints": true
     }
   ]
 }

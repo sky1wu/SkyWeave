@@ -6,7 +6,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { useEffect, useRef, useState } from "react";
 import { MapPin, Search } from "lucide-react";
-import type { Item, PoolPlace } from "@/domain/types";
+import type { Item, PoolPlace, Participant } from "@/domain/types";
 import {
   transportLabels,
   type TransportPlan,
@@ -16,6 +16,7 @@ import type { Place } from "@/amap/requests";
 import { api } from "@/lib/client";
 import { readTime, TimeField } from "./item-editor";
 import { ErrorText, Modal } from "./ui";
+import { ItemParticipants } from "./item-participants";
 
 const blankPoint = (): TransportPoint => ({
   name: "",
@@ -203,15 +204,22 @@ function EndpointField({
 
 export function TransportEditor({
   item,
+  participants = [],
+  inBranch = false,
   places,
   close,
   save,
 }: {
   item?: Item;
+  participants?: Participant[];
+  inBranch?: boolean;
   places: PoolPlace[];
   close: () => void;
   save: (data: Record<string, unknown>) => Promise<unknown>;
 }) {
+  const [participantIds, setParticipantIds] = useState<string[] | null>(
+    item?.participantIds ?? null,
+  );
   const [origin, setOrigin] = useState(item?.transport?.origin ?? blankPoint()),
     [destination, setDestination] = useState(
       item?.transport?.destination ?? blankPoint(),
@@ -232,7 +240,10 @@ export function TransportEditor({
             start = readTime(f, "start"),
             end = readTime(f, "end");
           try {
+            if (participantIds?.length === 0)
+              throw new Error("请至少选择一位参与者");
             await save({
+              participantIds,
               title:
                 String(f.get("title") ?? "").trim() ||
                 `${transportLabels[mode]} · ${origin.name} → ${destination.name}`,
@@ -346,6 +357,15 @@ export function TransportEditor({
             placeholder="默认使用交通类型和起终点"
           />
         </Label>
+        <ItemParticipants
+          participants={participants}
+          value={participantIds}
+          inBranch={inBranch}
+          onChange={(value) => {
+            setParticipantIds(value);
+            setError("");
+          }}
+        />
         <Label>
           备注
           <Textarea name="notes" rows={2} defaultValue={item?.notes ?? ""} />
