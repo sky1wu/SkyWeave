@@ -870,20 +870,27 @@
   border-top: 1px solid var(--line);
 }
 .split-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   min-height: 52px;
   padding: 9px 0;
   border-bottom: 1px solid var(--line);
 }
 .split-row label {
-  max-width: 60%;
+  min-width: 0;
 }
 .split-row input:not([type="checkbox"]) {
+  grid-column: 2;
   font-size: 12px;
   padding: 6px 9px;
+}
+.split-row > span {
+  grid-column: 3;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 .member-grid {
   border-top: 1px solid var(--line);

@@ -254,7 +254,7 @@ export function ExpenseEditor({
                     )
                   }
                 />
-                {p.name}
+                <span className="min-w-0 wrap-anywhere">{p.name}</span>
               </Label>
               {method !== "equal" && selected.includes(p.id) && (
                 <Input
