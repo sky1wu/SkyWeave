@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { useDroppable } from "@dnd-kit/core";
+import type { DropTarget } from "./planner/types";
 import { GitFork, MapPin, Plus, Users } from "lucide-react";
 import type { DayPlan, Item, Participant, PoolPlace } from "@/domain/types";
 import {
@@ -859,6 +860,7 @@ function BranchLane({
   branch,
   color,
   day,
+  dropTarget,
   participants,
   pool,
   editable,
@@ -871,6 +873,7 @@ function BranchLane({
   branch: PlanBranch;
   color: string;
   day: DayPlan;
+  dropTarget?: DropTarget | null;
   participants: Participant[];
   pool: PoolPlace[];
   editable: boolean;
@@ -879,7 +882,7 @@ function BranchLane({
   children: ReactNode;
 }) {
   const { setNodeRef, isOver } = useDroppable({
-    id: `branch:${branch.id}`,
+    id: `branch:${day.id}:${branch.id}`,
     data: { kind: "branch", dayId: day.id, branchId: branch.id },
   });
   const [targetDayId, setTargetDayId] = useState(day.id);
@@ -889,6 +892,8 @@ function BranchLane({
   return (
     <details
       ref={setNodeRef}
+      data-branch-id={branch.id}
+      data-branch-day={day.id}
       open
       className={`parallel-lane ${isOver ? "drop-over" : ""}`}
       style={{ "--branch-color": color } as CSSProperties}
@@ -905,6 +910,10 @@ function BranchLane({
       </summary>
       <div className="parallel-lane-content">
         {children}
+        <div
+          data-branch-end={branch.id}
+          className={`branch-drop-end ${dropTarget?.dayId === day.id && dropTarget.branchId === branch.id && !dropTarget.beforeItemId ? "drop-indicator" : ""}`}
+        />
         {editable && (
           <div className="parallel-add">
             <NativeSelect
@@ -985,6 +994,7 @@ export function ParallelBlock({
   transfer,
   item,
   day,
+  dropTarget,
   participants,
   pool,
   participantId,
@@ -1001,6 +1011,7 @@ export function ParallelBlock({
   transfer: (operation: "copy" | "move") => void;
   item: Item;
   day: DayPlan;
+  dropTarget?: DropTarget | null;
   participants: Participant[];
   pool: PoolPlace[];
   participantId: string | null;
@@ -1038,7 +1049,7 @@ export function ParallelBlock({
   );
   return (
     <section
-      className="parallel-block"
+      className={`parallel-block ${dropTarget?.dayId === day.id && dropTarget.beforeItemId === item.id ? "drop-before" : ""}`}
       id={
         item.dayId === day.id
           ? `item-${item.id}`
@@ -1117,6 +1128,7 @@ export function ParallelBlock({
               addParallel={() => addParallel(branch.id)}
               branch={branch}
               day={day}
+              dropTarget={dropTarget}
               color={
                 branchColors[plan.branches.findIndex((b) => b.id === branch.id)]
               }

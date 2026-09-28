@@ -1,44 +1,19 @@
-import { useState } from "react";
-import { displayItems } from "@/domain/parallel";
+import { useMemo, useState } from "react";
 import {
-  closestCenter,
   KeyboardSensor,
   MouseSensor,
-  pointerWithin,
   TouchSensor,
   useSensor,
   useSensors,
-  type CollisionDetection,
   type DragEndEvent,
-  type DragOverEvent,
+  type DragMoveEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import type { DayPlan, Item, PoolPlace, TripSnapshot } from "@/domain/types";
 import type { DropTarget, Mutate, PlannerAction } from "./types";
 
-const collision: CollisionDetection = (args) => {
-  const eligible = {
-    ...args,
-    droppableContainers: args.droppableContainers.filter(
-      (container) =>
-        args.active.data.current?.kind === "pool" ||
-        container.data.current?.kind !== "pool",
-    ),
-  };
-  if (!args.pointerCoordinates) return closestCenter(eligible);
-  const hits = pointerWithin(eligible).filter(
-    (hit) => hit.id !== args.active.id,
-  );
-  const itemHits = hits.filter(
-    (hit) =>
-      !String(hit.id).startsWith("day:") &&
-      !String(hit.id).startsWith("branch:"),
-  );
-  if (itemHits.length) return itemHits;
-  const items = hits.filter((hit) => !String(hit.id).startsWith("day:"));
-  return items.length ? items : hits;
-};
+import { dropTargetFor, plannerCollisionDetection } from "./drop-target";
 
 export function usePlannerDnD({
   snapshot,
@@ -58,7 +33,12 @@ export function usePlannerDnD({
   isLatestInteraction: (sequence: number) => boolean;
 }) {
   const [dragTitle, setDragTitle] = useState<string | null>(null);
+  const [dragFromPool, setDragFromPool] = useState(false);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const collision = useMemo(
+    () => plannerCollisionDetection(snapshot.days),
+    [snapshot.days],
+  );
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 7 } }),
     useSensor(TouchSensor, {
@@ -160,43 +140,15 @@ export function usePlannerDnD({
     );
   }
 
-  function targetFor(event: DragOverEvent | DragEndEvent): DropTarget | null {
-    if (!event.over) return null;
-    const dayId = event.over.data.current?.dayId as string | undefined;
-    const targetDay = snapshot.days.find((day) => day.id === dayId);
-    if (!targetDay) return null;
-    if (event.over.data.current?.kind === "branch")
-      return {
-        dayId: targetDay.id,
-        beforeItemId: null,
-        branchId: event.over.data.current.branchId,
-      };
-    if (event.over.data.current?.kind === "item")
-      return {
-        dayId: targetDay.id,
-        beforeItemId: String(event.over.id),
-        branchId:
-          targetDay.items.find((i) => i.id === String(event.over!.id))
-            ?.branchId ?? null,
-      };
-    const activator = event.activatorEvent;
-    const y =
-      activator instanceof MouseEvent
-        ? activator.clientY + event.delta.y
-        : event.active.rect.current.translated
-          ? event.active.rect.current.translated.top +
-            event.active.rect.current.translated.height / 2
-          : Infinity;
-    const before = displayItems(targetDay).find((item) => {
-      if (item.id === event.active.id) return false;
-      const node = document.getElementById(`item-${item.id}`);
-      return node && node.getBoundingClientRect().bottom > y;
-    });
-    return {
-      dayId: targetDay.id,
-      beforeItemId: before?.id ?? null,
-      branchId: before?.branchId ?? null,
-    };
+  function updateDropTarget(event: DragMoveEvent) {
+    const next = dropTargetFor(event);
+    setDropTarget((previous) =>
+      previous?.dayId === next?.dayId &&
+      previous?.branchId === next?.branchId &&
+      previous?.beforeItemId === next?.beforeItemId
+        ? previous
+        : next,
+    );
   }
 
   function dragEnd(event: DragEndEvent) {
@@ -215,7 +167,7 @@ export function usePlannerDnD({
       if (place && target) void act(() => reorderPool(place, target));
       return;
     }
-    const target = targetFor(event);
+    const target = dropTargetFor(event);
     if (!target) return;
     const targetDay = snapshot.days.find((day) => day.id === target.dayId)!;
     if (event.active.data.current?.kind === "pool") {
@@ -234,15 +186,25 @@ export function usePlannerDnD({
     if (!item) return;
     if (
       item.dayId === target.dayId &&
-      (item.branchId ?? null) === (target.branchId ?? null) &&
-      event.over?.data.current?.kind === "item"
+      (item.branchId ?? null) === (target.branchId ?? null)
     ) {
-      const ids = targetDay.items.map((candidate) => candidate.id);
-      const from = ids.indexOf(item.id);
-      const to = ids.indexOf(String(event.over.id));
-      if (from === to) return;
-      ids.splice(from, 1);
-      ids.splice(to, 0, item.id);
+      const siblings = targetDay.items.filter(
+        (candidate) => (candidate.branchId ?? null) === (item.branchId ?? null),
+      );
+      const reordered = siblings.filter(
+        (candidate) => candidate.id !== item.id,
+      );
+      const index = reordered.findIndex(
+        (candidate) => candidate.id === target.beforeItemId,
+      );
+      reordered.splice(index < 0 ? reordered.length : index, 0, item);
+      if (reordered.every((candidate, i) => candidate.id === siblings[i].id))
+        return;
+      const siblingIds = new Set(siblings.map((candidate) => candidate.id));
+      let offset = 0;
+      const ids = targetDay.items.map((candidate) =>
+        siblingIds.has(candidate.id) ? reordered[offset++].id : candidate.id,
+      );
       void act(() => reorder(targetDay, ids));
     } else
       void act(() =>
@@ -254,14 +216,18 @@ export function usePlannerDnD({
     sensors,
     collision,
     dragTitle,
+    dragFromPool,
     dropTarget,
     schedule,
     transfer,
     reorderPool,
     move,
-    dragStart: (event: DragStartEvent) =>
-      setDragTitle(String(event.active.data.current?.title ?? "地点")),
-    dragOver: (event: DragOverEvent) => setDropTarget(targetFor(event)),
+    dragStart: (event: DragStartEvent) => {
+      setDragTitle(String(event.active.data.current?.title ?? "地点"));
+      setDragFromPool(event.active.data.current?.kind === "pool");
+    },
+    dragMove: updateDropTarget,
+    dragOver: updateDropTarget,
     dragCancel: () => {
       setDragTitle(null);
       setDropTarget(null);

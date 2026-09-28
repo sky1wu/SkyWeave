@@ -1909,6 +1909,10 @@
 .drop-before {
   position: relative;
 }
+.branch-drop-end {
+  height: 12px;
+  margin-top: 4px;
+}
 .drop-before::before {
   content: "";
   position: absolute;
@@ -1918,8 +1922,10 @@
   height: 3px;
   background: var(--primary);
   z-index: 11;
+  pointer-events: none;
 }
-.day-drop-end.drop-indicator {
+.day-drop-end.drop-indicator,
+.branch-drop-end.drop-indicator {
   border: 1px dashed var(--primary);
   background: var(--accent);
 }

@@ -55,6 +55,7 @@ import { ErrorText, Modal } from "./ui";
 import { useDayNavigation } from "./planner/use-day-navigation";
 import { useMapFocus } from "./planner/use-map-focus";
 import { usePlannerDnD } from "./planner/use-planner-dnd";
+import { pointerPreview } from "./planner/drop-target";
 import { useRouteRecalculation } from "./planner/use-route-recalculation";
 import type { DropTarget, Mutate, PlannerView } from "./planner/types";
 
@@ -155,7 +156,7 @@ function DaySection({
         {children}
       </SortableContext>
       <div
-        className={`day-drop-end ${dropTarget?.dayId === day.id && !dropTarget.beforeItemId ? "drop-indicator" : ""}`}
+        className={`day-drop-end ${dropTarget?.dayId === day.id && !dropTarget.branchId && !dropTarget.beforeItemId ? "drop-indicator" : ""}`}
         data-day-end={day.id}
       >
         {!day.items.length
@@ -297,12 +298,14 @@ export function Planner({
     sensors,
     collision,
     dragTitle,
+    dragFromPool,
     dropTarget,
     schedule,
     transfer,
     reorderPool,
     move,
     dragStart,
+    dragMove,
     dragOver,
     dragCancel,
     dragEnd,
@@ -339,9 +342,15 @@ export function Planner({
         sensors={sensors}
         collisionDetection={collision}
         onDragStart={dragStart}
+        onDragMove={dragMove}
         onDragOver={dragOver}
         onDragCancel={dragCancel}
         onDragEnd={dragEnd}
+        autoScroll={{
+          threshold: { x: 0, y: 0.12 },
+          canScroll: (element) =>
+            element.matches(".continuous-timeline, .pool-list"),
+        }}
       >
         <div
           ref={workspaceRef}
@@ -771,6 +780,7 @@ export function Planner({
                         }}
                         item={item}
                         day={readingDays.find((d) => d.id === targetDay.id)!}
+                        dropTarget={dropTarget}
                         participants={snapshot.participants}
                         pool={snapshot.poolPlaces}
                         participantId={participantId}
@@ -1016,7 +1026,11 @@ export function Planner({
             />
           </section>
         </div>
-        <DragOverlay>
+        <DragOverlay
+          dropAnimation={dragFromPool ? null : undefined}
+          modifiers={dragFromPool ? [pointerPreview] : undefined}
+          style={{ pointerEvents: "none" }}
+        >
           {dragTitle && <div className="planner-drag-preview">{dragTitle}</div>}
         </DragOverlay>
       </DndContext>
