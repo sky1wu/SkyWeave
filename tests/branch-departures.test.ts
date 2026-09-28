@@ -672,3 +672,79 @@ it("preserves direct-meeting participation when the section is copied to a later
     own[1].stops.some((stop) => stop.id === section.parallelPlan!.joinItemId),
   ).toBe(true);
 });
+
+it("reports actual item attendees before and after two groups join on day three", async () => {
+  const { itemAttendance, automaticItemAttendance } =
+    await import("@/domain/item-participants");
+  const f = setup(),
+    first = f.item("第一天活动"),
+    second = f.item("第二天活动", 1),
+    before = f.item("当天加入前", 2),
+    meet = f.item("第三天集合", 2);
+  const branches = f.people.map((person, index) => ({
+    ...f.branch(`${index + 1} 组`, [person]),
+    ...(index
+      ? { entrants: [{ participantId: person, at: "departure" as const }] }
+      : {}),
+  }));
+  f.save(
+    { splitItemId: null, joinItemId: meet, joinPolicy: "wait_all", branches },
+    2,
+    {
+      departures: branches.map((b, index) => ({
+        branchId: b.id,
+        source: {
+          kind: "place",
+          place: { title: `${index + 1} 组出发地`, lat: 22, lng: 114 },
+        },
+      })),
+    },
+  );
+  const participants = s.snapshot(f.id, actor).participants,
+    days = f.days(),
+    times = calculateTripTimelines(days),
+    attendance = itemAttendance(days, participants, times);
+  for (const id of [first, second, before])
+    expect(attendance.get(id)).toEqual([f.people[0]]);
+  expect(attendance.get(meet)?.sort()).toEqual([...f.people].sort());
+  for (const person of f.people) {
+    const own = itineraryDays(days, participants, person);
+    expect(own[0].stops.some((stop) => stop.id === first)).toBe(
+      attendance.get(first)!.includes(person),
+    );
+    expect(own[1].stops.some((stop) => stop.id === second)).toBe(
+      attendance.get(second)!.includes(person),
+    );
+  }
+  const current = days[0].items.find((i) => i.id === first)!;
+  expect(current.participantIds).toBeNull();
+  s.editItem(first, actor, {
+    expectedVersion: current.version,
+    participantIds: [f.people[1]],
+  });
+  expect(itemAttendance(f.days(), participants).get(first)).toEqual([]);
+  expect(automaticItemAttendance(first, f.days(), participants)).toEqual([
+    f.people[0],
+  ]);
+});
+
+it("keeps ungrouped travelers in ordinary arrangements when only grouped people have timing rows", async () => {
+  const { itemAttendance } = await import("@/domain/item-participants");
+  const f = setup(),
+    early = f.item("全部参加的早期安排"),
+    meet = f.item("共同集合", 2);
+  f.save({
+    splitItemId: null,
+    joinItemId: meet,
+    joinPolicy: "wait_all",
+    branches: [
+      f.branch("一组", [f.people[0]]),
+      f.branch("二组", [f.people[1]]),
+    ],
+  });
+  const attendance = itemAttendance(
+    f.days(),
+    s.snapshot(f.id, actor).participants,
+  );
+  expect(attendance.get(early)?.sort()).toEqual([...f.people].sort());
+});

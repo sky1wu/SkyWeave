@@ -45,6 +45,10 @@ import { placeCategories } from "@/domain/planning";
 import { ItemEditor, itemPayload, TimeField, readTime } from "./item-editor";
 import { TripMap, type MapFocus } from "./map";
 import { LegCard } from "./leg-card";
+import {
+  itemAttendance,
+  automaticItemAttendance,
+} from "@/domain/item-participants";
 import { ItemParticipantsEditor } from "./item-participants";
 import { TimelineItem } from "./timeline-item";
 import { DayTabs } from "./day-tabs";
@@ -220,6 +224,24 @@ export function Planner({
   const timelines = useMemo(
     () => calculateTripTimelines(snapshot.days, participantId),
     [snapshot.days, participantId],
+  );
+  const attendance = useMemo(
+    () => itemAttendance(snapshot.days, snapshot.participants, timelines),
+    [snapshot.days, snapshot.participants, timelines],
+  );
+  const peopleEditingItem = participantEditor ?? editing?.item;
+  const automaticParticipants = useMemo(
+    () =>
+      peopleEditingItem
+        ? peopleEditingItem.participantIds != null
+          ? automaticItemAttendance(
+              peopleEditingItem.id,
+              snapshot.days,
+              snapshot.participants,
+            )
+          : attendance.get(peopleEditingItem.id)
+        : undefined,
+    [peopleEditingItem, snapshot.days, snapshot.participants, attendance],
   );
   const readingDays = useMemo(
     () =>
@@ -647,6 +669,7 @@ export function Planner({
                           participants={snapshot.participants}
                         />
                         <TimelineItem
+                          attendingParticipantIds={attendance.get(item.id)}
                           participants={snapshot.participants}
                           branch={branchesOf(targetDay).find(
                             (branch) => branch.id === item.branchId,
@@ -987,6 +1010,7 @@ export function Planner({
       {editing &&
         (editing.transport || editing.item?.transport ? (
           <TransportEditor
+            automaticParticipantIds={automaticParticipants}
             participants={editingParticipants}
             inBranch={!!editingBranch}
             item={editing.item}
@@ -1009,6 +1033,7 @@ export function Planner({
           />
         ) : (
           <ItemEditor
+            automaticParticipantIds={automaticParticipants}
             participants={editingParticipants}
             inBranch={!!editingBranch}
             item={editing.item}
@@ -1068,6 +1093,7 @@ export function Planner({
       )}
       {participantEditor && (
         <ItemParticipantsEditor
+          automaticParticipantIds={automaticParticipants}
           key={participantEditor.id}
           item={participantEditor}
           participants={snapshot.participants}

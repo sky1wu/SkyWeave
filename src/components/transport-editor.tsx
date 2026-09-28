@@ -206,6 +206,7 @@ export function TransportEditor({
   item,
   participants = [],
   inBranch = false,
+  automaticParticipantIds,
   places,
   close,
   save,
@@ -213,6 +214,7 @@ export function TransportEditor({
   item?: Item;
   participants?: Participant[];
   inBranch?: boolean;
+  automaticParticipantIds?: string[];
   places: PoolPlace[];
   close: () => void;
   save: (data: Record<string, unknown>) => Promise<unknown>;
@@ -358,6 +360,7 @@ export function TransportEditor({
           />
         </Label>
         <ItemParticipants
+          automaticParticipantIds={automaticParticipantIds}
           participants={participants}
           value={participantIds}
           inBranch={inBranch}

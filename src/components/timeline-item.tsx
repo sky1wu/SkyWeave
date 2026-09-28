@@ -37,6 +37,7 @@ function formatStayDuration(minutes: number) {
 export function TimelineItem({
   item,
   participants,
+  attendingParticipantIds,
   index,
   entry,
   selected,
@@ -61,6 +62,7 @@ export function TimelineItem({
 }: {
   item: Item;
   participants: Participant[];
+  attendingParticipantIds?: string[];
   index: number;
   entry: TimelineEntry;
   selected: boolean;
@@ -214,6 +216,7 @@ export function TimelineItem({
           </div>
         </div>
         <ItemParticipantSummary
+          attendingParticipantIds={attendingParticipantIds}
           item={item}
           participants={participants}
           branch={branch}

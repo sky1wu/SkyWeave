@@ -154,6 +154,7 @@ test("单条航班指定两人，其他人的时间、地图和导出不包含�
     dialog.getByRole("checkbox", { name: "丙", exact: true }),
   ).not.toBeChecked();
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator(".sw-mobile-sheet")).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
@@ -308,4 +309,118 @@ test("组内事项清楚显示继承与部分成员，人员弹窗支持取消�
   await page.reload();
   await expect(card).toContainText("协作者的新说明");
   await expect(picker).toContainText("本组全部成员");
+});
+
+test("第三天加入的两组人员不会出现在前两天的谁参加摘要中", async ({
+  page,
+}, testInfo) => {
+  await registerViaApi(page, {
+    name: "全程成员",
+    email: `attendance-${crypto.randomUUID()}@example.test`,
+    password: "Trip-test-password-2026",
+  });
+  const trip = await call<{ id: string }>(page, "/trips", "POST", {
+    title: "第三天三组集合",
+    startDate: "2026-10-01",
+    endDate: "2026-10-03",
+  });
+  const initial = await call<TripSnapshot>(page, `/trips/${trip.id}`);
+  const a = await call<{ id: string }>(
+    page,
+    `/trips/${trip.id}/participants`,
+    "POST",
+    { name: "第二组成员" },
+  );
+  const b = await call<{ id: string }>(
+    page,
+    `/trips/${trip.id}/participants`,
+    "POST",
+    { name: "第三组成员" },
+  );
+  const first = await call<{ id: string }>(
+    page,
+    `/days/${initial.days[0].id}/items`,
+    "POST",
+    { title: "第一天活动" },
+  );
+  const second = await call<{ id: string }>(
+    page,
+    `/days/${initial.days[1].id}/items`,
+    "POST",
+    { title: "第二天活动" },
+  );
+  const meet = await call<{ id: string }>(
+    page,
+    `/days/${initial.days[2].id}/items`,
+    "POST",
+    { title: "第三天集合" },
+  );
+  const people = [initial.participants[0].id, a.id, b.id];
+  const branches = people.map((id, index) => ({
+    id: crypto.randomUUID(),
+    title: `${index + 1} 组`,
+    participantIds: [id],
+    startMinutes: null,
+    ...(index ? { entrants: [{ participantId: id, at: "departure" }] } : {}),
+  }));
+  const snapshot = await call<TripSnapshot>(page, `/trips/${trip.id}`);
+  await call(page, `/trips/${trip.id}/parallel`, "POST", {
+    dayId: initial.days[2].id,
+    title: "三组分头",
+    expectedDays: snapshot.days.map((d) => ({
+      id: d.id,
+      expectedVersion: d.version,
+    })),
+    parallelPlan: {
+      splitItemId: null,
+      joinItemId: meet.id,
+      joinPolicy: "wait_all",
+      branches,
+    },
+    departures: branches.map((branch, index) => ({
+      branchId: branch.id,
+      source: {
+        kind: "place",
+        place: { title: `${index + 1} 组出发地`, lat: 22, lng: 114 },
+      },
+    })),
+  });
+  await page.goto(`/trips/${trip.id}/plan`);
+  for (const id of [first.id, second.id]) {
+    const summary = page
+      .getByTestId(`item-${id}`)
+      .locator(".item-participant-summary");
+    await expect(summary).toContainText("全程成员");
+    await expect(summary).not.toContainText("全部同行者");
+    await expect(summary).not.toContainText("第二组成员");
+    await expect(summary).not.toContainText("第三组成员");
+  }
+  await page
+    .getByTestId(`item-${first.id}`)
+    .getByRole("button", { name: /谁参加/ })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "谁参加", exact: true });
+  await expect(dialog.getByLabel("参加人员")).toHaveValue("all");
+  await expect(dialog).toContainText("实际参加：全程成员");
+  await expect(dialog).not.toContainText("第二组成员");
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByTestId(`item-${first.id}`).screenshot({
+    path: testInfo.outputPath("actual-attendees-before-joining.png"),
+  });
+  await page.getByLabel("查看谁的行程").selectOption(a.id);
+  await expect(page.getByTestId(`item-${first.id}`)).toHaveCount(0);
+  await expect(page.getByTestId(`item-${second.id}`)).toHaveCount(0);
+  await page.getByLabel("查看谁的行程").selectOption("");
+  await page
+    .locator(".day-tabs")
+    .getByRole("button", { name: /第 3 天/ })
+    .click();
+  const meeting = page.getByTestId(`item-${meet.id}`);
+  await expect(meeting.locator(".item-participant-summary")).toContainText(
+    "全部同行者",
+  );
+  const after = await call<TripSnapshot>(page, `/trips/${trip.id}`);
+  expect(
+    after.days[0].items.find((i) => i.id === first.id)?.participantIds,
+  ).toBeNull();
 });

@@ -105,6 +105,7 @@ export function ItemEditor({
   item,
   participants = [],
   inBranch = false,
+  automaticParticipantIds,
   point,
   close,
   save,
@@ -113,6 +114,7 @@ export function ItemEditor({
   item?: Item;
   participants?: Participant[];
   inBranch?: boolean;
+  automaticParticipantIds?: string[];
   point?: { lat: number; lng: number };
   close: () => void;
   save: (data: Record<string, unknown>) => Promise<unknown>;
@@ -315,6 +317,7 @@ export function ItemEditor({
           <Input name="description" defaultValue={item?.description ?? ""} />
         </Label>
         <ItemParticipants
+          automaticParticipantIds={automaticParticipantIds}
           participants={participants}
           value={participantIds}
           inBranch={inBranch}

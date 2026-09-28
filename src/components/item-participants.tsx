@@ -14,12 +14,14 @@ export function ItemParticipants({
   participants,
   value,
   onChange,
+  automaticParticipantIds,
   inBranch = false,
   hideLegend = false,
 }: {
   participants: Participant[];
   value: string[] | null;
   onChange: (value: string[] | null) => void;
+  automaticParticipantIds?: string[];
   inBranch?: boolean;
   hideLegend?: boolean;
 }) {
@@ -41,7 +43,7 @@ export function ItemParticipants({
           }
         >
           <option value="all">
-            {inBranch ? "本组全部成员" : "全部同行者"}
+            {inBranch ? "自动跟随本组安排" : "自动跟随行程安排"}
           </option>
           <option value="selected">
             {inBranch ? "本组部分成员" : "指定人员"}
@@ -50,10 +52,9 @@ export function ItemParticipants({
       </Label>
       {value === null && (
         <p className="text-xs muted">
-          {inBranch ? "随本组成员调整" : "随同行者名单调整"}
-          {available.length > 0
-            ? `：${available.map((person) => person.name).join("、")}`
-            : "。"}
+          {automaticParticipantIds !== undefined
+            ? `实际参加：${automaticParticipantIds.length ? automaticParticipantIds.map((id) => participants.find((p) => p.id === id)?.name ?? "同行者").join("、") : "暂无参与者"}。`
+            : "自动按成员加入时间和所属路线确定参加人员。"}
         </p>
       )}
       {value !== null && (
@@ -79,13 +80,16 @@ export function ItemParticipants({
           )}
         </div>
       )}
-      <p className="text-xs muted">设置只作用于这条安排，费用分摊保持原样。</p>
+      <p className="text-xs muted">
+        实际参加人员还会按加入时间和路线确定；设置只作用于这条安排，费用分摊保持原样。
+      </p>
     </fieldset>
   );
 }
 
 export function ItemParticipantSummary({
   item,
+  attendingParticipantIds,
   participants,
   branch,
   edit,
@@ -93,27 +97,36 @@ export function ItemParticipantSummary({
   item: Item;
   participants: Participant[];
   branch?: Pick<PlanBranch, "title" | "participantIds">;
+  attendingParticipantIds?: string[];
   edit?: () => void;
 }) {
-  const names = (
+  const configured =
     item.participantIds ??
     branch?.participantIds ??
-    participants.filter((p) => p.status === "active").map((p) => p.id)
-  )
+    participants.filter((p) => p.status === "active").map((p) => p.id);
+  const actual = attendingParticipantIds ?? configured;
+  const restricted =
+    configured.length !== actual.length ||
+    configured.some((id) => !actual.includes(id));
+  const names = actual
     .map((id) => participants.find((p) => p.id === id)?.name ?? "同行者")
     .join("、");
-  const summary = item.participantIds
-    ? names
+  const summary = !actual.length
+    ? "暂无参与者"
+    : item.participantIds || restricted
+      ? names
+      : branch
+        ? "本组全部成员"
+        : "全部同行者";
+  const inheritance = restricted
+    ? "按加入时间与路线计算"
     : branch
-      ? "本组全部成员"
-      : "全部同行者";
-  const inheritance = branch
-    ? item.participantIds
-      ? branch.participantIds.some((id) => !item.participantIds!.includes(id))
-        ? "本组部分成员"
-        : "本组指定成员"
-      : `跟随「${branch.title}」`
-    : null;
+      ? item.participantIds
+        ? branch.participantIds.some((id) => !item.participantIds!.includes(id))
+          ? "本组部分成员"
+          : "本组指定成员"
+        : `跟随「${branch.title}」`
+      : null;
   const content = (
     <>
       <Users size={14} aria-hidden="true" />
@@ -145,6 +158,7 @@ export function ItemParticipantSummary({
 
 export function ItemParticipantsEditor({
   item,
+  automaticParticipantIds,
   participants,
   branch,
   close,
@@ -153,6 +167,7 @@ export function ItemParticipantsEditor({
   item: Item;
   participants: Participant[];
   branch?: Pick<PlanBranch, "title" | "participantIds">;
+  automaticParticipantIds?: string[];
   close: () => void;
   save: (data: {
     participantIds: string[] | null;
@@ -195,6 +210,7 @@ export function ItemParticipantsEditor({
         )}
         <fieldset disabled={busy}>
           <ItemParticipants
+            automaticParticipantIds={automaticParticipantIds}
             participants={participants.filter(
               (person) => !branch || branch.participantIds.includes(person.id),
             )}
