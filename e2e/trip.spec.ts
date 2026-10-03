@@ -439,6 +439,81 @@ test("同行者：添加后可取消或确认删除，保留已有账目", async
   expect(retained.expenses[0].splits[0].participantId).toBe(payer.id);
 });
 
+test("结算保留实际垫付关系，净额为零时仍能完成双方收付", async ({ page }) => {
+  await register(page, "PairAlice");
+  const id = await createTrip(page, "按垫付关系结算");
+  const initial = await call<TripSnapshot>(page, `/trips/${id}`);
+  const alice = initial.participants[0];
+  const bob = await call<{ id: string }>(
+    page,
+    `/trips/${id}/participants`,
+    "POST",
+    {
+      name: "PairBob",
+    },
+  );
+  const carol = await call<{ id: string }>(
+    page,
+    `/trips/${id}/participants`,
+    "POST",
+    {
+      name: "PairCarol",
+    },
+  );
+  for (const [payer, debtor] of [
+    [alice, bob],
+    [bob, carol],
+  ]) {
+    await call(page, `/trips/${id}/expenses`, "POST", {
+      title: "代付车票",
+      category: "transport",
+      amountMinor: 100,
+      currency: "CNY",
+      exchangeRateToBase: "1",
+      payerParticipantId: payer.id,
+      splitMethod: "equal",
+      splitMeta: [{ participantId: debtor.id, value: "1" }],
+      incurredAt: Date.now(),
+    });
+  }
+  await page.getByRole("link", { name: "费用", exact: true }).click();
+  const suggestions = page.locator("section").filter({
+    has: page.getByRole("heading", { name: "建议结算", exact: true }),
+  });
+  const bobBalance = page
+    .locator(".money-table tbody tr")
+    .filter({ hasText: "PairBob" });
+  await expect(bobBalance).toContainText("收支相抵");
+  await expect(bobBalance).not.toContainText("已结清");
+  await expect(suggestions.locator(".settlement-row")).toHaveCount(2);
+  const toAlice = suggestions
+    .locator(".settlement-row")
+    .filter({ hasText: "PairAlice" });
+  await expect(toAlice).toContainText("PairBob");
+  await expect(toAlice).not.toContainText("PairCarol");
+  await toAlice.getByRole("button", { name: "登记转账", exact: true }).click();
+  await page.getByRole("button", { name: "确认已转账", exact: true }).click();
+  await expect(suggestions.locator(".settlement-row")).toHaveCount(1);
+  await expect(suggestions).toContainText("PairCarol");
+  await expect(suggestions).toContainText("PairBob");
+  await expect(bobBalance).toContainText("净应收");
+  const paid = await call<TripSnapshot>(page, `/trips/${id}`);
+  expect(paid.settlements).toHaveLength(1);
+  expect(paid.settlements[0]).toMatchObject({
+    fromParticipantId: bob.id,
+    toParticipantId: alice.id,
+    baseAmountMinor: 100,
+  });
+  await suggestions
+    .getByRole("button", { name: "登记转账", exact: true })
+    .click();
+  await page.getByRole("button", { name: "确认已转账", exact: true }).click();
+  await expect(suggestions).toContainText("当前没有待结算金额");
+  await expect(
+    page.locator(".money-table tbody tr").filter({ hasText: "已结清" }),
+  ).toHaveCount(3);
+});
+
 test("多人：邀请、SSE 双向修改、费用分摊、editor 结算、评论与持久化", async ({
   page,
   browser,

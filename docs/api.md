@@ -125,6 +125,8 @@ Day 使用 `position` 排序，`startMinutes` 默认 480。DayItem 使用 `posit
 | POST         | `/api/trips/:id/settlements` | 登记实际转账                  |
 | DELETE       | `/api/settlements/:id`       | 删除转账并重算余额            |
 
+`balances[].net` 是每人的净应收（正数）或净应付（负数）。`suggestions` 按两人之间的实际垫付关系计算：分摊人向付款人偿还，双方相互垫付和已登记转账抵扣后只保留一个方向，多付部分向原转账人退回。不会通过第三人转移债务；净余额为零时仍可能有向不同成员收款和付款的建议。历史转账即使没有关联费用，也会计入双方往来。
+
 ```json
 {
   "title": "三人晚餐",

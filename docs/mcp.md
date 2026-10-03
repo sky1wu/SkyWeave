@@ -120,6 +120,8 @@ try {
 | `create_settlement` | 通过 `settlement` 登记已完成的实际转账                       |
 | `delete_settlement` | 撤销结算记录并恢复余额                                       |
 
+`suggestions` 按实际垫付关系逐对结算：分摊人向付款人偿还，同两人之间的垫付与已登记转账相互抵扣，多付部分退回原转账人，不通过第三人转移债务。`balances[].net` 仍为个人净余额；净额为零也可能同时有对不同成员的应收和应付。历史转账即使没有关联费用，也会计入双方往来。
+
 先读取 `get_expenses` 或 `get_participants`，使用参与者的 `id`（**participantId**）作为付款人、分摊人和结算双方，不能使用用户 ID。参与者仍在应用成员页管理。
 
 `amountMinor` 为整数最小货币单位，CNY 12.34 元填 1234，JPY 123 日元填 123；`currencies[].minorDigits` 提供小数位。`exchangeRateToBase` 是原币兑换行程结算币的十进制字符串，同币种为 `"1"`。`incurredAt`、`settledAt` 使用 Unix 毫秒。

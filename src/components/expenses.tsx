@@ -512,6 +512,9 @@ export function Expenses({
     snapshot.expenses,
     snapshot.settlements,
   );
+  const unsettled = new Set(
+    suggestions.flatMap((s) => [s.fromParticipantId, s.toParticipantId]),
+  );
   const name = (id: string) =>
     snapshot.participants.find((p) => p.id === id)?.name ?? "同行者";
   const total = snapshot.expenses.reduce((s, e) => s + e.baseAmountMinor, 0);
@@ -616,7 +619,10 @@ export function Expenses({
         </section>
       </div>
       <section className="panel mt-6 p-6">
-        <h3 className="font-semibold mb-5">成员账单</h3>
+        <h3 className="font-semibold mb-2">成员账单</h3>
+        <p className="text-sm muted mb-5">
+          当前余额为应收与应付的净额，具体转账见下方建议结算。
+        </p>
         <div className="table-scroll">
           <table className="money-table">
             <thead>
@@ -642,7 +648,13 @@ export function Expenses({
                           : "muted"
                     }
                   >
-                    {b.net > 0 ? "应收 " : b.net < 0 ? "应付 " : "已结清 "}
+                    {b.net > 0
+                      ? "净应收 "
+                      : b.net < 0
+                        ? "净应付 "
+                        : unsettled.has(b.participantId)
+                          ? "收支相抵 "
+                          : "已结清 "}
                     {formatMoney(Math.abs(b.net), base)}
                   </td>
                 </tr>
@@ -652,7 +664,10 @@ export function Expenses({
         </div>
       </section>
       <section className="panel mt-6 p-6">
-        <h3 className="font-semibold mb-4">建议结算</h3>
+        <h3 className="font-semibold mb-2">建议结算</h3>
+        <p className="text-sm muted mb-4">
+          按实际垫付关系结算，同两人之间的费用和已登记转账互相抵扣。
+        </p>
         {suggestions.length ? (
           suggestions.map((s, i) => (
             <div className="settlement-row" key={i}>

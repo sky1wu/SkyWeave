@@ -195,14 +195,32 @@ export function calculateBalances(
     if (!r) throw new Error("账目参与者不存在");
     return r;
   };
+  // Positive amounts mean the first participant owes the second. Keep each
+  // pair separate so settlement suggestions preserve who actually paid whom.
+  const debts = new Map<string, Map<string, bigint>>();
+  const addDebt = (from: string, to: string, amount: bigint) => {
+    if (from === to || amount === 0n) return;
+    const [first, second] = from < to ? [from, to] : [to, from];
+    const signed = from < to ? amount : -amount;
+    let pairs = debts.get(first);
+    if (!pairs) debts.set(first, (pairs = new Map()));
+    pairs.set(second, (pairs.get(second) ?? 0n) + signed);
+  };
   for (const expense of expenses) {
     row(expense.payerParticipantId).paidBase += BigInt(expense.baseAmountMinor);
-    for (const split of expense.splits)
+    for (const split of expense.splits) {
       row(split.participantId).owedBase += BigInt(split.baseAmountMinor);
+      addDebt(
+        split.participantId,
+        expense.payerParticipantId,
+        BigInt(split.baseAmountMinor),
+      );
+    }
   }
   for (const s of settlements) {
     row(s.fromParticipantId).sentBase += BigInt(s.baseAmountMinor);
     row(s.toParticipantId).receivedBase += BigInt(s.baseAmountMinor);
+    addDebt(s.fromParticipantId, s.toParticipantId, -BigInt(s.baseAmountMinor));
   }
   const balances: Balance[] = [...rows.values()].map((r) => ({
     participantId: r.participantId,
@@ -214,36 +232,25 @@ export function calculateBalances(
   }));
   if (balances.reduce((s, r) => s + BigInt(r.net), 0n) !== 0n)
     throw new Error("账目余额不守恒");
-  const sort = (
-    a: { amount: number; id: string },
-    b: { amount: number; id: string },
-  ) => b.amount - a.amount || a.id.localeCompare(b.id);
-  const creditors = balances
-    .filter((b) => b.net > 0)
-    .map((b) => ({ id: b.participantId, amount: b.net }))
-    .sort(sort);
-  const debtors = balances
-    .filter((b) => b.net < 0)
-    .map((b) => ({ id: b.participantId, amount: -b.net }))
-    .sort(sort);
   const suggestions: {
     fromParticipantId: string;
     toParticipantId: string;
     amountMinor: number;
   }[] = [];
-  let c = 0,
-    d = 0;
-  while (c < creditors.length && d < debtors.length) {
-    const amount = Math.min(creditors[c].amount, debtors[d].amount);
-    suggestions.push({
-      fromParticipantId: debtors[d].id,
-      toParticipantId: creditors[c].id,
-      amountMinor: amount,
-    });
-    creditors[c].amount -= amount;
-    debtors[d].amount -= amount;
-    if (!creditors[c].amount) c++;
-    if (!debtors[d].amount) d++;
-  }
+  for (const [first, pairs] of debts)
+    for (const [second, amount] of pairs) {
+      if (amount === 0n) continue;
+      suggestions.push({
+        fromParticipantId: amount > 0n ? first : second,
+        toParticipantId: amount > 0n ? second : first,
+        amountMinor: safeInteger(amount > 0n ? amount : -amount),
+      });
+    }
+  suggestions.sort(
+    (a, b) =>
+      b.amountMinor - a.amountMinor ||
+      a.fromParticipantId.localeCompare(b.fromParticipantId) ||
+      a.toParticipantId.localeCompare(b.toParticipantId),
+  );
   return { balances, suggestions };
 }

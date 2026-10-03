@@ -100,8 +100,157 @@ describe("money", () => {
       { fromParticipantId: "b", toParticipantId: "a", baseAmountMinor: 25000 },
     ]);
     expect(after.balances.map((b) => b.net)).toEqual([15000, 5000, -20000]);
-    expect(after.suggestions.reduce((s, x) => s + x.amountMinor, 0)).toBe(
-      20000,
+    expect(after.suggestions).toEqual([
+      { fromParticipantId: "c", toParticipantId: "a", amountMinor: 20000 },
+      { fromParticipantId: "a", toParticipantId: "b", amountMinor: 5000 },
+    ]);
+  });
+});
+
+describe("settlement suggestions", () => {
+  type Expense = Parameters<typeof calculateBalances>[1][number];
+  type Settlement = Parameters<typeof calculateBalances>[2][number];
+  function expense(payer: string, shares: Record<string, number>): Expense {
+    return {
+      payerParticipantId: payer,
+      baseAmountMinor: Object.values(shares).reduce((sum, v) => sum + v, 0),
+      splits: Object.entries(shares).map(
+        ([participantId, baseAmountMinor]) => ({
+          participantId,
+          baseAmountMinor,
+        }),
+      ),
+    };
+  }
+  function expectSettled(
+    participants: string[],
+    expenses: Expense[],
+    settlements: Settlement[] = [],
+  ) {
+    const { suggestions } = calculateBalances(
+      participants,
+      expenses,
+      settlements,
     );
+    const after = calculateBalances(participants, expenses, [
+      ...settlements,
+      ...suggestions.map((s) => ({ ...s, baseAmountMinor: s.amountMinor })),
+    ]);
+    expect(after.balances.every((b) => b.net === 0)).toBe(true);
+    expect(after.suggestions).toEqual([]);
+  }
+
+  it("keeps separate groups' repayments with their original payers", () => {
+    const people = ["a", "b", "c", "d", "e"];
+    const expenses = [
+      expense("a", { a: 6000, b: 6000, c: 6000 }),
+      expense("d", { d: 10000, e: 10000 }),
+    ];
+    const result = calculateBalances(people, expenses, []);
+    expect(result.suggestions).toEqual([
+      { fromParticipantId: "e", toParticipantId: "d", amountMinor: 10000 },
+      { fromParticipantId: "b", toParticipantId: "a", amountMinor: 6000 },
+      { fromParticipantId: "c", toParticipantId: "a", amountMinor: 6000 },
+    ]);
+    expectSettled(people, expenses);
+  });
+
+  it("does not redirect debts through another participant in the same group", () => {
+    const expenses = [expense("a", { b: 100 }), expense("b", { c: 100 })];
+    const result = calculateBalances(["a", "b", "c"], expenses, []);
+    expect(result.balances.map((b) => b.net)).toEqual([100, 0, -100]);
+    expect(result.suggestions).toEqual([
+      { fromParticipantId: "b", toParticipantId: "a", amountMinor: 100 },
+      { fromParticipantId: "c", toParticipantId: "b", amountMinor: 100 },
+    ]);
+    expectSettled(["a", "b", "c"], expenses);
+  });
+
+  it("offsets reciprocal expenses and partial transfers only within each pair", () => {
+    const expenses = [
+      expense("a", { a: 300, b: 300, c: 300 }),
+      expense("b", { a: 240 }),
+    ];
+    const settlements = [
+      { fromParticipantId: "b", toParticipantId: "a", baseAmountMinor: 20 },
+    ];
+    expect(
+      calculateBalances(["a", "b", "c"], expenses, settlements).suggestions,
+    ).toEqual([
+      { fromParticipantId: "c", toParticipantId: "a", amountMinor: 300 },
+      { fromParticipantId: "b", toParticipantId: "a", amountMinor: 40 },
+    ]);
+    expectSettled(["a", "b", "c"], expenses, settlements);
+  });
+
+  it("accounts for historical transfers without a shared expense", () => {
+    const settlements = [
+      { fromParticipantId: "a", toParticipantId: "b", baseAmountMinor: 125 },
+    ];
+    expect(calculateBalances(["a", "b"], [], settlements).suggestions).toEqual([
+      { fromParticipantId: "b", toParticipantId: "a", amountMinor: 125 },
+    ]);
+    expectSettled(["a", "b"], [], settlements);
+  });
+
+  it("preserves each pair's debt in a cycle even when personal net balances are zero", () => {
+    const expenses = [
+      expense("a", { b: 100 }),
+      expense("b", { c: 100 }),
+      expense("c", { a: 100 }),
+    ];
+    const result = calculateBalances(["a", "b", "c"], expenses, []);
+    expect(result.balances.every((b) => b.net === 0)).toBe(true);
+    expect(result.suggestions).toEqual([
+      { fromParticipantId: "a", toParticipantId: "c", amountMinor: 100 },
+      { fromParticipantId: "b", toParticipantId: "a", amountMinor: 100 },
+      { fromParticipantId: "c", toParticipantId: "b", amountMinor: 100 },
+    ]);
+    expectSettled(["a", "b", "c"], expenses);
+  });
+
+  it("keeps converted minor units exact and suggestions stable when input order changes", () => {
+    const splits = splitExpense(100, 86, "HKD", "equal", [
+      { participantId: "a", value: "1" },
+      { participantId: "b", value: "1" },
+      { participantId: "c", value: "1" },
+    ]);
+    const expenses = [
+      { payerParticipantId: "a", baseAmountMinor: 86, splits },
+      expense("b", { a: 20, b: 0 }),
+      expense("c", { c: 15 }),
+    ];
+    const result = calculateBalances(["a", "b", "c"], expenses, []);
+    expect(result.suggestions).toEqual([
+      { fromParticipantId: "c", toParticipantId: "a", amountMinor: 28 },
+      { fromParticipantId: "b", toParticipantId: "a", amountMinor: 9 },
+    ]);
+    expect(
+      calculateBalances(
+        ["c", "b", "a"],
+        [...expenses]
+          .reverse()
+          .map((e) => ({ ...e, splits: [...e.splits].reverse() })),
+        [],
+      ).suggestions,
+    ).toEqual(result.suggestions);
+    expectSettled(["a", "b", "c"], expenses);
+  });
+
+  it("retains a one-cent debt after a large repayment", () => {
+    const expenses = [expense("a", { b: Number.MAX_SAFE_INTEGER })];
+    const settlements = [
+      {
+        fromParticipantId: "b",
+        toParticipantId: "a",
+        baseAmountMinor: Number.MAX_SAFE_INTEGER - 1,
+      },
+    ];
+    expect(
+      calculateBalances(["a", "b"], expenses, settlements).suggestions,
+    ).toEqual([
+      { fromParticipantId: "b", toParticipantId: "a", amountMinor: 1 },
+    ]);
+    expectSettled(["a", "b"], expenses, settlements);
   });
 });
