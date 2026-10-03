@@ -28,6 +28,7 @@ import {
   moneyText,
   parseMoney,
   splitExpense,
+  type SettlementMode,
   type SplitMethod,
 } from "@/domain/money";
 import { ErrorText, Modal } from "./ui";
@@ -505,12 +506,15 @@ export function Expenses({
   comment: (expense: Expense) => void;
 }) {
   const { confirm, confirmation } = useConfirmation();
+  const [settlementMode, setSettlementMode] =
+    useState<SettlementMode>("direct");
   const editable = snapshot.role !== "viewer",
     base = snapshot.trip.baseCurrency;
   const { balances, suggestions } = calculateBalances(
     snapshot.participants.map((p) => p.id),
     snapshot.expenses,
     snapshot.settlements,
+    settlementMode,
   );
   const unsettled = new Set(
     suggestions.flatMap((s) => [s.fromParticipantId, s.toParticipantId]),
@@ -664,10 +668,50 @@ export function Expenses({
         </div>
       </section>
       <section className="panel mt-6 p-6">
-        <h3 className="font-semibold mb-2">建议结算</h3>
-        <p className="text-sm muted mb-4">
-          按实际垫付关系结算，同两人之间的费用和已登记转账互相抵扣。
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h3 className="font-semibold">建议结算</h3>
+          <div role="group" aria-label="清账方案" className="flex gap-2">
+            {(
+              [
+                { value: "direct", label: "按账目清账" },
+                { value: "simplified", label: "简化清账" },
+              ] as const
+            ).map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                size="sm"
+                variant={
+                  settlementMode === option.value ? "default" : "outline"
+                }
+                aria-pressed={settlementMode === option.value}
+                aria-describedby="settlement-description"
+                onClick={() => setSettlementMode(option.value)}
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <p
+          id="settlement-description"
+          className="text-sm muted mb-2"
+          aria-live="polite"
+        >
+          {settlementMode === "direct"
+            ? "按实际垫付关系结算，同两人之间的费用和已登记转账互相抵扣。"
+            : "按全体净余额合并清账，可能向没有共同账单的人转账。"}
         </p>
+        <p className="text-sm muted mb-4">
+          {suggestions.length} 笔建议转账 · 以 {base} 结算
+        </p>
+        {settlementMode === "direct" &&
+          suggestions.length > 0 &&
+          balances.every((b) => b.net === 0) && (
+            <p className="text-sm muted mb-4">
+              各成员净余额均为零，以下双方往来可在简化清账中相互抵消。
+            </p>
+          )}
         {suggestions.length ? (
           suggestions.map((s, i) => (
             <div className="settlement-row" key={i}>

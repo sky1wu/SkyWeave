@@ -11,7 +11,12 @@ import {
 import { contextualDays } from "@/domain/parallel";
 import { amap } from "@/amap/service";
 import { calculateTimeline, calculateTripTimelines } from "@/domain/timeline";
-import { calculateBalances, currencies, minorDigits } from "@/domain/money";
+import {
+  calculateBalances,
+  currencies,
+  minorDigits,
+  type SettlementMode,
+} from "@/domain/money";
 import type { Item, Leg, Participant, PoolPlace } from "@/domain/types";
 import { many, one } from "./db";
 import { AppError, requireValue } from "./errors";
@@ -155,11 +160,12 @@ export function createMcpServer(principal: McpPrincipal) {
       ),
     };
   }
-  function finances(tripId: string) {
+  function finances(tripId: string, settlementMode: SettlementMode = "direct") {
     mcpAccess(principal, tripId);
     const data = snapshot(tripId, user);
     return {
       tripId,
+      settlementMode,
       baseCurrency: data.trip.baseCurrency,
       currencies: currencies.map((currency) => ({
         currency,
@@ -173,6 +179,7 @@ export function createMcpServer(principal: McpPrincipal) {
         data.participants.map((p) => p.id),
         data.expenses,
         data.settlements,
+        settlementMode,
       ),
     };
   }
@@ -538,24 +545,34 @@ export function createMcpServer(principal: McpPrincipal) {
         };
       }),
   );
+  const financeRead = {
+    ...trip,
+    settlementMode: z
+      .enum(["direct", "simplified"])
+      .default("direct")
+      .describe(
+        "清账方案：direct 按双方实际垫付关系抵扣（默认）；simplified 按全体净余额合并，允许跨账单配对。只影响本次建议，不登记转账或保存设置。",
+      ),
+  };
   register(
     "get_expenses",
-    "读取行程费用、分摊明细、参与者 ID、当前令牌所属账号的成员备注名 participantAliases、实际结算记录和余额；备注名通过 participantId 关联参与者，currencies 给出各币种小数位。费用记录含最新 version。",
-    trip,
+    "读取行程费用、分摊明细、参与者 ID、当前令牌所属账号的成员备注名 participantAliases、实际结算记录和余额；备注名通过 participantId 关联参与者，currencies 给出各币种小数位。费用记录含最新 version。可用 settlementMode 选择按账目或简化清账，返回本次使用的 settlementMode。",
+    financeRead,
     false,
-    ({ tripId }) => tx(() => finances(tripId)),
+    ({ tripId, settlementMode }) => tx(() => finances(tripId, settlementMode)),
   );
   register(
     "get_balances",
-    "读取以行程结算币种计价的每人余额和建议转账。仅计算建议，不登记或发起支付。",
-    trip,
+    "读取以行程结算币种计价的每人余额和建议转账。可用 settlementMode 选择按账目或简化清账，返回本次使用的 settlementMode。仅计算建议，不登记或发起支付。",
+    financeRead,
     false,
-    ({ tripId }) =>
+    ({ tripId, settlementMode }) =>
       tx(() => {
         mcpAccess(principal, tripId);
         return {
           baseCurrency: getTrip(tripId).baseCurrency,
-          ...balances(tripId, user),
+          settlementMode,
+          ...balances(tripId, user, settlementMode),
         };
       }),
   );

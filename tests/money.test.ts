@@ -6,6 +6,7 @@ import {
   parseMoney,
   moneyText,
   formatMoney,
+  type SettlementMode,
 } from "@/domain/money";
 describe("money", () => {
   it("round trips large monetary values without losing a minor unit in the editor", () => {
@@ -126,16 +127,23 @@ describe("settlement suggestions", () => {
     participants: string[],
     expenses: Expense[],
     settlements: Settlement[] = [],
+    mode: SettlementMode = "direct",
   ) {
     const { suggestions } = calculateBalances(
       participants,
       expenses,
       settlements,
+      mode,
     );
-    const after = calculateBalances(participants, expenses, [
-      ...settlements,
-      ...suggestions.map((s) => ({ ...s, baseAmountMinor: s.amountMinor })),
-    ]);
+    const after = calculateBalances(
+      participants,
+      expenses,
+      [
+        ...settlements,
+        ...suggestions.map((s) => ({ ...s, baseAmountMinor: s.amountMinor })),
+      ],
+      mode,
+    );
     expect(after.balances.every((b) => b.net === 0)).toBe(true);
     expect(after.suggestions).toEqual([]);
   }
@@ -164,6 +172,89 @@ describe("settlement suggestions", () => {
       { fromParticipantId: "c", toParticipantId: "b", amountMinor: 100 },
     ]);
     expectSettled(["a", "b", "c"], expenses);
+  });
+
+  it("offers a simplified scheme with fewer transfers and identical personal balances", () => {
+    const people = ["a", "b", "c"];
+    const expenses = [expense("a", { b: 100 }), expense("b", { c: 100 })];
+    const direct = calculateBalances(people, expenses, []);
+    const simplified = calculateBalances(people, expenses, [], "simplified");
+    expect(simplified.balances).toEqual(direct.balances);
+    expect(direct.suggestions).toHaveLength(2);
+    expect(simplified.suggestions).toEqual([
+      { fromParticipantId: "c", toParticipantId: "a", amountMinor: 100 },
+    ]);
+    expect(calculateBalances(people, expenses, [], "direct")).toEqual(direct);
+    expectSettled(people, expenses, [], "simplified");
+  });
+
+  it("allows deterministic cross-group matching only in the simplified scheme", () => {
+    const people = ["a", "b", "c", "d", "e"];
+    const expenses = [
+      expense("a", { a: 6000, b: 6000, c: 6000 }),
+      expense("d", { d: 10000, e: 10000 }),
+    ];
+    const simplified = calculateBalances(people, expenses, [], "simplified");
+    expect(simplified.suggestions).toEqual([
+      { fromParticipantId: "e", toParticipantId: "a", amountMinor: 10000 },
+      { fromParticipantId: "b", toParticipantId: "a", amountMinor: 2000 },
+      { fromParticipantId: "b", toParticipantId: "d", amountMinor: 4000 },
+      { fromParticipantId: "c", toParticipantId: "d", amountMinor: 6000 },
+    ]);
+    expect(
+      calculateBalances(
+        [...people].reverse(),
+        [...expenses].reverse(),
+        [],
+        "simplified",
+      ).suggestions,
+    ).toEqual(simplified.suggestions);
+    expectSettled(people, expenses, [], "simplified");
+  });
+
+  it("simplifies partial repayments and overpayments using the remaining net balances", () => {
+    const people = ["a", "b", "c"];
+    const expenses = [expense("a", { a: 20000, b: 20000, c: 20000 })];
+    const settlements = [
+      { fromParticipantId: "b", toParticipantId: "a", baseAmountMinor: 25000 },
+      { fromParticipantId: "c", toParticipantId: "a", baseAmountMinor: 10000 },
+    ];
+    const simplified = calculateBalances(
+      people,
+      expenses,
+      settlements,
+      "simplified",
+    );
+    expect(simplified.suggestions).toEqual([
+      { fromParticipantId: "c", toParticipantId: "a", amountMinor: 5000 },
+      { fromParticipantId: "c", toParticipantId: "b", amountMinor: 5000 },
+    ]);
+    expect(simplified.balances).toEqual(
+      calculateBalances(people, expenses, settlements).balances,
+    );
+    expectSettled(people, expenses, settlements, "simplified");
+  });
+
+  it("offsets cycles in the simplified scheme, including ones from cross-person repayments", () => {
+    const people = ["a", "b", "c"];
+    const expenses = [expense("a", { b: 100 }), expense("b", { c: 100 })];
+    const settlements = [
+      { fromParticipantId: "c", toParticipantId: "a", baseAmountMinor: 100 },
+    ];
+    const simplified = calculateBalances(
+      people,
+      expenses,
+      settlements,
+      "simplified",
+    );
+    const direct = calculateBalances(people, expenses, settlements);
+    expect(simplified.balances.every((b) => b.net === 0)).toBe(true);
+    expect(simplified.suggestions).toEqual([]);
+    expect(direct.balances).toEqual(simplified.balances);
+    expect(direct.suggestions).toHaveLength(3);
+    expect(calculateBalances(people, [], [], "simplified").suggestions).toEqual(
+      [],
+    );
   });
 
   it("offsets reciprocal expenses and partial transfers only within each pair", () => {
@@ -207,6 +298,7 @@ describe("settlement suggestions", () => {
       { fromParticipantId: "c", toParticipantId: "b", amountMinor: 100 },
     ]);
     expectSettled(["a", "b", "c"], expenses);
+    expectSettled(["a", "b", "c"], expenses, [], "simplified");
   });
 
   it("keeps converted minor units exact and suggestions stable when input order changes", () => {
@@ -235,6 +327,7 @@ describe("settlement suggestions", () => {
       ).suggestions,
     ).toEqual(result.suggestions);
     expectSettled(["a", "b", "c"], expenses);
+    expectSettled(["a", "b", "c"], expenses, [], "simplified");
   });
 
   it("retains a one-cent debt after a large repayment", () => {
@@ -252,5 +345,12 @@ describe("settlement suggestions", () => {
       { fromParticipantId: "b", toParticipantId: "a", amountMinor: 1 },
     ]);
     expectSettled(["a", "b"], expenses, settlements);
+    expect(
+      calculateBalances(["a", "b"], expenses, settlements, "simplified")
+        .suggestions,
+    ).toEqual([
+      { fromParticipantId: "b", toParticipantId: "a", amountMinor: 1 },
+    ]);
+    expectSettled(["a", "b"], expenses, settlements, "simplified");
   });
 });

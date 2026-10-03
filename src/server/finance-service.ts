@@ -1,4 +1,9 @@
-import { convertMoney, splitExpense, calculateBalances } from "@/domain/money";
+import {
+  convertMoney,
+  splitExpense,
+  calculateBalances,
+  type SettlementMode,
+} from "@/domain/money";
 import type {
   Expense,
   Split,
@@ -21,12 +26,17 @@ import {
 } from "./service-core";
 import { snapshot } from "./trip-service";
 
-export function balances(tripId: string, actor: Actor) {
+export function balances(
+  tripId: string,
+  actor: Actor,
+  settlementMode: SettlementMode = "direct",
+) {
   const data = snapshot(tripId, actor, "expenses");
   return calculateBalances(
     data.participants.map((p) => p.id),
     data.expenses,
     data.settlements,
+    settlementMode,
   );
 }
 

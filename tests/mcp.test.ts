@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { SettlementMode } from "@/domain/money";
 import type {
   DayPlan,
   TripSnapshot,
@@ -843,8 +844,128 @@ type Finances = {
   settlements: Settlement[];
   participants: Participant[];
   balances: { participantId: string; net: number }[];
+  settlementMode: SettlementMode;
+  suggestions: {
+    fromParticipantId: string;
+    toParticipantId: string;
+    amountMinor: number;
+  }[];
 };
 describe("MCP expenses and settlements", () => {
+  it("exposes both settlement schemes to read-only clients without changing the ledger or default", async () => {
+    const { trip, access } = fixture();
+    tokens.revokeMcpToken(owner, access.id);
+    const read = tokens.createMcpToken(owner, {
+      name: "Read settlement schemes",
+      tripId: trip.id,
+      permission: "read",
+    });
+    const client = await connect(read.token);
+    const payer = s.snapshot(trip.id, owner).participants[0];
+    const middle = s.createParticipant(trip.id, owner, { name: "Middle" });
+    const debtor = s.createParticipant(trip.id, owner, { name: "Debtor" });
+    for (const [from, to] of [
+      [middle, payer],
+      [debtor, middle],
+    ])
+      s.saveExpense(trip.id, owner, {
+        title: "代付车票",
+        category: "transport",
+        amountMinor: 100,
+        currency: "CNY",
+        exchangeRateToBase: "1",
+        payerParticipantId: to.id,
+        splitMethod: "equal",
+        splitMeta: [{ participantId: from.id, value: "1" }],
+        incurredAt: Date.now(),
+      });
+    const before = s.snapshot(trip.id, owner);
+    const other = s.createTrip(owner, {
+      title: "Other trip",
+      startDate: "2026-10-02",
+      endDate: "2026-10-03",
+    });
+    const listed = await client.listTools();
+    for (const tool of ["get_expenses", "get_balances"]) {
+      const schema = listed.tools.find((t) => t.name === tool)!;
+      expect(schema.inputSchema.properties?.settlementMode).toMatchObject({
+        enum: ["direct", "simplified"],
+        default: "direct",
+      });
+      expect(schema.inputSchema.required).not.toContain("settlementMode");
+      expect(schema.annotations?.readOnlyHint).toBe(true);
+      const defaultResult = await call<Finances>(client, tool, {
+        tripId: trip.id,
+      });
+      const direct = await call<Finances>(client, tool, {
+        tripId: trip.id,
+        settlementMode: "direct",
+      });
+      expect(direct).toEqual(defaultResult);
+      expect(direct.settlementMode).toBe("direct");
+      expect(direct.suggestions).toHaveLength(2);
+      expect(direct.suggestions).toEqual(
+        expect.arrayContaining([
+          {
+            fromParticipantId: middle.id,
+            toParticipantId: payer.id,
+            amountMinor: 100,
+          },
+          {
+            fromParticipantId: debtor.id,
+            toParticipantId: middle.id,
+            amountMinor: 100,
+          },
+        ]),
+      );
+      const simplified = await call<Finances>(client, tool, {
+        tripId: trip.id,
+        settlementMode: "simplified",
+      });
+      expect(simplified.settlementMode).toBe("simplified");
+      expect(simplified.balances).toEqual(direct.balances);
+      expect(simplified.suggestions).toEqual([
+        {
+          fromParticipantId: debtor.id,
+          toParticipantId: payer.id,
+          amountMinor: 100,
+        },
+      ]);
+      if (tool === "get_expenses") {
+        expect(simplified.expenses).toEqual(direct.expenses);
+        expect(simplified.settlements).toEqual(direct.settlements);
+      }
+      expect(await call<Finances>(client, tool, { tripId: trip.id })).toEqual(
+        direct,
+      );
+      await error(client, tool, { tripId: trip.id, settlementMode: "unknown" });
+      await error(
+        client,
+        tool,
+        { tripId: other.id, settlementMode: "simplified" },
+        "TOKEN_SCOPE",
+      );
+    }
+    expect(s.snapshot(trip.id, owner)).toEqual(before);
+
+    s.createSettlement(trip.id, owner, {
+      fromParticipantId: debtor.id,
+      toParticipantId: payer.id,
+      amountMinor: 100,
+      currency: "CNY",
+      exchangeRateToBase: "1",
+      settledAt: Date.now(),
+    });
+    for (const tool of ["get_expenses", "get_balances"]) {
+      const settled = await call<Finances>(client, tool, {
+        tripId: trip.id,
+        settlementMode: "simplified",
+      });
+      expect(settled.balances.every((b) => b.net === 0)).toBe(true);
+      expect(settled.suggestions).toEqual([]);
+    }
+    tokens.revokeMcpToken(owner, read.id);
+  });
   it("creates, updates and deletes split expenses and settlement records with version checks", async () => {
     const { access, trip, days } = fixture();
     const guest = s.createParticipant(trip.id, owner, { name: "Guest" });

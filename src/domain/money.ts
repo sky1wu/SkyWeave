@@ -164,6 +164,7 @@ export interface Balance {
   receivedBase: number;
   net: number;
 }
+export type SettlementMode = "direct" | "simplified";
 export function calculateBalances(
   participantIds: string[],
   expenses: {
@@ -176,6 +177,7 @@ export function calculateBalances(
     toParticipantId: string;
     baseAmountMinor: number;
   }[],
+  mode: SettlementMode = "direct",
 ) {
   safeInteger(expenses.reduce((sum, e) => sum + BigInt(e.baseAmountMinor), 0n));
   const rows = new Map(
@@ -199,7 +201,7 @@ export function calculateBalances(
   // pair separate so settlement suggestions preserve who actually paid whom.
   const debts = new Map<string, Map<string, bigint>>();
   const addDebt = (from: string, to: string, amount: bigint) => {
-    if (from === to || amount === 0n) return;
+    if (mode === "simplified" || from === to || amount === 0n) return;
     const [first, second] = from < to ? [from, to] : [to, from];
     const signed = from < to ? amount : -amount;
     let pairs = debts.get(first);
@@ -237,6 +239,35 @@ export function calculateBalances(
     toParticipantId: string;
     amountMinor: number;
   }[] = [];
+  if (mode === "simplified") {
+    const sort = (
+      a: { id: string; amount: number },
+      b: { id: string; amount: number },
+    ) => b.amount - a.amount || a.id.localeCompare(b.id);
+    const creditors = balances
+      .filter((b) => b.net > 0)
+      .map((b) => ({ id: b.participantId, amount: b.net }))
+      .sort(sort);
+    const debtors = balances
+      .filter((b) => b.net < 0)
+      .map((b) => ({ id: b.participantId, amount: -b.net }))
+      .sort(sort);
+    let c = 0,
+      d = 0;
+    while (c < creditors.length && d < debtors.length) {
+      const amount = Math.min(creditors[c].amount, debtors[d].amount);
+      suggestions.push({
+        fromParticipantId: debtors[d].id,
+        toParticipantId: creditors[c].id,
+        amountMinor: amount,
+      });
+      creditors[c].amount -= amount;
+      debtors[d].amount -= amount;
+      if (!creditors[c].amount) c++;
+      if (!debtors[d].amount) d++;
+    }
+    return { balances, suggestions };
+  }
   for (const [first, pairs] of debts)
     for (const [second, amount] of pairs) {
       if (amount === 0n) continue;
